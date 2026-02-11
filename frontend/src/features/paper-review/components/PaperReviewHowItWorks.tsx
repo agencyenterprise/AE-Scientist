@@ -1,7 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, FileText, Brain, RefreshCw, BarChart3, Layers } from "lucide-react";
+import {
+  ChevronDown,
+  FileText,
+  Brain,
+  RefreshCw,
+  BarChart3,
+  Layers,
+  Clock4,
+  DollarSign,
+} from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 
 const FLOW_STEPS = [
@@ -161,10 +170,33 @@ export function PaperReviewHowItWorks({ className }: PaperReviewHowItWorksProps)
             </div>
           </div>
 
+          {/* Cost & Duration Info */}
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-lg border border-slate-800/60 bg-slate-900/40 p-3">
+              <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-slate-400">
+                <Clock4 className="h-3.5 w-3.5 text-sky-300" />
+                Duration
+              </div>
+              <p className="mt-1 text-lg font-semibold text-white">2-5 minutes</p>
+              <p className="text-xs text-slate-500">Varies based on paper length and model.</p>
+            </div>
+            <div className="rounded-lg border border-slate-800/60 bg-slate-900/40 p-3">
+              <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-slate-400">
+                <DollarSign className="h-3.5 w-3.5 text-emerald-300" />
+                Cost
+              </div>
+              <p className="mt-1 text-lg font-semibold text-white">&lt; $1</p>
+              <p className="text-xs text-slate-500">Typically $0.30-$0.50 per review.</p>
+            </div>
+          </div>
+
           {/* Configuration Note */}
-          <p className="mt-4 text-xs text-slate-500">
-            Reviews use 3 ensemble reviewers with 2 reflection rounds by default. The process
-            typically completes in 1-3 minutes depending on paper length.
+          <p className="mt-4 text-sm text-slate-400">
+            Reviews use 3 ensemble reviewers with 2 reflection rounds by default.
+          </p>
+          <p className="mt-2 text-sm text-slate-400">
+            If your balance goes negative during the execution, review results are locked until you
+            add credits.
           </p>
         </div>
       )}

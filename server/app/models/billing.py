@@ -59,3 +59,25 @@ class CheckoutSessionCreateRequest(BaseModel):
 
 class CheckoutSessionCreateResponse(BaseModel):
     checkout_url: HttpUrl
+
+
+class InsufficientBalanceErrorDetail(BaseModel):
+    """Details of an insufficient balance error.
+
+    All amounts are in cents (e.g., 500 = $5.00).
+    """
+
+    message: str = Field(..., description="Human-readable error message")
+    required_cents: int = Field(..., description="Minimum balance required for the action")
+    available_cents: int = Field(..., description="User's current balance")
+    action: str = Field(..., description="The action that was attempted")
+
+
+class InsufficientBalanceError(BaseModel):
+    """Error response when user has insufficient balance.
+
+    Returned with HTTP 402 Payment Required.
+    Matches FastAPI's HTTPException format with a 'detail' field.
+    """
+
+    detail: InsufficientBalanceErrorDetail

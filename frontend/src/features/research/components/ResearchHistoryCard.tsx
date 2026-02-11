@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
-import { Clock } from "lucide-react";
+import { Clock, Lock } from "lucide-react";
 import type { ResearchRun } from "@/types/research";
 import { Markdown } from "@/shared/components/Markdown";
 import { formatResearchStageName } from "../utils/research-utils";
@@ -24,6 +24,7 @@ export function ResearchHistoryCard({ research }: ResearchHistoryCardProps) {
   const isPending = research.status === "pending";
   const isFailed = research.status === "failed";
   const isCompleted = research.status === "completed";
+  const isAccessRestricted = research.accessRestricted;
 
   return (
     <Link href={`/research/${research.runId}`}>
@@ -54,6 +55,12 @@ export function ResearchHistoryCard({ research }: ResearchHistoryCardProps) {
               {isCompleted && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-200">
                   completed
+                </span>
+              )}
+              {isAccessRestricted && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-200">
+                  <Lock className="h-2.5 w-2.5" />
+                  locked
                 </span>
               )}
             </div>

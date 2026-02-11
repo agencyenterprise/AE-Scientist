@@ -3,9 +3,17 @@
 #   filename:  openapi.json
 
 from __future__ import annotations
-from enum import StrEnum
 from typing import Annotated, Any, Literal
 from pydantic import AnyUrl, AwareDatetime, BaseModel, Field, RootModel
+from enum import StrEnum
+
+
+class AccessRestrictedData(BaseModel):
+    has_enough_credits: Annotated[bool, Field(title="Has Enough Credits")]
+    access_restricted: Annotated[bool, Field(title="Access Restricted")]
+    access_restricted_reason: Annotated[
+        str | None, Field(title="Access Restricted Reason")
+    ] = None
 
 
 class Status(StrEnum):
@@ -542,6 +550,25 @@ class InitializationProgressPayload(BaseModel):
     message: Annotated[str, Field(title="Message")]
 
 
+class InsufficientBalanceErrorDetail(BaseModel):
+    message: Annotated[
+        str, Field(description="Human-readable error message", title="Message")
+    ]
+    required_cents: Annotated[
+        int,
+        Field(
+            description="Minimum balance required for the action",
+            title="Required Cents",
+        ),
+    ]
+    available_cents: Annotated[
+        int, Field(description="User's current balance", title="Available Cents")
+    ]
+    action: Annotated[
+        str, Field(description="The action that was attempted", title="Action")
+    ]
+
+
 class LLMDefault(BaseModel):
     llm_provider: Annotated[
         str, Field(description="LLM provider name", min_length=1, title="Llm Provider")
@@ -912,15 +939,22 @@ class PaperReviewSummary(BaseModel):
     status: Annotated[str, Field(description="Review status", title="Status")]
     summary: Annotated[
         str | None,
-        Field(description="Paper summary (null if pending)", title="Summary"),
+        Field(
+            description="Paper summary (null if pending or restricted)", title="Summary"
+        ),
     ] = None
     overall: Annotated[
         int | None,
-        Field(description="Overall score (null if pending)", title="Overall"),
+        Field(
+            description="Overall score (null if pending or restricted)", title="Overall"
+        ),
     ] = None
     decision: Annotated[
         str | None,
-        Field(description="Review decision (null if pending)", title="Decision"),
+        Field(
+            description="Review decision (null if pending or restricted)",
+            title="Decision",
+        ),
     ] = None
     original_filename: Annotated[
         str, Field(description="Original PDF filename", title="Original Filename")
@@ -929,6 +963,20 @@ class PaperReviewSummary(BaseModel):
     created_at: Annotated[
         str, Field(description="ISO timestamp of review creation", title="Created At")
     ]
+    has_enough_credits: Annotated[
+        bool | None,
+        Field(
+            description="Whether user had positive balance when review completed. NULL if still running.",
+            title="Has Enough Credits",
+        ),
+    ] = None
+    access_restricted: Annotated[
+        bool | None,
+        Field(
+            description="True if user cannot view full review details due to insufficient credits",
+            title="Access Restricted",
+        ),
+    ] = False
 
 
 class ParentRunFileInfo(BaseModel):
@@ -1008,6 +1056,11 @@ class ResearchRunAcceptedResponse(BaseModel):
     pod_name: Annotated[str, Field(title="Pod Name")]
     gpu_type: Annotated[str, Field(title="Gpu Type")]
     cost: Annotated[float, Field(title="Cost")]
+
+
+class ResearchRunAccessRestrictedEvent(BaseModel):
+    type: Annotated[Literal["access_restricted"], Field(title="Type")]
+    data: AccessRestrictedData
 
 
 class ResearchRunArtifactMetadata(BaseModel):
@@ -1276,6 +1329,27 @@ class ResearchRunInfo(BaseModel):
             title="Last Restart Reason",
         ),
     ] = None
+    has_enough_credits: Annotated[
+        bool | None,
+        Field(
+            description="Whether user had positive balance when run completed. NULL if still running.",
+            title="Has Enough Credits",
+        ),
+    ] = None
+    access_restricted: Annotated[
+        bool | None,
+        Field(
+            description="True if user cannot view full run details due to insufficient credits",
+            title="Access Restricted",
+        ),
+    ] = False
+    access_restricted_reason: Annotated[
+        str | None,
+        Field(
+            description="Message explaining why access is restricted",
+            title="Access Restricted Reason",
+        ),
+    ] = None
 
 
 class ResearchRunInitializationStatusData(BaseModel):
@@ -1406,6 +1480,27 @@ class ResearchRunListItem(BaseModel):
         Field(
             description="Evaluation decision ('Accept' or 'Reject') from LLM review, if available",
             title="Evaluation Decision",
+        ),
+    ] = None
+    has_enough_credits: Annotated[
+        bool | None,
+        Field(
+            description="Whether user had positive balance when run completed. NULL if still running.",
+            title="Has Enough Credits",
+        ),
+    ] = None
+    access_restricted: Annotated[
+        bool | None,
+        Field(
+            description="True if user cannot view full run details due to insufficient credits",
+            title="Access Restricted",
+        ),
+    ] = False
+    access_restricted_reason: Annotated[
+        str | None,
+        Field(
+            description="Message explaining why access is restricted",
+            title="Access Restricted Reason",
         ),
     ] = None
 
@@ -1776,18 +1871,7 @@ class TerminateExecutionResponse(BaseModel):
     status: Annotated[Literal["terminating"], Field(title="Status")]
 
 
-class TokenUsageEvent(BaseModel):
-    model: Annotated[str, Field(title="Model")]
-    input_tokens: Annotated[int, Field(title="Input Tokens")]
-    cached_input_tokens: Annotated[int, Field(title="Cached Input Tokens")]
-    output_tokens: Annotated[int, Field(title="Output Tokens")]
-
-
-class TokenUsagePayload(BaseModel):
-    event: TokenUsageEvent
-
-
-class TokenUsageResponse(BaseModel):
+class TokenUsage(BaseModel):
     input_tokens: Annotated[
         int, Field(description="Total input tokens used", title="Input Tokens")
     ]
@@ -1797,6 +1881,17 @@ class TokenUsageResponse(BaseModel):
     output_tokens: Annotated[
         int, Field(description="Total output tokens used", title="Output Tokens")
     ]
+
+
+class TokenUsageEvent(BaseModel):
+    model: Annotated[str, Field(title="Model")]
+    input_tokens: Annotated[int, Field(title="Input Tokens")]
+    cached_input_tokens: Annotated[int, Field(title="Cached Input Tokens")]
+    output_tokens: Annotated[int, Field(title="Output Tokens")]
+
+
+class TokenUsagePayload(BaseModel):
+    event: TokenUsageEvent
 
 
 class TreeVizItem(BaseModel):
@@ -2136,6 +2231,10 @@ class IdeaUpdateResponse(BaseModel):
     idea: Annotated[Idea, Field(description="Updated idea")]
 
 
+class InsufficientBalanceError(BaseModel):
+    detail: InsufficientBalanceErrorDetail
+
+
 class MetricCollection(BaseModel):
     primary: Annotated[
         MetricInterpretation, Field(description="Primary metric being optimized")
@@ -2346,7 +2445,7 @@ class PaperGenerationStepEvent(BaseModel):
     ] = None
 
 
-class PaperReviewDetailResponse(BaseModel):
+class PaperReviewDetail(BaseModel):
     id: Annotated[int, Field(title="Id")]
     status: Annotated[
         str,
@@ -2359,20 +2458,53 @@ class PaperReviewDetailResponse(BaseModel):
         str | None,
         Field(description="Error message if status is failed", title="Error Message"),
     ] = None
+    original_filename: Annotated[
+        str, Field(description="Original PDF filename", title="Original Filename")
+    ]
+    model: Annotated[str, Field(description="Model used for review", title="Model")]
+    created_at: Annotated[
+        str, Field(description="ISO timestamp of review creation", title="Created At")
+    ]
+    has_enough_credits: Annotated[
+        bool | None,
+        Field(
+            description="Whether user had positive balance when review completed. NULL if still running.",
+            title="Has Enough Credits",
+        ),
+    ] = None
+    access_restricted: Annotated[
+        bool | None,
+        Field(
+            description="True if user cannot view full review details due to insufficient credits",
+            title="Access Restricted",
+        ),
+    ] = False
+    access_restricted_reason: Annotated[
+        str | None,
+        Field(
+            description="Message explaining why access is restricted",
+            title="Access Restricted Reason",
+        ),
+    ] = None
     summary: Annotated[
         str | None,
-        Field(description="Paper summary (null if not completed)", title="Summary"),
+        Field(
+            description="Paper summary (null if not completed or restricted)",
+            title="Summary",
+        ),
     ] = None
     strengths: Annotated[
         list[str] | None,
         Field(
-            description="List of strengths (null if not completed)", title="Strengths"
+            description="List of strengths (null if not completed or restricted)",
+            title="Strengths",
         ),
     ] = None
     weaknesses: Annotated[
         list[str] | None,
         Field(
-            description="List of weaknesses (null if not completed)", title="Weaknesses"
+            description="List of weaknesses (null if not completed or restricted)",
+            title="Weaknesses",
         ),
     ] = None
     originality: Annotated[int | None, Field(title="Originality")] = None
@@ -2388,17 +2520,16 @@ class PaperReviewDetailResponse(BaseModel):
     overall: Annotated[int | None, Field(title="Overall")] = None
     confidence: Annotated[int | None, Field(title="Confidence")] = None
     decision: Annotated[str | None, Field(title="Decision")] = None
-    original_filename: Annotated[str, Field(title="Original Filename")]
-    model: Annotated[str, Field(title="Model")]
-    created_at: Annotated[str, Field(title="Created At")]
     token_usage: Annotated[
-        TokenUsageResponse | None,
-        Field(description="Token usage (null if not completed)"),
+        TokenUsage | None,
+        Field(description="Token usage (null if not completed or restricted)"),
     ] = None
     cost_cents: Annotated[
         int | None,
-        Field(description="Cost charged in cents for this review", title="Cost Cents"),
-    ] = 0
+        Field(
+            description="Cost charged in cents (null if restricted)", title="Cost Cents"
+        ),
+    ] = None
 
 
 class PaperReviewListResponse(BaseModel):
@@ -3031,6 +3162,7 @@ class ResearchRunStreamEvent(
         | ResearchRunTerminationStatusEvent
         | ResearchRunArtifactEvent
         | ResearchRunReviewCompletedEvent
+        | ResearchRunAccessRestrictedEvent
         | ResearchRunStageCompletedEvent
         | ResearchRunPaperGenerationEvent
         | ResearchRunStageEventStream
@@ -3053,6 +3185,7 @@ class ResearchRunStreamEvent(
         | ResearchRunTerminationStatusEvent
         | ResearchRunArtifactEvent
         | ResearchRunReviewCompletedEvent
+        | ResearchRunAccessRestrictedEvent
         | ResearchRunStageCompletedEvent
         | ResearchRunPaperGenerationEvent
         | ResearchRunStageEventStream

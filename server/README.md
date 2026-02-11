@@ -133,7 +133,7 @@ Operations are billed based on actual costs in cents. Users must maintain a mini
 **Local development with Stripe CLI:**
 ```bash
 # Install Stripe CLI, then forward webhooks to your local server
-stripe listen --forward-to localhost:8000/api/billing/stripe-webhook
+stripe listen --forward-to http://localhost:8000/api/billing/stripe-webhook
 
 # The CLI will print a webhook signing secret - use it for local testing
 ```

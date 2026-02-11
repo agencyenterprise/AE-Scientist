@@ -100,6 +100,7 @@ class ResearchPipelineRun(NamedTuple):
     hw_billing_status: Optional[str]
     hw_billing_last_retry_at: Optional[datetime]
     hw_billing_retry_count: int
+    has_enough_credits: Optional[bool]
     created_at: datetime
     updated_at: datetime
 
@@ -240,6 +241,7 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
         hw_billing_status: Optional[str] = None,
         hw_billing_last_retry_at: Optional[datetime] = None,
         hw_billing_retry_count: Optional[int] = None,
+        has_enough_credits: Optional[bool] = None,
     ) -> None:
         fields = []
         values: list[object] = []
@@ -296,6 +298,9 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
         if hw_billing_retry_count is not None:
             fields.append("hw_billing_retry_count = %s")
             values.append(hw_billing_retry_count)
+        if has_enough_credits is not None:
+            fields.append("has_enough_credits = %s")
+            values.append(has_enough_credits)
         fields.append("updated_at = %s")
         values.append(datetime.now(timezone.utc))
         values.append(run_id)
@@ -467,6 +472,49 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
             return None
         return int(result["created_by_user_id"])
 
+    async def unlock_research_runs_for_user(self, user_id: int) -> int:
+        """Update has_enough_credits to TRUE for all runs where it's FALSE.
+
+        This is called when a user adds credits and their balance becomes positive.
+        Returns the number of runs that were unlocked.
+        """
+        query = """
+            UPDATE research_pipeline_runs r
+            SET has_enough_credits = TRUE, updated_at = NOW()
+            FROM ideas i
+            WHERE r.idea_id = i.id
+              AND i.created_by_user_id = %s
+              AND r.has_enough_credits = FALSE
+        """
+        async with self.aget_connection() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute(query, (user_id,))
+                updated_count = cursor.rowcount
+                await conn.commit()
+        return updated_count
+
+    async def lock_active_research_runs_for_user(self, user_id: int) -> int:
+        """Update has_enough_credits to FALSE for active runs.
+
+        This is called when a user's balance goes negative from any charge.
+        Only locks runs that are still in progress (pending, initializing, running).
+        Returns the number of runs that were locked.
+        """
+        query = """
+            UPDATE research_pipeline_runs r
+            SET has_enough_credits = FALSE, updated_at = NOW()
+            FROM ideas i
+            WHERE r.idea_id = i.id
+              AND i.created_by_user_id = %s
+              AND r.status IN ('pending', 'initializing', 'running')
+        """
+        async with self.aget_connection() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute(query, (user_id,))
+                updated_count = cursor.rowcount
+                await conn.commit()
+        return updated_count
+
     async def get_run_webhook_token_hash(self, run_id: str) -> Optional[str]:
         query = """
             SELECT webhook_token_hash
@@ -557,6 +605,7 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
             hw_billing_status=row.get("hw_billing_status"),
             hw_billing_last_retry_at=row.get("hw_billing_last_retry_at"),
             hw_billing_retry_count=row.get("hw_billing_retry_count", 0),
+            has_enough_credits=row.get("has_enough_credits"),
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )
@@ -578,6 +627,7 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                 r.gpu_type,
                 r.error_message,
                 r.cost,
+                r.has_enough_credits,
                 r.created_at,
                 r.updated_at,
                 iv.title,
@@ -682,6 +732,7 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                 r.gpu_type,
                 r.cost,
                 r.error_message,
+                r.has_enough_credits,
                 r.created_at,
                 r.updated_at,
                 iv.title,

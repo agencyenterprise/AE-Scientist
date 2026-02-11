@@ -1794,6 +1794,9 @@ export interface paths {
          *
          *     Returns a signed URL that expires after 1 hour. Only returns URLs
          *     for papers owned by the authenticated user.
+         *
+         *     Returns 402 Payment Required if the user's balance was negative when
+         *     the review completed.
          */
         get: operations["get_paper_download_url_api_paper_reviews__review_id__download_get"];
         put?: never;
@@ -1890,6 +1893,18 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AccessRestrictedData
+         * @description Data for access restriction state changes.
+         */
+        AccessRestrictedData: {
+            /** Has Enough Credits */
+            has_enough_credits: boolean;
+            /** Access Restricted */
+            access_restricted: boolean;
+            /** Access Restricted Reason */
+            access_restricted_reason?: string | null;
+        };
         /**
          * ActiveNode
          * @description Represents a node currently executing in the research pipeline.
@@ -3122,6 +3137,44 @@ export interface components {
             message: string;
         };
         /**
+         * InsufficientBalanceError
+         * @description Error response when user has insufficient balance.
+         *
+         *     Returned with HTTP 402 Payment Required.
+         *     Matches FastAPI's HTTPException format with a 'detail' field.
+         */
+        InsufficientBalanceError: {
+            detail: components["schemas"]["InsufficientBalanceErrorDetail"];
+        };
+        /**
+         * InsufficientBalanceErrorDetail
+         * @description Details of an insufficient balance error.
+         *
+         *     All amounts are in cents (e.g., 500 = $5.00).
+         */
+        InsufficientBalanceErrorDetail: {
+            /**
+             * Message
+             * @description Human-readable error message
+             */
+            message: string;
+            /**
+             * Required Cents
+             * @description Minimum balance required for the action
+             */
+            required_cents: number;
+            /**
+             * Available Cents
+             * @description User's current balance
+             */
+            available_cents: number;
+            /**
+             * Action
+             * @description The action that was attempted
+             */
+            action: string;
+        };
+        /**
          * LLMDefault
          * @description Model for LLM default settings.
          */
@@ -3992,10 +4045,12 @@ export interface components {
             details?: Record<string, never> | null;
         };
         /**
-         * PaperReviewDetailResponse
-         * @description Detailed response for a single paper review.
+         * PaperReviewDetail
+         * @description Paper review with computed fields for API responses.
+         *
+         *     This is used both as the service return type and the API response model.
          */
-        PaperReviewDetailResponse: {
+        PaperReviewDetail: {
             /** Id */
             id: number;
             /**
@@ -4009,18 +4064,49 @@ export interface components {
              */
             error_message?: string | null;
             /**
+             * Original Filename
+             * @description Original PDF filename
+             */
+            original_filename: string;
+            /**
+             * Model
+             * @description Model used for review
+             */
+            model: string;
+            /**
+             * Created At
+             * @description ISO timestamp of review creation
+             */
+            created_at: string;
+            /**
+             * Has Enough Credits
+             * @description Whether user had positive balance when review completed. NULL if still running.
+             */
+            has_enough_credits?: boolean | null;
+            /**
+             * Access Restricted
+             * @description True if user cannot view full review details due to insufficient credits
+             * @default false
+             */
+            access_restricted: boolean;
+            /**
+             * Access Restricted Reason
+             * @description Message explaining why access is restricted
+             */
+            access_restricted_reason?: string | null;
+            /**
              * Summary
-             * @description Paper summary (null if not completed)
+             * @description Paper summary (null if not completed or restricted)
              */
             summary?: string | null;
             /**
              * Strengths
-             * @description List of strengths (null if not completed)
+             * @description List of strengths (null if not completed or restricted)
              */
             strengths?: string[] | null;
             /**
              * Weaknesses
-             * @description List of weaknesses (null if not completed)
+             * @description List of weaknesses (null if not completed or restricted)
              */
             weaknesses?: string[] | null;
             /** Originality */
@@ -4049,20 +4135,13 @@ export interface components {
             confidence?: number | null;
             /** Decision */
             decision?: string | null;
-            /** Original Filename */
-            original_filename: string;
-            /** Model */
-            model: string;
-            /** Created At */
-            created_at: string;
-            /** @description Token usage (null if not completed) */
-            token_usage?: components["schemas"]["TokenUsageResponse"] | null;
+            /** @description Token usage (null if not completed or restricted) */
+            token_usage?: components["schemas"]["TokenUsage"] | null;
             /**
              * Cost Cents
-             * @description Cost charged in cents for this review
-             * @default 0
+             * @description Cost charged in cents (null if restricted)
              */
-            cost_cents: number;
+            cost_cents?: number | null;
         };
         /**
          * PaperReviewListResponse
@@ -4113,17 +4192,17 @@ export interface components {
             status: string;
             /**
              * Summary
-             * @description Paper summary (null if pending)
+             * @description Paper summary (null if pending or restricted)
              */
             summary?: string | null;
             /**
              * Overall
-             * @description Overall score (null if pending)
+             * @description Overall score (null if pending or restricted)
              */
             overall?: number | null;
             /**
              * Decision
-             * @description Review decision (null if pending)
+             * @description Review decision (null if pending or restricted)
              */
             decision?: string | null;
             /**
@@ -4141,6 +4220,17 @@ export interface components {
              * @description ISO timestamp of review creation
              */
             created_at: string;
+            /**
+             * Has Enough Credits
+             * @description Whether user had positive balance when review completed. NULL if still running.
+             */
+            has_enough_credits?: boolean | null;
+            /**
+             * Access Restricted
+             * @description True if user cannot view full review details due to insufficient credits
+             * @default false
+             */
+            access_restricted: boolean;
         };
         /** ParentRunFileInfo */
         ParentRunFileInfo: {
@@ -4343,6 +4433,18 @@ export interface components {
             gpu_type: string;
             /** Cost */
             cost: number;
+        };
+        /**
+         * ResearchRunAccessRestrictedEvent
+         * @description Event emitted when a run's access restriction state changes (e.g., credits ran out).
+         */
+        ResearchRunAccessRestrictedEvent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "access_restricted";
+            data: components["schemas"]["AccessRestrictedData"];
         };
         /** ResearchRunArtifactEvent */
         ResearchRunArtifactEvent: {
@@ -4778,6 +4880,22 @@ export interface components {
              * @description Reason for the last restart (heartbeat_timeout or container_died)
              */
             last_restart_reason?: string | null;
+            /**
+             * Has Enough Credits
+             * @description Whether user had positive balance when run completed. NULL if still running.
+             */
+            has_enough_credits?: boolean | null;
+            /**
+             * Access Restricted
+             * @description True if user cannot view full run details due to insufficient credits
+             * @default false
+             */
+            access_restricted: boolean;
+            /**
+             * Access Restricted Reason
+             * @description Message explaining why access is restricted
+             */
+            access_restricted_reason?: string | null;
         };
         /** ResearchRunInitialEvent */
         ResearchRunInitialEvent: {
@@ -4951,6 +5069,22 @@ export interface components {
              * @description Evaluation decision ('Accept' or 'Reject') from LLM review, if available
              */
             evaluation_decision?: string | null;
+            /**
+             * Has Enough Credits
+             * @description Whether user had positive balance when run completed. NULL if still running.
+             */
+            has_enough_credits?: boolean | null;
+            /**
+             * Access Restricted
+             * @description True if user cannot view full run details due to insufficient credits
+             * @default false
+             */
+            access_restricted: boolean;
+            /**
+             * Access Restricted Reason
+             * @description Message explaining why access is restricted
+             */
+            access_restricted_reason?: string | null;
         };
         /**
          * ResearchRunListResponse
@@ -5282,7 +5416,7 @@ export interface components {
          * ResearchRunStreamEvent
          * @description Root model for research pipeline SSE events.
          */
-        ResearchRunStreamEvent: components["schemas"]["ResearchRunInitialEvent"] | components["schemas"]["ResearchRunCompleteEvent"] | components["schemas"]["ResearchRunStageProgressEvent"] | components["schemas"]["ResearchRunRunEvent"] | components["schemas"]["ResearchRunInitializationStatusEvent"] | components["schemas"]["ResearchRunTerminationStatusEvent"] | components["schemas"]["ResearchRunArtifactEvent"] | components["schemas"]["ResearchRunReviewCompletedEvent"] | components["schemas"]["ResearchRunStageCompletedEvent"] | components["schemas"]["ResearchRunPaperGenerationEvent"] | components["schemas"]["ResearchRunStageEventStream"] | components["schemas"]["ResearchRunStageSummaryEvent"] | components["schemas"]["ResearchRunCodeExecutionStartedEvent"] | components["schemas"]["ResearchRunCodeExecutionCompletedEvent"] | components["schemas"]["ResearchRunStageSkipWindowEvent"] | components["schemas"]["ResearchRunHeartbeatEvent"] | components["schemas"]["ResearchRunHwCostEstimateEvent"] | components["schemas"]["ResearchRunHwCostActualEvent"] | components["schemas"]["ResearchRunErrorEvent"];
+        ResearchRunStreamEvent: components["schemas"]["ResearchRunInitialEvent"] | components["schemas"]["ResearchRunCompleteEvent"] | components["schemas"]["ResearchRunStageProgressEvent"] | components["schemas"]["ResearchRunRunEvent"] | components["schemas"]["ResearchRunInitializationStatusEvent"] | components["schemas"]["ResearchRunTerminationStatusEvent"] | components["schemas"]["ResearchRunArtifactEvent"] | components["schemas"]["ResearchRunReviewCompletedEvent"] | components["schemas"]["ResearchRunAccessRestrictedEvent"] | components["schemas"]["ResearchRunStageCompletedEvent"] | components["schemas"]["ResearchRunPaperGenerationEvent"] | components["schemas"]["ResearchRunStageEventStream"] | components["schemas"]["ResearchRunStageSummaryEvent"] | components["schemas"]["ResearchRunCodeExecutionStartedEvent"] | components["schemas"]["ResearchRunCodeExecutionCompletedEvent"] | components["schemas"]["ResearchRunStageSkipWindowEvent"] | components["schemas"]["ResearchRunHeartbeatEvent"] | components["schemas"]["ResearchRunHwCostEstimateEvent"] | components["schemas"]["ResearchRunHwCostActualEvent"] | components["schemas"]["ResearchRunErrorEvent"];
         /**
          * ResearchRunSummary
          * @description Lightweight overview of a research pipeline run.
@@ -5980,26 +6114,11 @@ export interface components {
              */
             status: "terminating";
         };
-        /** TokenUsageEvent */
-        TokenUsageEvent: {
-            /** Model */
-            model: string;
-            /** Input Tokens */
-            input_tokens: number;
-            /** Cached Input Tokens */
-            cached_input_tokens: number;
-            /** Output Tokens */
-            output_tokens: number;
-        };
-        /** TokenUsagePayload */
-        TokenUsagePayload: {
-            event: components["schemas"]["TokenUsageEvent"];
-        };
         /**
-         * TokenUsageResponse
-         * @description Token usage summary.
+         * TokenUsage
+         * @description Token usage summary for a paper review.
          */
-        TokenUsageResponse: {
+        TokenUsage: {
             /**
              * Input Tokens
              * @description Total input tokens used
@@ -6015,6 +6134,21 @@ export interface components {
              * @description Total output tokens used
              */
             output_tokens: number;
+        };
+        /** TokenUsageEvent */
+        TokenUsageEvent: {
+            /** Model */
+            model: string;
+            /** Input Tokens */
+            input_tokens: number;
+            /** Cached Input Tokens */
+            cached_input_tokens: number;
+            /** Output Tokens */
+            output_tokens: number;
+        };
+        /** TokenUsagePayload */
+        TokenUsagePayload: {
+            event: components["schemas"]["TokenUsageEvent"];
         };
         /**
          * TreeVizItem
@@ -6437,6 +6571,15 @@ export interface operations {
                     "text/event-stream": components["schemas"]["ChatStreamEvent"];
                 };
             };
+            /** @description Insufficient balance - returned as SSE error event */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": components["schemas"]["ChatStreamEvent"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -6471,6 +6614,15 @@ export interface operations {
                     "text/event-stream": components["schemas"]["ConversationImportStreamEvent"];
                 };
             };
+            /** @description Insufficient balance to import conversation */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InsufficientBalanceError"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -6503,6 +6655,15 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ConversationImportStreamEvent"];
                     "text/event-stream": components["schemas"]["ConversationImportStreamEvent"];
+                };
+            };
+            /** @description Insufficient balance to generate idea */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InsufficientBalanceError"];
                 };
             };
             /** @description Validation Error */
@@ -8448,6 +8609,15 @@ export interface operations {
                     "application/json": components["schemas"]["ResearchRunAcceptedResponse"];
                 };
             };
+            /** @description Insufficient balance to launch research */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InsufficientBalanceError"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -8973,6 +9143,15 @@ export interface operations {
                     "application/json": components["schemas"]["PaperReviewStartedResponse"];
                 };
             };
+            /** @description Insufficient balance to start paper review */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InsufficientBalanceError"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -9021,7 +9200,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PaperReviewDetailResponse"];
+                    "application/json": components["schemas"]["PaperReviewDetail"];
                 };
             };
             /** @description Validation Error */

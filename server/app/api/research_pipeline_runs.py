@@ -32,6 +32,9 @@ from app.models import (
     ResearchRunStageSummary,
     TreeVizItem,
 )
+from app.models.billing import InsufficientBalanceError
+from app.models.sse import AccessRestrictedData
+from app.models.sse import ResearchRunAccessRestrictedEvent as SSEAccessRestrictedEvent
 from app.models.sse import ResearchRunRunEvent as SSERunEvent
 from app.models.timeline_events import StageId
 from app.services import get_database
@@ -418,6 +421,12 @@ async def create_and_launch_research_run(
     "/{conversation_id}/idea/research-run",
     response_model=ResearchRunAcceptedResponse,
     status_code=status.HTTP_202_ACCEPTED,
+    responses={
+        402: {
+            "model": InsufficientBalanceError,
+            "description": "Insufficient balance to launch research",
+        },
+    },
 )
 async def submit_idea_for_research(
     conversation_id: int,
@@ -494,6 +503,26 @@ async def get_research_run_details(
     run = await db.get_run_for_conversation(run_id=run_id, conversation_id=conversation_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Research run not found")
+
+    # Check if access is restricted due to insufficient credits
+    access_restricted = run.has_enough_credits is False
+
+    # If access is restricted, return limited data (status only)
+    if access_restricted:
+        termination = await db.get_research_pipeline_run_termination(run_id=run_id)
+        return ResearchRunDetailsResponse(
+            run=ResearchRunInfo.from_db_record(
+                run=run, termination=termination, parent_run_id=conversation.parent_run_id
+            ),
+            stage_progress=[],
+            stage_events=[],
+            stage_summaries=[],
+            events=[],
+            artifacts=[],
+            paper_generation_progress=[],
+            stage_skip_windows=[],
+            child_conversations=[],
+        )
 
     stage_progress_events = [
         ResearchRunStageProgress.from_db_record(event)
@@ -857,8 +886,19 @@ async def stop_research_run(conversation_id: int, run_id: str) -> ResearchRunSto
         )
 
     stop_message = "Research run was stopped by the user."
+
+    # Determine has_enough_credits based on user's current wallet balance
+    has_enough_credits: bool | None = None
+    user_id = await db.get_run_owner_user_id(run_id)
+    if user_id is not None:
+        balance = await db.get_user_wallet_balance(user_id)
+        has_enough_credits = balance > 0
+
     await db.update_research_pipeline_run(
-        run_id=run_id, status="failed", error_message=stop_message
+        run_id=run_id,
+        status="failed",
+        error_message=stop_message,
+        has_enough_credits=has_enough_credits,
     )
     await db.insert_research_pipeline_run_event(
         run_id=run_id,
@@ -890,6 +930,28 @@ async def stop_research_run(conversation_id: int, run_id: str) -> ResearchRunSto
             data=run_event,
         ),
     )
+
+    # Notify frontend if access is restricted due to insufficient credits
+    if has_enough_credits is False:
+        logger.info(
+            "Emitting access_restricted SSE event for run %s (trigger: user_stop, "
+            "user_id=%s, balance_positive=False)",
+            run_id,
+            user_id,
+        )
+        publish_stream_event(
+            run_id,
+            SSEAccessRestrictedEvent(
+                type="access_restricted",
+                data=AccessRestrictedData(
+                    has_enough_credits=False,
+                    access_restricted=True,
+                    access_restricted_reason=(
+                        "Add credits to view full run details. " "Your balance must be positive."
+                    ),
+                ),
+            ),
+        )
 
     await ingest_narration_event(
         db,
@@ -932,6 +994,14 @@ async def download_research_run_artifact(
     run = await db.get_run_for_conversation(run_id=run_id, conversation_id=conversation_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Research run not found")
+
+    # Check if access is restricted due to insufficient credits
+    if run.has_enough_credits is False:
+        raise HTTPException(
+            status_code=402,
+            detail="Insufficient credits. Add funds to access artifacts.",
+        )
+
     artifact = await db.get_run_artifact(artifact_id)
     if artifact is None or artifact.run_id != run_id:
         raise HTTPException(status_code=404, detail="Artifact not found")
@@ -977,6 +1047,13 @@ async def get_artifact_presigned_url(
     run = await db.get_run_for_conversation(run_id=run_id, conversation_id=conversation_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Research run not found")
+
+    # Check if access is restricted due to insufficient credits
+    if run.has_enough_credits is False:
+        raise HTTPException(
+            status_code=402,
+            detail="Insufficient credits. Add funds to access artifacts.",
+        )
 
     artifact = await db.get_run_artifact(artifact_id)
     if artifact is None or artifact.run_id != run_id:

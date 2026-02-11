@@ -20,6 +20,8 @@ from app.models.research_pipeline import ResearchRunEvent as RPEvent
 from app.models.research_pipeline import ResearchRunPaperGenerationProgress
 from app.models.research_pipeline import ResearchRunStageEvent as RPStageEvent
 from app.models.research_pipeline import ResearchRunStageProgress, ResearchRunStageSummary
+from app.models.sse import AccessRestrictedData
+from app.models.sse import ResearchRunAccessRestrictedEvent as SSEAccessRestrictedEvent
 from app.models.sse import ResearchRunArtifactEvent as SSEArtifactEvent
 from app.models.sse import ResearchRunCodeExecutionCompletedData
 from app.models.sse import ResearchRunCodeExecutionCompletedEvent as SSECodeExecutionCompletedEvent
@@ -870,12 +872,22 @@ async def ingest_run_finished(
 
     new_status = "completed" if payload.success else "failed"
     now = datetime.now(timezone.utc)
+
+    # Determine has_enough_credits based on user's current wallet balance
+    has_enough_credits: bool | None = None
+    user_id = await db.get_run_owner_user_id(run_id)
+    if user_id is not None:
+        db_manager = cast(DatabaseManager, db)
+        balance = await db_manager.get_user_wallet_balance(user_id)
+        has_enough_credits = balance > 0
+
     await db.update_research_pipeline_run(
         run_id=run_id,
         status=new_status,
         error_message=payload.message,
         last_heartbeat_at=now,
         heartbeat_failures=0,
+        has_enough_credits=has_enough_credits,
     )
     await db.insert_research_pipeline_run_event(
         run_id=run_id,
@@ -909,6 +921,26 @@ async def ingest_run_finished(
             data=run_event,
         ),
     )
+
+    # Notify frontend if access is restricted due to insufficient credits
+    if has_enough_credits is False:
+        logger.info(
+            "Emitting access_restricted SSE event for run %s (trigger: run_finished, "
+            "user_id=%s, balance_positive=False)",
+            run_id,
+            user_id,
+        )
+        publish_stream_event(
+            run_id,
+            SSEAccessRestrictedEvent(
+                type="access_restricted",
+                data=AccessRestrictedData(
+                    has_enough_credits=False,
+                    access_restricted=True,
+                    access_restricted_reason="Add credits to view full run details. Your balance must be positive.",
+                ),
+            ),
+        )
 
     # Ingest into narrator for timeline and queue cleanup
     await ingest_narration_event(
@@ -1151,6 +1183,8 @@ async def ingest_token_usage(
     )
 
     # Charge user for LLM usage (separate from GPU costs)
+    # Note: charge_for_llm_usage -> charge_cents automatically locks all user content
+    # if balance goes negative
     user_id = await db.get_run_owner_user_id(run_id)
     if user_id:
         await charge_for_llm_usage(

@@ -34,6 +34,7 @@ from app.models import (
     ParseSuccessResult,
     ResearchRunSummary,
 )
+from app.models.billing import InsufficientBalanceError
 from app.models.conversations import ModelCost, ResearchCost
 from app.services import (
     AnthropicService,
@@ -1077,7 +1078,11 @@ async def _stream_manual_seed_pipeline(
                     "schema": {"$ref": "#/components/schemas/ConversationImportStreamEvent"}
                 }
             },
-        }
+        },
+        402: {
+            "model": InsufficientBalanceError,
+            "description": "Insufficient balance to import conversation",
+        },
     },
 )
 async def import_conversation(
@@ -1130,7 +1135,11 @@ async def import_conversation(
                     "schema": {"$ref": "#/components/schemas/ConversationImportStreamEvent"}
                 }
             },
-        }
+        },
+        402: {
+            "model": InsufficientBalanceError,
+            "description": "Insufficient balance to generate idea",
+        },
     },
 )
 async def import_manual_seed(

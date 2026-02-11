@@ -13,7 +13,9 @@ import {
   Clock,
   AlertCircle,
   X,
+  Lock,
 } from "lucide-react";
+import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import { config } from "@/shared/lib/config";
 import { withAuthHeaders } from "@/shared/lib/session-token";
@@ -21,13 +23,22 @@ import { PaperReviewResult, type PaperReviewResponse } from "./PaperReviewResult
 import type { components } from "@/types/api.gen";
 
 // Use generated types from OpenAPI schema
-type ReviewDetailResponse = components["schemas"]["PaperReviewDetailResponse"];
+type ReviewDetailResponse = components["schemas"]["PaperReviewDetail"];
 type PaperReviewSummary = components["schemas"]["PaperReviewSummary"];
 type PaperReviewListResponse = components["schemas"]["PaperReviewListResponse"];
 
 const REFRESH_INTERVAL_MS = 5000; // Refresh every 5 seconds when there are pending reviews
 
-function getStatusIcon(status: string, decision: string | null | undefined) {
+function getStatusIcon(
+  status: string,
+  decision: string | null | undefined,
+  accessRestricted?: boolean
+) {
+  // Show lock icon for restricted reviews
+  if (accessRestricted) {
+    return <Lock className="h-4 w-4 text-amber-400" />;
+  }
+
   switch (status) {
     case "pending":
     case "processing":
@@ -172,8 +183,9 @@ export function PaperReviewHistory({ refreshKey }: PaperReviewHistoryProps) {
   };
 
   const handleReviewClick = (review: PaperReviewSummary) => {
-    // Only allow clicking on completed reviews
+    // Only allow clicking on completed, non-restricted reviews
     if (review.status !== "completed") return;
+    if (review.access_restricted) return;
 
     if (expandedReviewId === review.id) {
       // Collapse if already expanded
@@ -244,30 +256,46 @@ export function PaperReviewHistory({ refreshKey }: PaperReviewHistoryProps) {
         const isInProgress = review.status === "pending" || review.status === "processing";
         const isExpanded = expandedReviewId === review.id;
         const isLoading = loadingReviewId === review.id;
-        const isClickable = review.status === "completed";
+        const isRestricted = review.access_restricted === true;
+        const isClickable = review.status === "completed" && !isRestricted;
 
         return (
           <div key={review.id}>
             <div
               onClick={() => handleReviewClick(review)}
-              className={`flex items-center gap-4 py-4 transition-colors ${
+              className={`flex items-center gap-4 px-4 py-4 transition-colors ${
                 isInProgress
                   ? "bg-amber-500/5"
-                  : isClickable
-                    ? "cursor-pointer hover:bg-slate-800/30"
-                    : ""
+                  : isRestricted
+                    ? "bg-amber-500/5"
+                    : isClickable
+                      ? "cursor-pointer hover:bg-slate-800/30"
+                      : ""
               }`}
             >
-              <div className="flex-shrink-0">{getStatusIcon(review.status, review.decision)}</div>
+              <div className="flex-shrink-0">
+                {getStatusIcon(review.status, review.decision, review.access_restricted)}
+              </div>
 
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="truncate font-medium text-white">
                     {review.original_filename}
                   </span>
-                  <span className={`text-sm ${statusInfo.color}`}>{statusInfo.text}</span>
+                  {isRestricted ? (
+                    <span className="text-sm text-amber-400">Locked</span>
+                  ) : (
+                    <span className={`text-sm ${statusInfo.color}`}>{statusInfo.text}</span>
+                  )}
                 </div>
-                {review.status === "completed" && review.summary ? (
+                {isRestricted ? (
+                  <p className="mt-1 text-sm text-amber-400/70">
+                    Add credits to view this review.{" "}
+                    <Link href="/billing" className="underline hover:text-amber-300">
+                      Add Credits
+                    </Link>
+                  </p>
+                ) : review.status === "completed" && review.summary ? (
                   <p className="mt-1 line-clamp-1 text-sm text-slate-400">{review.summary}</p>
                 ) : review.status === "failed" ? (
                   <p className="mt-1 text-sm text-red-400/70">Review failed</p>
@@ -279,7 +307,7 @@ export function PaperReviewHistory({ refreshKey }: PaperReviewHistoryProps) {
                   </p>
                 ) : null}
                 <div className="mt-1 flex items-center gap-3 text-xs text-slate-500">
-                  {review.status === "completed" && review.overall !== null && (
+                  {review.status === "completed" && review.overall !== null && !isRestricted && (
                     <span>
                       Score:{" "}
                       <span className={getScoreColor(review.overall)}>{review.overall}/10</span>
@@ -297,12 +325,22 @@ export function PaperReviewHistory({ refreshKey }: PaperReviewHistoryProps) {
               )}
               {!isLoading &&
                 !isInProgress &&
+                !isRestricted &&
                 isClickable &&
                 (isExpanded ? (
                   <ChevronDown className="h-5 w-5 flex-shrink-0 text-slate-400" />
                 ) : (
                   <ChevronRight className="h-5 w-5 flex-shrink-0 text-slate-600" />
                 ))}
+              {isRestricted && (
+                <Link
+                  href="/billing"
+                  onClick={e => e.stopPropagation()}
+                  className="shrink-0 rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-sky-500"
+                >
+                  Add Credits
+                </Link>
+              )}
               {isInProgress && (
                 <Loader2 className="h-5 w-5 flex-shrink-0 animate-spin text-amber-400" />
               )}

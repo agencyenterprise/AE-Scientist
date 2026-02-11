@@ -34,6 +34,7 @@ interface OverviewTabProps {
   stageSkipState?: StageSkipStateMap;
   skipPendingStage?: string | null;
   onSkipStage?: (stageId: string) => Promise<void>;
+  accessRestricted?: boolean;
 }
 
 export function OverviewTab({
@@ -48,6 +49,7 @@ export function OverviewTab({
   stageSkipState,
   skipPendingStage,
   onSkipStage,
+  accessRestricted,
 }: OverviewTabProps) {
   const isSuccessfullyCompleted = run.status === "completed";
 
@@ -60,7 +62,7 @@ export function OverviewTab({
 
       {run.error_message && <ResearchRunError message={run.error_message} />}
 
-      {conversationId !== null && (
+      {!accessRestricted && conversationId !== null && (
         <FinalPdfBanner
           artifacts={artifacts}
           conversationId={conversationId}
@@ -69,7 +71,7 @@ export function OverviewTab({
         />
       )}
 
-      {isSuccessfullyCompleted && (
+      {!accessRestricted && isSuccessfullyCompleted && (
         <EvaluationSummary
           review={review}
           loading={reviewLoading}
@@ -77,15 +79,17 @@ export function OverviewTab({
         />
       )}
 
-      <ResearchActivityFeed
-        runId={runId}
-        onTerminateExecution={onTerminateExecution}
-        runStatus={run.status}
-        terminationStatus={run.termination_status}
-        stageSkipState={stageSkipState}
-        skipPendingStage={skipPendingStage}
-        onSkipStage={onSkipStage}
-      />
+      {!accessRestricted && (
+        <ResearchActivityFeed
+          runId={runId}
+          onTerminateExecution={onTerminateExecution}
+          runStatus={run.status}
+          terminationStatus={run.termination_status}
+          stageSkipState={stageSkipState}
+          skipPendingStage={skipPendingStage}
+          onSkipStage={onSkipStage}
+        />
+      )}
     </div>
   );
 }

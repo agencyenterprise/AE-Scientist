@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/shared/lib/api-client-typed";
-import { formatCentsAsDollars, parseInsufficientBalanceError } from "@/shared/utils/costs";
+import {
+  getInsufficientBalanceDetail,
+  formatInsufficientBalanceMessage,
+} from "@/shared/utils/costs";
 import { useGpuSelection } from "@/features/research/hooks/useGpuSelection";
 
 /**
@@ -44,13 +47,9 @@ export function useLaunchResearch(conversationId: number | null) {
       );
       if (error) {
         if (response.status === 402) {
-          const info = parseInsufficientBalanceError(error as unknown);
-          const message =
-            info?.message ||
-            (info?.required_cents
-              ? `You need at least ${formatCentsAsDollars(info.required_cents)} to launch research.`
-              : "Insufficient balance to launch research.");
-          throw new Error(message);
+          // 402 response is typed as InsufficientBalanceError from the OpenAPI schema
+          const detail = getInsufficientBalanceDetail(error);
+          throw new Error(formatInsufficientBalanceMessage(detail));
         }
         if (response.status === 400) {
           const errorObj = error as unknown as Record<string, unknown>;

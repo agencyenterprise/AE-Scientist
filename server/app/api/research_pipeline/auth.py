@@ -34,6 +34,7 @@ class ResearchRunStore(Protocol):
         start_deadline_at: Optional[datetime] = None,
         last_billed_at: Optional[datetime] = None,
         started_running_at: Optional[datetime] = None,
+        has_enough_credits: Optional[bool] = None,
     ) -> None: ...
 
     async def insert_research_pipeline_run_event(

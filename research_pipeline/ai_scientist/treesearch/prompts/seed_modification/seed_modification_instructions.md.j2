@@ -1,0 +1,28 @@
+# Seed Modification Task
+
+**Your ONLY job is to change the random seed value in the code and run it.**
+
+## Target Seed Value
+**NEW_SEED = {{ seed_value }}**
+
+## Instructions
+1. Find ALL places in the code where random seeds are set:
+   - `SEED = ...` or `seed = ...` variable assignments
+   - `random.seed(...)`
+   - `np.random.seed(...)`
+   - `torch.manual_seed(...)`
+   - `torch.cuda.manual_seed(...)` / `torch.cuda.manual_seed_all(...)`
+2. Change ALL seed values to **{{ seed_value }}**
+3. Write the modified code to `{{ agent_file_name }}`
+4. Run: `{{ venv_dir }}/bin/python {{ agent_file_name }}`
+
+## Do NOT change anything else
+- Do not change any logic, algorithms, or model architecture
+- Do not change where results are saved (must remain `./working/experiment_data.npy`)
+- Do not change plot output locations (must remain `./working/*.png`)
+- Do not modify hyperparameters (except seeds)
+
+## Base Code
+```python
+{{ base_code }}
+```

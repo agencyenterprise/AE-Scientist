@@ -10,13 +10,34 @@ import {
   Clock4,
   DollarSign,
   FileText,
+  FlaskConical,
   GitBranch,
-  Layers,
-  Repeat,
   GitMerge,
+  Layers,
+  MessageSquare,
+  Repeat,
 } from "lucide-react";
 
-const FLOW_STEPS = [
+const USER_JOURNEY = [
+  {
+    icon: MessageSquare,
+    iconColor: "text-sky-400",
+    bgColor: "bg-sky-500/20",
+    title: "Step 1: Ideation",
+    detail:
+      "Describe your research hypothesis on the home page. Then chat with an AI assistant to refine your idea into a concrete, executable research plan. Iterate until you have a well-defined experiment.",
+  },
+  {
+    icon: FlaskConical,
+    iconColor: "text-emerald-400",
+    bgColor: "bg-emerald-500/20",
+    title: "Step 2: Research Pipeline",
+    detail:
+      'When your idea is ready, click "Launch Research" to start the pipeline. Select your hardware tier and watch as the system runs experiments, analyzes results, and generates a paper.',
+  },
+];
+
+const PIPELINE_FLOW_STEPS = [
   {
     title: "Design experiments in code",
     detail: "Writes training scripts and evaluation loops that can run end-to-end.",
@@ -130,19 +151,43 @@ export function HowItWorksPanel({ className }: HowItWorksPanelProps) {
     <div className={cn("space-y-6 text-sm text-slate-100", className)}>
       <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-slate-400">
         <GitBranch className="h-4 w-4 text-sky-400" />
-        <span>How AE Scientist Runs</span>
+        <span>How AE Scientist Works</span>
       </div>
-      <h2 className="mt-2 text-2xl font-semibold text-white">Understand the pipeline</h2>
+      <h2 className="mt-2 text-2xl font-semibold text-white">From idea to paper</h2>
       <p className="mt-2 text-slate-300">
-        AE Scientist automates an end-to-end research workflow, from idea generation to manuscript
-        drafting. Use this tab to sanity-check whether your project fits the system&apos;s current
-        constraints before launching a run.
+        AE Scientist is a two-phase system: first you refine your research idea with AI assistance,
+        then launch an automated pipeline that runs experiments and writes a paper.
       </p>
 
       <section className="mt-6">
-        <h3 className="text-base font-semibold text-white">Standard flow</h3>
+        <h3 className="text-base font-semibold text-white">Your journey</h3>
+        <div className="mt-3 space-y-3">
+          {USER_JOURNEY.map(step => (
+            <div
+              key={step.title}
+              className="rounded-2xl border border-slate-800/60 bg-slate-900/40 p-4 shadow-sm"
+            >
+              <div className="flex items-center gap-3">
+                <span
+                  className={cn(
+                    "flex h-8 w-8 items-center justify-center rounded-full",
+                    step.bgColor
+                  )}
+                >
+                  <step.icon className={cn("h-4 w-4", step.iconColor)} />
+                </span>
+                <p className="text-sm font-semibold text-white">{step.title}</p>
+              </div>
+              <p className="mt-2 text-slate-300">{step.detail}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="mt-6">
+        <h3 className="text-base font-semibold text-white">What the pipeline does</h3>
         <ol className="mt-3 space-y-3">
-          {FLOW_STEPS.map((step, index) => (
+          {PIPELINE_FLOW_STEPS.map((step, index) => (
             <li
               key={step.title}
               className="rounded-2xl border border-slate-800/60 bg-slate-900/40 p-4 shadow-sm"
@@ -212,12 +257,13 @@ export function HowItWorksPanel({ className }: HowItWorksPanelProps) {
             <Clock4 className="h-4 w-4 text-amber-300" />
             Runtime
           </div>
-          <p className="mt-2 text-lg font-semibold text-white">
-            3-{maxRuntimeHours === null ? "…" : maxRuntimeHours} hours
-          </p>
+          <p className="mt-2 text-lg font-semibold text-white">4-6 hours</p>
           <p className="text-slate-400 text-sm">
-            This depends on the complexity of the experiment. A maximum time limit is set at{" "}
-            {maxRuntimeHours === null ? "…" : maxRuntimeHours} hours to prevent excessive cost.
+            Typical runtime for a research run. Can vary significantly based on experiment
+            complexity and the hardware you select.
+            {maxRuntimeHours !== null && (
+              <> A maximum limit of {maxRuntimeHours} hours is set to prevent excessive cost.</>
+            )}
           </p>
         </div>
         <div className="rounded-2xl border border-slate-800/60 bg-slate-900/40 p-4">
@@ -225,10 +271,10 @@ export function HowItWorksPanel({ className }: HowItWorksPanelProps) {
             <DollarSign className="h-4 w-4 text-emerald-300" />
             Cost
           </div>
-          <p className="mt-2 text-lg font-semibold text-white">~$20 USD</p>
+          <p className="mt-2 text-lg font-semibold text-white">~$25 USD</p>
           <p className="text-slate-400 text-sm">
-            Charged per research run. The actual cost is based on the actual runtime of the
-            experiment.
+            Typical cost per research run. Actual cost varies based on runtime, experiment
+            complexity, and the hardware tier you select.
           </p>
         </div>
         <div className="rounded-2xl border border-slate-800/60 bg-slate-900/40 p-4">

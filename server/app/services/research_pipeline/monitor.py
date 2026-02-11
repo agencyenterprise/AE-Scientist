@@ -11,6 +11,8 @@ from app.api.research_pipeline.utils import generate_run_webhook_token
 from app.api.research_pipeline_stream import publish_stream_event
 from app.config import settings
 from app.models import ResearchRunEvent
+from app.models.sse import AccessRestrictedData
+from app.models.sse import ResearchRunAccessRestrictedEvent as SSEAccessRestrictedEvent
 from app.models.sse import ResearchRunRunEvent as SSERunEvent
 from app.services import get_database
 from app.services.database import DatabaseManager
@@ -45,6 +47,7 @@ class ResearchRunStore(Protocol):
         start_deadline_at: Optional[datetime] = None,
         last_billed_at: Optional[datetime] = None,
         started_running_at: Optional[datetime] = None,
+        has_enough_credits: Optional[bool] = None,
     ) -> None: ...
 
     async def insert_research_pipeline_run_event(
@@ -520,6 +523,23 @@ class ResearchPipelineMonitor:
         )
 
         available = await db.get_user_wallet_balance(user_id)
+
+        # If balance went negative, restrict access to active user content
+        has_enough_credits_update: bool | None = None
+        if available <= 0:
+            has_enough_credits_update = False
+            # Lock all user's active research runs and paper reviews
+            actual_db = get_database()
+            locked_runs = await actual_db.lock_active_research_runs_for_user(user_id)
+            locked_reviews = await actual_db.lock_active_paper_reviews_for_user(user_id)
+            logger.info(
+                "Run %s user balance went negative (%d cents); locked %d active runs and %d active reviews.",
+                run.run_id,
+                available,
+                locked_runs,
+                locked_reviews,
+            )
+
         await db.insert_research_pipeline_run_event(
             run_id=run.run_id,
             event_type="billing_hold",
@@ -534,7 +554,32 @@ class ResearchPipelineMonitor:
         await db.update_research_pipeline_run(
             run_id=run.run_id,
             last_billed_at=now,
+            has_enough_credits=has_enough_credits_update,
         )
+
+        # Notify frontend if access was restricted due to insufficient credits
+        if has_enough_credits_update is False:
+            logger.info(
+                "Emitting access_restricted SSE event for run %s (trigger: billing_hold, "
+                "user_id=%s, balance_cents=%d)",
+                run.run_id,
+                user_id,
+                available,
+            )
+            publish_stream_event(
+                run.run_id,
+                SSEAccessRestrictedEvent(
+                    type="access_restricted",
+                    data=AccessRestrictedData(
+                        has_enough_credits=False,
+                        access_restricted=True,
+                        access_restricted_reason=(
+                            "Add credits to view full run details. "
+                            "Your balance must be positive."
+                        ),
+                    ),
+                ),
+            )
 
     async def _maybe_backfill_ssh_info(
         self,

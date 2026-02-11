@@ -3,7 +3,10 @@ import { useRouter } from "next/navigation";
 import type { ConversationDetail, Idea } from "@/types";
 import { api } from "@/shared/lib/api-client-typed";
 import { useProjectDraftData } from "./use-project-draft-data";
-import { formatCentsAsDollars, parseInsufficientBalanceError } from "@/shared/utils/costs";
+import {
+  getInsufficientBalanceDetail,
+  formatInsufficientBalanceMessage,
+} from "@/shared/utils/costs";
 import { useGpuSelection } from "@/features/research/hooks/useGpuSelection";
 
 interface UseProjectDraftStateProps {
@@ -87,18 +90,13 @@ export function useProjectDraftState({
       );
 
       if (error) {
-        // Check for 402 (insufficient balance) - error has status in openapi-fetch
-        const errorAny = error as { status?: number; detail?: string };
-        if (errorAny.status === 402 || (typeof error === "object" && "required_cents" in error)) {
-          const info = parseInsufficientBalanceError(error);
-          const message =
-            info?.message ||
-            (info?.required_cents
-              ? `You need at least ${formatCentsAsDollars(info.required_cents)} to launch research.`
-              : "Insufficient balance to launch research.");
-          throw new Error(message);
+        // Check for 402 (insufficient balance) - error is typed from OpenAPI schema
+        const detail = getInsufficientBalanceDetail(error);
+        if (detail) {
+          throw new Error(formatInsufficientBalanceMessage(detail));
         }
         // Check for 400 (bad request)
+        const errorAny = error as { detail?: string };
         const detailValue = errorAny.detail;
         const message = detailValue ?? "Failed to launch research run.";
         throw new Error(message);

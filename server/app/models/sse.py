@@ -383,6 +383,21 @@ class ResearchRunReviewCompletedEvent(BaseModel):
     data: "LlmReviewResponse"
 
 
+class AccessRestrictedData(BaseModel):
+    """Data for access restriction state changes."""
+
+    has_enough_credits: bool
+    access_restricted: bool
+    access_restricted_reason: Optional[str] = None
+
+
+class ResearchRunAccessRestrictedEvent(BaseModel):
+    """Event emitted when a run's access restriction state changes (e.g., credits ran out)."""
+
+    type: Literal["access_restricted"]
+    data: AccessRestrictedData
+
+
 ResearchRunEventUnion = Annotated[
     Union[
         ResearchRunInitialEvent,
@@ -393,6 +408,7 @@ ResearchRunEventUnion = Annotated[
         ResearchRunTerminationStatusEvent,
         ResearchRunArtifactEvent,
         ResearchRunReviewCompletedEvent,
+        ResearchRunAccessRestrictedEvent,
         ResearchRunStageCompletedEvent,
         ResearchRunPaperGenerationEvent,
         ResearchRunStageEventStream,

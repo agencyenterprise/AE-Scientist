@@ -49,9 +49,13 @@ The frontend provides an intuitive interface for:
 
    # Stripe Checkout
    NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="pk_test_xxx"
+
+   # Support Email (for refund requests, free trial requests, etc.)
+   NEXT_PUBLIC_SUPPORT_EMAIL="james.bowler@ae.studio"
    ```
 
    - `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` is required for redirecting users to Stripe Checkout.
+   - `NEXT_PUBLIC_SUPPORT_EMAIL` is used for mailto links (refund requests, free trial requests). Defaults to `james.bowler@ae.studio` if not set.
    - Minimum balance thresholds are fetched from the backend via `/api/public-config`.
 
 ### Development

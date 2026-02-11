@@ -63,6 +63,9 @@ export type TerminationStatusData = components["schemas"]["ResearchRunTerminatio
 // LLM Review
 export type LlmReviewResponse = components["schemas"]["LlmReviewResponse"];
 
+// Access restriction (SSE event data)
+export type AccessRestrictedData = components["schemas"]["AccessRestrictedData"];
+
 // Run tree
 export type RunTreeNode = components["schemas"]["RunTreeNodeResponse"];
 export type RunTreeResponse = components["schemas"]["RunTreeResponse"];
@@ -100,6 +103,9 @@ export interface ResearchRun {
   parentRunId: string | null;
   evaluationOverall: number | null; // Overall evaluation score (1-10)
   evaluationDecision: string | null; // 'Accept' or 'Reject'
+  hasEnoughCredits: boolean | null; // Whether user had positive balance when run completed
+  accessRestricted: boolean; // True if user cannot view full run details
+  accessRestrictedReason: string | null; // Message explaining why access is restricted
 }
 
 export interface ResearchRunListResponse {

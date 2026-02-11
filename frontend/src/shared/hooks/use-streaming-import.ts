@@ -5,7 +5,10 @@ import * as Sentry from "@sentry/nextjs";
 import { apiStream, ApiError } from "@/shared/lib/api-client";
 import { ImportState } from "@/features/conversation-import/types/types";
 import type { SSEEvent } from "@/features/conversation-import/types/types";
-import { parseInsufficientBalanceError } from "@/shared/utils/costs";
+import {
+  getInsufficientBalanceDetail,
+  formatInsufficientBalanceMessage,
+} from "@/shared/utils/costs";
 
 /**
  * Options for the streaming import hook.
@@ -355,8 +358,8 @@ export function useStreamingImport(options: StreamingImportOptions = {}): Stream
         };
       } catch (error) {
         if (error instanceof ApiError && error.status === 402) {
-          const info = parseInsufficientBalanceError(error.data);
-          const message = info?.message || "Insufficient balance. Please add funds to continue.";
+          const detail = getInsufficientBalanceDetail(error.data);
+          const message = formatInsufficientBalanceMessage(detail);
           setIsStreaming(false);
           onEnd?.();
           onError?.(message);
@@ -364,9 +367,9 @@ export function useStreamingImport(options: StreamingImportOptions = {}): Stream
             success: false,
             error: message,
             insufficientBalance: true,
-            required: info?.required_cents,
-            available: info?.available_cents,
-            action: info?.action,
+            required: detail?.required_cents,
+            available: detail?.available_cents,
+            action: detail?.action,
           };
         }
         // AbortError is expected on cleanup

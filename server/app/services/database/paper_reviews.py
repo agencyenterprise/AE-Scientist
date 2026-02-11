@@ -22,7 +22,7 @@ class PaperReviewStatus(str, Enum):
 
 
 class PaperReview(NamedTuple):
-    """Represents a standalone paper review."""
+    """Represents a standalone paper review from the database."""
 
     id: int
     user_id: int
@@ -42,12 +42,13 @@ class PaperReview(NamedTuple):
     overall: Optional[int]
     confidence: Optional[int]
     decision: Optional[str]
-    original_filename: Optional[str]
+    original_filename: str
     s3_key: Optional[str]
     model: str
     status: str
     error_message: Optional[str]
     created_at: datetime
+    has_enough_credits: Optional[bool] = None
 
 
 class PaperReviewsMixin(ConnectionProvider):
@@ -170,7 +171,8 @@ class PaperReviewsMixin(ConnectionProvider):
             SELECT id, user_id, summary, strengths, weaknesses, originality, quality,
                    clarity, significance, questions, limitations, ethical_concerns,
                    soundness, presentation, contribution, overall, confidence, decision,
-                   original_filename, s3_key, model, status, error_message, created_at
+                   original_filename, s3_key, model, status, error_message, created_at,
+                   has_enough_credits
             FROM paper_reviews
             WHERE user_id = %s AND status IN (%s, %s)
             ORDER BY created_at DESC
@@ -256,7 +258,8 @@ class PaperReviewsMixin(ConnectionProvider):
             SELECT id, user_id, summary, strengths, weaknesses, originality, quality,
                    clarity, significance, questions, limitations, ethical_concerns,
                    soundness, presentation, contribution, overall, confidence, decision,
-                   original_filename, s3_key, model, status, error_message, created_at
+                   original_filename, s3_key, model, status, error_message, created_at,
+                   has_enough_credits
             FROM paper_reviews
             WHERE id = %s
         """
@@ -276,7 +279,8 @@ class PaperReviewsMixin(ConnectionProvider):
             SELECT id, user_id, summary, strengths, weaknesses, originality, quality,
                    clarity, significance, questions, limitations, ethical_concerns,
                    soundness, presentation, contribution, overall, confidence, decision,
-                   original_filename, s3_key, model, status, error_message, created_at
+                   original_filename, s3_key, model, status, error_message, created_at,
+                   has_enough_credits
             FROM paper_reviews
             WHERE user_id = %s
             ORDER BY created_at DESC
@@ -318,5 +322,67 @@ class PaperReviewsMixin(ConnectionProvider):
                         PaperReviewStatus.PROCESSING.value,
                         stale_threshold_minutes,
                     ),
+                )
+                return cursor.rowcount or 0
+
+    async def set_paper_review_has_enough_credits(
+        self, review_id: int, has_enough_credits: bool
+    ) -> None:
+        """Set the has_enough_credits flag for a paper review.
+
+        This is called when a review completes to record whether the user
+        had positive balance at completion time.
+        """
+        async with self.aget_connection() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
+                    """
+                    UPDATE paper_reviews
+                    SET has_enough_credits = %s
+                    WHERE id = %s
+                    """,
+                    (has_enough_credits, review_id),
+                )
+
+    async def unlock_paper_reviews_for_user(self, user_id: int) -> int:
+        """Unlock paper reviews for a user by setting has_enough_credits to TRUE.
+
+        This is called when a user adds credits and their balance becomes positive.
+
+        Returns:
+            Number of reviews unlocked.
+        """
+        async with self.aget_connection() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
+                    """
+                    UPDATE paper_reviews
+                    SET has_enough_credits = TRUE
+                    WHERE user_id = %s
+                      AND has_enough_credits = FALSE
+                    """,
+                    (user_id,),
+                )
+                return cursor.rowcount or 0
+
+    async def lock_active_paper_reviews_for_user(self, user_id: int) -> int:
+        """Lock active paper reviews for a user by setting has_enough_credits to FALSE.
+
+        This is called when a user's balance goes negative from any charge.
+        Only locks reviews that are still in progress (pending or processing).
+
+        Returns:
+            Number of reviews locked.
+        """
+        async with self.aget_connection() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
+                    """
+                    UPDATE paper_reviews
+                    SET has_enough_credits = FALSE
+                    WHERE user_id = %s
+                      AND status IN ('pending', 'processing')
+                    """,
+                    (user_id,),
                 )
                 return cursor.rowcount or 0

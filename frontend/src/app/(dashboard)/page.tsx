@@ -1,5 +1,6 @@
 import { CreateHypothesisForm } from "@/features/input-pipeline/components/CreateHypothesisForm";
 import { ResearchHistoryList } from "@/features/research/components/ResearchHistoryList";
+import { GettingStartedCard } from "@/shared/components/GettingStartedCard";
 import { PageCard } from "@/shared/components/PageCard";
 import { Rocket } from "lucide-react";
 
@@ -19,10 +20,12 @@ export default async function HomePage() {
               What should the AE Scientist run next?
             </h1>
             <p className="max-w-2xl text-pretty text-base text-slate-300 sm:text-lg">
-              Promote a favorite ideation outcome or craft a brand new research direction. We’ll run
-              the experiments and keep you in the loop every step of the way.
+              Promote a favorite ideation outcome or craft a brand new research direction.
+              We&apos;ll run the experiments and keep you in the loop every step of the way.
             </p>
           </div>
+
+          <GettingStartedCard />
 
           <div className="relative rounded-[28px] border border-slate-800/70 bg-slate-950/80 p-6 text-left shadow-[0_30px_80px_-50px_rgba(125,211,252,0.45)] backdrop-blur">
             <CreateHypothesisForm />

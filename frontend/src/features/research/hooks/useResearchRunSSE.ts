@@ -17,6 +17,7 @@ import type {
   StageSkipWindowUpdate,
   LlmReviewResponse,
   TerminationStatusData,
+  AccessRestrictedData,
 } from "@/types/research";
 
 export type { ResearchRunDetails };
@@ -46,6 +47,7 @@ interface UseResearchRunSSEOptions {
   onStageSkipWindow?: (event: StageSkipWindowUpdate) => void;
   onReviewCompleted?: (review: LlmReviewResponse) => void;
   onInitializationStatus?: (event: InitializationStatusData) => void;
+  onAccessRestricted?: (data: AccessRestrictedData) => void;
 }
 
 interface UseResearchRunSSEReturn {
@@ -106,6 +108,13 @@ function normalizeRunInfo(run: InitialRunInfo): ResearchRunInfo {
       (run as unknown as { last_restart_at?: string | null }).last_restart_at ?? null,
     last_restart_reason:
       (run as unknown as { last_restart_reason?: string | null }).last_restart_reason ?? null,
+    has_enough_credits:
+      (run as unknown as { has_enough_credits?: boolean | null }).has_enough_credits ?? null,
+    access_restricted:
+      (run as unknown as { access_restricted?: boolean }).access_restricted ?? false,
+    access_restricted_reason:
+      (run as unknown as { access_restricted_reason?: string | null }).access_restricted_reason ??
+      null,
   };
 }
 
@@ -271,6 +280,7 @@ export function useResearchRunSSE({
   onCodeExecutionCompleted,
   onStageSkipWindow,
   onReviewCompleted,
+  onAccessRestricted,
 }: UseResearchRunSSEOptions): UseResearchRunSSEReturn {
   const abortControllerRef = useRef<AbortController | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -429,6 +439,9 @@ export function useResearchRunSSE({
                   onStageSkipWindow(event.data as StageSkipWindowUpdate);
                 }
                 break;
+              case "access_restricted":
+                onAccessRestricted?.(event.data);
+                break;
               case "complete":
                 isConnectedRef.current = false;
                 onComplete(event.data.status);
@@ -514,6 +527,7 @@ export function useResearchRunSSE({
     onCodeExecutionStarted,
     onCodeExecutionCompleted,
     onReviewCompleted,
+    onAccessRestricted,
   ]);
 
   useEffect(() => {

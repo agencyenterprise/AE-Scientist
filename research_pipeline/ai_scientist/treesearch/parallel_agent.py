@@ -210,9 +210,11 @@ class ParallelAgent:
         Run multiple seeds of the same *already-generated* experiment to assess stability.
 
         Important behavior:
-        - These seed runs **do not use Codex** to generate code.
-        - Each seed run re-executes the *parent node's experiment code* under a different RNG seed
-          (see `worker_process._process_seed_eval_reuse`).
+        - These seed runs **use Codex** to modify the seed values in the experiment code.
+        - Codex is given explicit instructions to find and replace all seed-related values
+          (e.g., `SEED = 42`, `random.seed(42)`, etc.) with the target seed value.
+        - This approach ensures that hardcoded seeds in the experiment code are properly modified,
+          unlike the previous approach which only prepended seed initialization.
         - Seeds are run in batches sized by num_workers (and num_gpus if applicable) to ensure
           GPU resources are properly reused between batches.
 

@@ -16,7 +16,7 @@ from ai_scientist.api_types import StageId as ApiStageName
 from ai_scientist.llm import structured_query_with_schema
 
 from . import execution_registry
-from .codex.codex_cli_runner import CodexCliRunner, build_codex_env, ensure_codex_venv
+from .codex.codex_cli_runner import CodexCliRunner, ensure_codex_venv
 from .codex.codex_task_types import (
     CodexTaskContext,
     EvaluationMetricSpec,
@@ -35,6 +35,10 @@ from .codex.seed_aggregation import (
 from .codex.seed_aggregation import (
     codex_seed_aggregation_instructions_lines,
 )
+from .codex.seed_modification import (
+    SeedModificationTaskContext,
+    write_seed_modification_task_file,
+)
 from .config import Config as AppConfig
 from .config import apply_log_level
 from .events import (
@@ -45,7 +49,6 @@ from .events import (
     RunningCodeEvent,
     RunType,
 )
-from .executor import run_python_script
 from .gpu_manager import GPUSpec, get_gpu_specs
 from .journal import Node
 from .metrics_parsing import generate_and_assign_metrics, persist_metrics_pass_artifacts
@@ -212,187 +215,6 @@ def _review_execution_with_llm(
             TrainingReview.__name__,
         )
     return response
-
-
-def _build_seed_eval_script_text(*, seed_value: int, parent_code: str) -> str:
-    """
-    Build a standalone Python script that enforces deterministic seeding, then runs `parent_code`.
-
-    This is used for `seed_eval` runs, which intentionally bypass Codex and re-execute an existing
-    experiment implementation under different RNG seeds.
-    """
-    return "\n".join(
-        [
-            "",
-            "",
-            "import random",
-            "from pathlib import Path",
-            "",
-            "import numpy as np",
-            "",
-            "try:",
-            "    import torch",
-            "except Exception:  # noqa: BLE001",
-            "    torch = None",
-            "",
-            f"seed_value = {seed_value}",
-            "random.seed(seed_value)",
-            "np.random.seed(seed_value)",
-            "if torch is not None:",
-            "    torch.manual_seed(seed_value)",
-            "    torch.cuda.manual_seed_all(seed_value)",
-            "",
-            "# Ensure working/ exists (the experiment code is expected to use it).",
-            "working_dir = Path.cwd() / 'working'",
-            "working_dir.mkdir(parents=True, exist_ok=True)",
-            "",
-            parent_code,
-            "",
-        ]
-    )
-
-
-def _process_seed_eval_reuse(
-    *,
-    cfg: AppConfig,
-    title: str,
-    task_desc: str,
-    stage_goals: str,
-    stage_identifier: StageIdentifier,
-    evaluation_metric_spec: EvaluationMetricSpec,
-    workspace_dir: Path,
-    working_dir: Path,
-    venv_dir: Path,
-    execution_id: str,
-    seed_eval: bool,
-    seed_value: int,
-    parent_node: Node,
-    event_callback: Callable[[BaseEvent], None],
-    node_index: int,
-) -> dict[str, object]:
-    """
-    Execute the parent node's experiment code under a different seed (no Codex involved).
-
-    Purpose:
-    - After a main stage completes, the system re-runs the best implementation across multiple
-      RNG seeds to check that the metric is not a one-off due to randomness.
-
-    Key point:
-    - The seed-eval run **does not** ask Codex to generate/modify code. It writes a small wrapper
-      (`seed_eval_run.py`) that sets seeds and then executes the parent's experiment code verbatim.
-    """
-    # Seed-eval reuse: execute the parent's experiment code with a different seed.
-    parent_code = str(parent_node.code or "")
-    agent_file = workspace_dir / str(cfg.exec.agent_file_name)
-    agent_file.write_text(parent_code, encoding="utf-8")
-
-    seed_eval_script = workspace_dir / "seed_eval_run.py"
-    seed_eval_script.write_text(
-        _build_seed_eval_script_text(seed_value=seed_value, parent_code=parent_code),
-        encoding="utf-8",
-    )
-
-    # Build Codex environment for script execution
-    codex_env = build_codex_env(venv_dir=venv_dir)
-
-    python_executable = venv_dir / "bin" / "python"
-    exec_result = run_python_script(
-        purpose="seed_eval",
-        python_executable=python_executable,
-        script_path=seed_eval_script,
-        cwd=workspace_dir,
-        env=codex_env,
-        timeout_seconds=int(cfg.exec.timeout),
-    )
-    term_out = exec_result.term_out
-    exec_time = exec_result.exec_time_s
-    exc_type = exec_result.exc_type
-    exc_info = exec_result.exc_info
-
-    child_node = Node(
-        id=execution_id,
-        plan=f"Seed evaluation run. Seed: {seed_value}",
-        code=parent_code,
-        is_seed_node=True,
-        is_seed_agg_node=False,
-        is_buggy_plots=False,
-        plot_code=parent_node.plot_code,
-        plot_plan=parent_node.plot_plan,
-        parse_metrics_plan=str(parent_node.parse_metrics_plan or ""),
-        parse_metrics_code=str(parent_node.parse_metrics_code or ""),
-    )
-    _attach_parent(child_node=child_node, parent_node=parent_node)
-    child_node.absorb_exec_result(
-        SimpleNamespace(
-            term_out=term_out,
-            exec_time=exec_time,
-            exc_type=exc_type,
-            exc_info=exc_info,
-            exc_stack=None,
-        )
-    )
-    child_node.exec_time = exec_time
-    child_node.exc_type = exc_type
-    child_node.exc_info = exc_info or {}
-
-    llm_review = _review_execution_with_llm(
-        cfg=cfg,
-        title=title,
-        task_desc=task_desc,
-        stage_goals=stage_goals,
-        stage_identifier=stage_identifier,
-        code=child_node.code,
-        plan=child_node.plan,
-        term_out="".join(term_out),
-        exc_type=exc_type,
-        exec_time=float(exec_time),
-    )
-    if llm_review is None:
-        child_node.analysis = "LLM execution review failed; see execution output."
-        child_node.is_buggy = True
-    else:
-        child_node.analysis = str(llm_review.summary or "").strip()
-        child_node.is_buggy = bool(llm_review.is_bug) or (exc_type is not None)
-
-    metrics_workspace_dir = generate_and_assign_metrics(
-        cfg=cfg,
-        research_pipeline_root=RESEARCH_PIPELINE_ROOT,
-        codex_timeout_seconds=int(cfg.exec.timeout),
-        venv_dir=venv_dir,
-        workspace_dir=workspace_dir,
-        working_dir=working_dir,
-        node=child_node,
-        node_index=node_index,
-        parent_node=parent_node,
-        stage_identifier=stage_identifier,
-        evaluation_metric_spec=evaluation_metric_spec,
-        seed_eval=seed_eval,
-        event_callback=event_callback,
-    )
-
-    _move_experiment_artifacts(
-        cfg=cfg,
-        child_node=child_node,
-        working_dir=working_dir,
-        event_callback=event_callback,
-    )
-    if metrics_workspace_dir is not None:
-        persist_metrics_pass_artifacts(node=child_node, metrics_workspace_dir=metrics_workspace_dir)
-
-    if child_node.is_buggy is False and stage_identifier in (
-        StageIdentifier.STAGE3,
-        StageIdentifier.STAGE4,
-    ):
-        generate_vlm_feedback(
-            cfg=cfg,
-            node=child_node,
-            stage_identifier=stage_identifier,
-            event_callback=event_callback,
-        )
-
-    result_data = child_node.to_dict()
-    pickle.dumps(result_data)
-    return result_data
 
 
 def _attach_parent(*, child_node: Node, parent_node: Node) -> None:
@@ -1222,47 +1044,47 @@ def process_node(
 
     _abort_if_skip_requested(execution_id=execution_id)
 
-    if seed_eval and seed_aggregation is None and parent_node is not None:
-        result_data = _process_seed_eval_reuse(
+    # Seed evaluation uses a dedicated, focused prompt that asks Codex to find and replace
+    # all seed values in the code. This is different from the regular stage prompts.
+    is_seed_modification = seed_eval and seed_aggregation is None and parent_node is not None
+    output_json_file = workspace_dir / "node_result.json"
+
+    if is_seed_modification:
+        # Use dedicated seed modification prompt
+        assert parent_node is not None  # Already checked in is_seed_modification
+        parent_code = str(parent_node.code or "")
+        seed_mod_ctx = SeedModificationTaskContext(
+            seed_value=seed_value,
+            agent_file_name=cfg.exec.agent_file_name,
+            venv_dir=str(venv_dir),
+            base_code=parent_code,
+        )
+        task_file = write_seed_modification_task_file(
+            workspace_dir=workspace_dir,
+            ctx=seed_mod_ctx,
+        )
+    else:
+        # Use regular stage prompt
+        output_json_file, task_file, _env_ctx = _prepare_codex_task_file(
+            workspace_dir=workspace_dir,
+            execution_id=execution_id,
+            stage_identifier=stage_identifier,
+            stage_name=stage_name,
             cfg=cfg,
+            venv_dir=venv_dir,
             title=title,
             task_desc=task_desc,
             stage_goals=stage_goals,
-            stage_identifier=stage_identifier,
             evaluation_metric_spec=evaluation_metric_spec,
-            workspace_dir=workspace_dir,
-            working_dir=working_dir,
-            venv_dir=venv_dir,
-            execution_id=execution_id,
-            seed_eval=seed_eval,
-            seed_value=seed_value,
+            memory_summary=memory_summary,
             parent_node=parent_node,
-            event_callback=event_callback,
-            node_index=node_index,
+            seed_aggregation=seed_aggregation,
+            stage2_hyperparam_idea=stage2_hyperparam_idea,
+            stage4_ablation_idea=stage4_ablation_idea,
+            gpu_id=gpu_id,
+            gpu_spec=gpu_spec,
+            user_feedback_payload=user_feedback_payload,
         )
-        _cleanup_venv(venv_dir=venv_dir)
-        return result_data
-
-    output_json_file, task_file, _env_ctx = _prepare_codex_task_file(
-        workspace_dir=workspace_dir,
-        execution_id=execution_id,
-        stage_identifier=stage_identifier,
-        stage_name=stage_name,
-        cfg=cfg,
-        venv_dir=venv_dir,
-        title=title,
-        task_desc=task_desc,
-        stage_goals=stage_goals,
-        evaluation_metric_spec=evaluation_metric_spec,
-        memory_summary=memory_summary,
-        parent_node=parent_node,
-        seed_aggregation=seed_aggregation,
-        stage2_hyperparam_idea=stage2_hyperparam_idea,
-        stage4_ablation_idea=stage4_ablation_idea,
-        gpu_id=gpu_id,
-        gpu_spec=gpu_spec,
-        user_feedback_payload=user_feedback_payload,
-    )
 
     term_out, exec_time, exc_type, exc_info = _run_codex_cli(
         workspace_dir=workspace_dir,
@@ -1340,6 +1162,11 @@ def process_node(
         node_result["is_seed_agg_node"] = True
         # Determine plot health from artifacts: if no plots were written, mark plots buggy.
         node_result["is_buggy_plots"] = count_working_pngs(working_dir=working_dir) <= 0
+
+    # For seed modification runs, ensure is_seed_node is set
+    if seed_eval and seed_aggregation is None:
+        node_result["is_seed_node"] = True
+        node_result["is_seed_agg_node"] = False
 
     # Always treat the agent file as the source of truth for the executed code.
     # If Codex fails to write this file (or writes it empty), treat it as a contract failure.

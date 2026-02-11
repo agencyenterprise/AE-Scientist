@@ -109,6 +109,18 @@ class ResearchRunListItem(BaseModel):
         None,
         description="Evaluation decision ('Accept' or 'Reject') from LLM review, if available",
     )
+    has_enough_credits: Optional[bool] = Field(
+        None,
+        description="Whether user had positive balance when run completed. NULL if still running.",
+    )
+    access_restricted: bool = Field(
+        False,
+        description="True if user cannot view full run details due to insufficient credits",
+    )
+    access_restricted_reason: Optional[str] = Field(
+        None,
+        description="Message explaining why access is restricted",
+    )
 
 
 class ResearchRunListResponse(BaseModel):
@@ -150,6 +162,18 @@ class ResearchRunInfo(ResearchRunSummary):
     last_restart_reason: Optional[str] = Field(
         None,
         description="Reason for the last restart (heartbeat_timeout or container_died)",
+    )
+    has_enough_credits: Optional[bool] = Field(
+        None,
+        description="Whether user had positive balance when run completed. NULL if still running.",
+    )
+    access_restricted: bool = Field(
+        False,
+        description="True if user cannot view full run details due to insufficient credits",
+    )
+    access_restricted_reason: Optional[str] = Field(
+        None,
+        description="Message explaining why access is restricted",
     )
 
     @staticmethod
@@ -200,6 +224,13 @@ class ResearchRunInfo(ResearchRunSummary):
             restart_count=run.restart_count,
             last_restart_at=run.last_restart_at.isoformat() if run.last_restart_at else None,
             last_restart_reason=run.last_restart_reason,
+            has_enough_credits=run.has_enough_credits,
+            access_restricted=run.has_enough_credits is False,
+            access_restricted_reason=(
+                "Add credits to view full run details. Your balance must be positive."
+                if run.has_enough_credits is False
+                else None
+            ),
         )
 
 

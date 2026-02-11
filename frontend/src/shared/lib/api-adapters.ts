@@ -141,6 +141,9 @@ export function convertApiResearchRun(apiRun: ResearchRunListItemApi): ResearchR
     parentRunId: apiRun.parent_run_id ?? null,
     evaluationOverall: apiRun.evaluation_overall ?? null,
     evaluationDecision: apiRun.evaluation_decision ?? null,
+    hasEnoughCredits: apiRun.has_enough_credits ?? null,
+    accessRestricted: apiRun.access_restricted ?? false,
+    accessRestrictedReason: apiRun.access_restricted_reason ?? null,
   };
 }
 

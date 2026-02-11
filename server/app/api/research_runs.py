@@ -41,6 +41,15 @@ def _row_to_list_item(row: dict) -> ResearchRunListItem:
     raw_url = row.get("conversation_url")
     conversation_url = raw_url if _is_external_url(raw_url) else None
 
+    # Determine access restriction based on has_enough_credits
+    has_enough_credits = row.get("has_enough_credits")
+    access_restricted = has_enough_credits is False
+    access_restricted_reason = (
+        "Add credits to view full run details. Your balance must be positive."
+        if access_restricted
+        else None
+    )
+
     return ResearchRunListItem(
         run_id=row["run_id"],
         status=row["status"],
@@ -62,6 +71,9 @@ def _row_to_list_item(row: dict) -> ResearchRunListItem:
         parent_run_id=row.get("parent_run_id"),
         evaluation_overall=row.get("evaluation_overall"),
         evaluation_decision=row.get("evaluation_decision"),
+        has_enough_credits=has_enough_credits,
+        access_restricted=access_restricted,
+        access_restricted_reason=access_restricted_reason,
     )
 
 

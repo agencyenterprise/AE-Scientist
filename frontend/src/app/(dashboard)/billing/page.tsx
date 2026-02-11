@@ -19,6 +19,23 @@ import { useAuthContext } from "@/shared/contexts/AuthContext";
 const PAGE_SIZE_OPTIONS = [25, 50, 100];
 const DEFAULT_PAGE_SIZE = 25;
 
+const SUPPORT_EMAIL = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "james.bowler@ae.studio";
+
+function buildRefundMailto(userEmail?: string): string {
+  const body = `Hi,
+
+I'd like to request a refund. Here are the details:
+
+Account email: ${userEmail || "[your email]"}
+
+Reason:
+
+[Please describe why you're requesting a refund]
+
+Thanks!`;
+  return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Refund Request - AE Scientist")}&body=${encodeURIComponent(body)}`;
+}
+
 function formatCurrency(amountCents?: number | null, currency?: string | null): string {
   if (amountCents === undefined || amountCents === null) {
     return "—";
@@ -52,7 +69,8 @@ function getSourceLink(
 }
 
 export default function BillingPage() {
-  const { isAuthenticated } = useAuthContext();
+  const { isAuthenticated, user } = useAuthContext();
+  const refundMailto = buildRefundMailto(user?.email);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [showHolds, setShowHolds] = useState(false);
@@ -156,6 +174,12 @@ export default function BillingPage() {
             {error}
           </p>
         )}
+        <p className="mt-4 text-sm text-muted-foreground">
+          Need help?{" "}
+          <a href={refundMailto} className="text-primary hover:underline">
+            Request a refund
+          </a>
+        </p>
       </section>
 
       <section className="rounded-lg border border-border bg-card p-6 shadow-sm">

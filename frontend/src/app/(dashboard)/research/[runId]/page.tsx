@@ -26,10 +26,12 @@ import {
   GitBranch,
   Layers,
   Loader2,
+  Lock,
   Package,
   ShieldCheck,
   DollarSign,
 } from "lucide-react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
@@ -215,6 +217,24 @@ export default function ResearchRunDetailPage() {
           seedError={seedError}
         />
 
+        {run.access_restricted && (
+          <div className="flex items-center justify-between gap-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+            <div className="flex items-center gap-3">
+              <Lock className="h-5 w-5 shrink-0 text-amber-400" />
+              <p className="text-sm text-amber-200">
+                {run.access_restricted_reason ||
+                  "Your balance is negative. Add credits to view full run details."}
+              </p>
+            </div>
+            <Link
+              href="/billing"
+              className="shrink-0 rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-sky-500"
+            >
+              Add Credits
+            </Link>
+          </div>
+        )}
+
         <ResearchSummaryStrip
           status={run.status}
           currentStage={currentStage}
@@ -233,20 +253,38 @@ export default function ResearchRunDetailPage() {
               <Layers className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Overview</span>
             </TabsTrigger>
-            <TabsTrigger value="stages" className="gap-1.5 data-[state=active]:bg-background">
+            <TabsTrigger
+              value="stages"
+              className="gap-1.5 data-[state=active]:bg-background"
+              disabled={run.access_restricted}
+            >
               <GitBranch className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Research Tree</span>
+              {run.access_restricted && <Lock className="h-3 w-3 text-amber-400" />}
             </TabsTrigger>
-            <TabsTrigger value="artifacts" className="gap-1.5 data-[state=active]:bg-background">
+            <TabsTrigger
+              value="artifacts"
+              className="gap-1.5 data-[state=active]:bg-background"
+              disabled={run.access_restricted}
+            >
               <Package className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Artifacts</span>
-              <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium">
-                {displayedArtifactCount}
-              </span>
+              {run.access_restricted ? (
+                <Lock className="h-3 w-3 text-amber-400" />
+              ) : (
+                <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium">
+                  {displayedArtifactCount}
+                </span>
+              )}
             </TabsTrigger>
-            <TabsTrigger value="evaluation" className="gap-1.5 data-[state=active]:bg-background">
+            <TabsTrigger
+              value="evaluation"
+              className="gap-1.5 data-[state=active]:bg-background"
+              disabled={run.access_restricted}
+            >
               <ShieldCheck className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Evaluation</span>
+              {run.access_restricted && <Lock className="h-3 w-3 text-amber-400" />}
             </TabsTrigger>
             <TabsTrigger value="runcost" className="gap-1.5 data-[state=active]:bg-background">
               <DollarSign className="h-3.5 w-3.5" />
@@ -259,14 +297,15 @@ export default function ResearchRunDetailPage() {
               run={run}
               conversationId={conversationId}
               runId={runId}
-              artifacts={artifacts}
-              review={review}
-              reviewLoading={reviewLoading}
+              artifacts={run.access_restricted ? [] : artifacts}
+              review={run.access_restricted ? null : review}
+              reviewLoading={run.access_restricted ? false : reviewLoading}
               onViewEvaluation={() => setActiveTab("evaluation")}
               onTerminateExecution={conversationId ? handleTerminateExecution : undefined}
-              stageSkipState={stageSkipState}
-              skipPendingStage={skipPendingStage}
+              stageSkipState={run.access_restricted ? {} : stageSkipState}
+              skipPendingStage={run.access_restricted ? null : skipPendingStage}
               onSkipStage={conversationId ? handleSkipStage : undefined}
+              accessRestricted={run.access_restricted}
             />
           </TabsContent>
 

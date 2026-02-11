@@ -7,9 +7,9 @@ This module contains FastAPI routes for streaming chat functionality with SSE.
 import asyncio
 import json
 import logging
-from typing import AsyncGenerator, List, Optional, Union
+from typing import Any, AsyncGenerator, List, Optional, cast
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -37,6 +37,24 @@ class ErrorResponse(BaseModel):
 
     error: str = Field(..., description="Error message")
     detail: Optional[str] = Field(None, description="Additional error details")
+
+
+def create_error_stream_response(error_message: str, status_code: int = 500) -> StreamingResponse:
+    """Create a StreamingResponse that sends a single error event in SSE format."""
+
+    async def error_stream() -> AsyncGenerator[str, None]:
+        yield json.dumps({"type": "error", "data": error_message}) + "\n"
+
+    return StreamingResponse(
+        error_stream(),
+        status_code=status_code,
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Content-Type": "text/event-stream",
+        },
+    )
 
 
 async def _run_chat_generation_to_queue(
@@ -186,20 +204,23 @@ async def _run_chat_generation_to_queue(
             "content": {
                 "text/event-stream": {"schema": {"$ref": "#/components/schemas/ChatStreamEvent"}}
             },
-        }
+        },
+        402: {
+            "description": "Insufficient balance - returned as SSE error event",
+            "content": {
+                "text/event-stream": {"schema": {"$ref": "#/components/schemas/ChatStreamEvent"}}
+            },
+        },
     },
 )
 async def stream_chat_with_idea(
-    conversation_id: int, request_data: ChatRequest, request: Request, response: Response
-) -> Union[StreamingResponse, ErrorResponse]:
+    conversation_id: int, request_data: ChatRequest, request: Request
+) -> StreamingResponse:
     """
     Stream chat messages with real-time updates via Server-Sent Events.
     """
     if conversation_id <= 0:
-        response.status_code = 400
-        return ErrorResponse(
-            error="Invalid conversation ID", detail="Conversation ID must be positive"
-        )
+        return create_error_stream_response("Conversation ID must be positive", 400)
 
     db = get_database()
 
@@ -211,8 +232,7 @@ async def stream_chat_with_idea(
         # Validate conversation exists
         existing_conversation = await db.get_conversation_by_id(conversation_id)
         if not existing_conversation:
-            response.status_code = 404
-            return ErrorResponse(error="Conversation not found", detail="Conversation not found")
+            return create_error_stream_response("Conversation not found", 404)
 
         user = get_current_user(request)
         # Get idea
@@ -262,11 +282,7 @@ N/A
         if request_data.skip_user_message_creation:
             # For auto-trigger of existing messages, use the last user message from history
             if not chat_history or chat_history[-1].role != "user":
-                response.status_code = 400
-                return ErrorResponse(
-                    error="No user message to respond to",
-                    detail="skip_user_message_creation requires an existing user message",
-                )
+                return create_error_stream_response("No user message to respond to", 400)
             user_msg_id = chat_history[-1].id
             # Extract the actual message content from the last user message for LLM
             actual_user_message = chat_history[-1].content
@@ -296,10 +312,8 @@ N/A
             found_ids = {fa.id for fa in file_attachments}
             missing_ids = set(request_data.attachment_ids) - found_ids
             if missing_ids:
-                response.status_code = 404
-                return ErrorResponse(
-                    error="File attachments not found",
-                    detail=f"File attachments not found: {list(missing_ids)}",
+                return create_error_stream_response(
+                    f"File attachments not found: {list(missing_ids)}", 404
                 )
 
             # Link file attachments to the user message
@@ -440,7 +454,24 @@ N/A
             },
         )
 
+    except HTTPException as e:
+        # Handle HTTPException (including 402 insufficient balance) by returning as SSE error
+        logger.error(f"HTTPException in stream_chat_with_idea: {e.status_code}: {e.detail}")
+
+        # Format the error message for 402 responses
+        # Note: e.detail can be a dict at runtime even though typed as str
+        detail_any = cast(Any, e.detail)
+        if e.status_code == 402 and isinstance(detail_any, dict):
+            if detail_any.get("required_cents") is not None:
+                required = detail_any["required_cents"] / 100
+                error_msg = f"Insufficient balance. You need ${required:.2f} to continue."
+            else:
+                error_msg = detail_any.get("message", "Insufficient balance")
+        else:
+            error_msg = str(e.detail) if e.detail else "Request failed"
+
+        return create_error_stream_response(error_msg, e.status_code)
+
     except Exception as e:
         logger.exception(f"Error in stream_chat_with_idea: {e}")
-        response.status_code = 500
-        return ErrorResponse(error="Stream failed", detail=f"Failed to stream chat: {str(e)}")
+        return create_error_stream_response("Stream failed. Please try again.", 500)

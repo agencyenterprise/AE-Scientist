@@ -12,6 +12,8 @@ from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
 
 from app.middleware.auth import get_current_user
+from app.models.billing import InsufficientBalanceError
+from app.models.paper_review import PaperReviewDetail
 from app.services.paper_review_service import get_paper_review_service
 
 router = APIRouter(prefix="/paper-reviews", tags=["paper-reviews"])
@@ -26,14 +28,6 @@ class ErrorResponse(BaseModel):
     detail: Optional[str] = Field(None, description="Additional error details")
 
 
-class TokenUsageResponse(BaseModel):
-    """Token usage summary."""
-
-    input_tokens: int = Field(..., description="Total input tokens used")
-    cached_input_tokens: int = Field(..., description="Cached input tokens")
-    output_tokens: int = Field(..., description="Total output tokens used")
-
-
 class PaperReviewStartedResponse(BaseModel):
     """Response when a paper review is started."""
 
@@ -46,12 +40,26 @@ class PaperReviewSummary(BaseModel):
 
     id: int = Field(..., description="Review ID")
     status: str = Field(..., description="Review status")
-    summary: Optional[str] = Field(None, description="Paper summary (null if pending)")
-    overall: Optional[int] = Field(None, description="Overall score (null if pending)")
-    decision: Optional[str] = Field(None, description="Review decision (null if pending)")
+    summary: Optional[str] = Field(
+        None, description="Paper summary (null if pending or restricted)"
+    )
+    overall: Optional[int] = Field(
+        None, description="Overall score (null if pending or restricted)"
+    )
+    decision: Optional[str] = Field(
+        None, description="Review decision (null if pending or restricted)"
+    )
     original_filename: str = Field(..., description="Original PDF filename")
     model: str = Field(..., description="Model used for review")
     created_at: str = Field(..., description="ISO timestamp of review creation")
+    has_enough_credits: Optional[bool] = Field(
+        None,
+        description="Whether user had positive balance when review completed. NULL if still running.",
+    )
+    access_restricted: bool = Field(
+        False,
+        description="True if user cannot view full review details due to insufficient credits",
+    )
 
 
 class PaperReviewListResponse(BaseModel):
@@ -59,41 +67,6 @@ class PaperReviewListResponse(BaseModel):
 
     reviews: List[PaperReviewSummary] = Field(..., description="List of review summaries")
     count: int = Field(..., description="Number of reviews returned")
-
-
-class PaperReviewDetailResponse(BaseModel):
-    """Detailed response for a single paper review."""
-
-    id: int
-    status: str = Field(..., description="Review status: pending, processing, completed, failed")
-    error_message: Optional[str] = Field(None, description="Error message if status is failed")
-    summary: Optional[str] = Field(None, description="Paper summary (null if not completed)")
-    strengths: Optional[List[str]] = Field(
-        None, description="List of strengths (null if not completed)"
-    )
-    weaknesses: Optional[List[str]] = Field(
-        None, description="List of weaknesses (null if not completed)"
-    )
-    originality: Optional[int] = None
-    quality: Optional[int] = None
-    clarity: Optional[int] = None
-    significance: Optional[int] = None
-    questions: Optional[List[str]] = None
-    limitations: Optional[List[str]] = None
-    ethical_concerns: Optional[bool] = None
-    soundness: Optional[int] = None
-    presentation: Optional[int] = None
-    contribution: Optional[int] = None
-    overall: Optional[int] = None
-    confidence: Optional[int] = None
-    decision: Optional[str] = None
-    original_filename: str
-    model: str
-    created_at: str
-    token_usage: Optional[TokenUsageResponse] = Field(
-        None, description="Token usage (null if not completed)"
-    )
-    cost_cents: int = Field(0, description="Cost charged in cents for this review")
 
 
 class PaperDownloadResponse(BaseModel):
@@ -120,7 +93,17 @@ class PendingReviewsResponse(BaseModel):
     count: int = Field(..., description="Number of pending reviews")
 
 
-@router.post("", response_model=PaperReviewStartedResponse, status_code=202)
+@router.post(
+    "",
+    response_model=PaperReviewStartedResponse,
+    status_code=202,
+    responses={
+        402: {
+            "model": InsufficientBalanceError,
+            "description": "Insufficient balance to start paper review",
+        },
+    },
+)
 async def create_paper_review(
     request: Request,
     file: UploadFile = File(..., description="PDF file to review"),
@@ -177,15 +160,11 @@ async def create_paper_review(
             status=status,
         )
 
+    except HTTPException:
+        # Let HTTPException (including 402 from enforce_minimum_balance) propagate
+        raise
     except Exception as e:
         logger.exception("Failed to start paper review")
-        # Check if it's a payment required error
-        status_code = getattr(e, "status_code", None)
-        if status_code == 402:
-            raise HTTPException(
-                status_code=402,
-                detail="You don't have enough balance to perform this review",
-            ) from e
         raise HTTPException(status_code=500, detail="Failed to start review") from e
 
 
@@ -245,11 +224,11 @@ async def list_paper_reviews(
         raise HTTPException(status_code=500, detail="Failed to list reviews") from e
 
 
-@router.get("/{review_id}", response_model=PaperReviewDetailResponse)
+@router.get("/{review_id}", response_model=PaperReviewDetail)
 async def get_paper_review(
     review_id: int,
     request: Request,
-) -> PaperReviewDetailResponse:
+) -> PaperReviewDetail:
     """
     Get a specific paper review by ID.
 
@@ -271,37 +250,7 @@ async def get_paper_review(
                 detail="The requested review does not exist or you don't have access to it",
             )
 
-        # Build token usage if available
-        token_usage = None
-        if review.get("token_usage") and review["token_usage"].get("input_tokens"):
-            token_usage = TokenUsageResponse(**review["token_usage"])
-
-        return PaperReviewDetailResponse(
-            id=review["id"],
-            status=review["status"],
-            error_message=review.get("error_message"),
-            summary=review.get("summary") or None,
-            strengths=review.get("strengths"),
-            weaknesses=review.get("weaknesses"),
-            originality=review.get("originality"),
-            quality=review.get("quality"),
-            clarity=review.get("clarity"),
-            significance=review.get("significance"),
-            questions=review.get("questions"),
-            limitations=review.get("limitations"),
-            ethical_concerns=review.get("ethical_concerns"),
-            soundness=review.get("soundness"),
-            presentation=review.get("presentation"),
-            contribution=review.get("contribution"),
-            overall=review.get("overall"),
-            confidence=review.get("confidence"),
-            decision=review.get("decision"),
-            original_filename=review["original_filename"],
-            model=review["model"],
-            created_at=review["created_at"],
-            token_usage=token_usage,
-            cost_cents=review.get("cost_cents", 0),
-        )
+        return review
 
     except HTTPException:
         raise
@@ -320,14 +269,37 @@ async def get_paper_download_url(
 
     Returns a signed URL that expires after 1 hour. Only returns URLs
     for papers owned by the authenticated user.
+
+    Returns 402 Payment Required if the user's balance was negative when
+    the review completed.
     """
     current_user = get_current_user(request)
 
     try:
         service = get_paper_review_service()
+
+        # First check if the review exists and if access is restricted
+        review = await service.get_review(
+            review_id=review_id,
+            user_id=current_user.id,
+        )
+
+        if not review:
+            raise HTTPException(
+                status_code=404,
+                detail="The requested paper does not exist or you don't have access to it",
+            )
+
+        if review.access_restricted:
+            raise HTTPException(
+                status_code=402,
+                detail="Insufficient credits. Add funds to download this paper.",
+            )
+
         result = await service.get_paper_download_url(
             review_id=review_id,
             user_id=current_user.id,
+            check_credits=False,  # Already checked above
         )
 
         if not result:

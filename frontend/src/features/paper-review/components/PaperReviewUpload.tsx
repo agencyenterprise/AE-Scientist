@@ -4,6 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { FileUp, Loader2, AlertCircle, CheckCircle, Clock } from "lucide-react";
 import { config } from "@/shared/lib/config";
 import { withAuthHeaders } from "@/shared/lib/session-token";
+import {
+  getInsufficientBalanceDetail,
+  formatInsufficientBalanceMessage,
+} from "@/shared/utils/costs";
 import { ModelSelector } from "@/features/model-selector/components/ModelSelector";
 import { PromptTypes } from "@/shared/lib/prompt-types";
 import { PaperReviewResult, type PaperReviewResponse } from "./PaperReviewResult";
@@ -12,7 +16,7 @@ import type { components } from "@/types/api.gen";
 type UploadState = "idle" | "uploading" | "polling" | "complete" | "error";
 
 // Use generated types from OpenAPI schema
-type ReviewDetailResponse = components["schemas"]["PaperReviewDetailResponse"];
+type ReviewDetailResponse = components["schemas"]["PaperReviewDetail"];
 type PendingReviewSummary = components["schemas"]["PendingReviewSummary"];
 type PaperReviewStartedResponse = components["schemas"]["PaperReviewStartedResponse"];
 
@@ -109,6 +113,13 @@ export function PaperReviewUpload({ onStartNewReview }: PaperReviewUploadProps) 
         setCurrentReviewStatus(data.status);
 
         if (data.status === "completed") {
+          // Check if access is restricted due to insufficient credits
+          if (data.access_restricted) {
+            // Redirect to the review detail page which will show the locked banner
+            window.location.href = `/paper-review/${data.id}`;
+            return;
+          }
+
           // Review is complete - transform to the format PaperReviewResult expects
           const result: PaperReviewResponse = {
             id: data.id,
@@ -224,7 +235,19 @@ export function PaperReviewUpload({ onStartNewReview }: PaperReviewUploadProps) 
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || errorData.detail || "Failed to submit paper for review");
+        // Handle 402 insufficient balance error
+        if (response.status === 402) {
+          const detail = getInsufficientBalanceDetail(errorData);
+          throw new Error(
+            formatInsufficientBalanceMessage(detail, "Insufficient balance for review")
+          );
+        }
+        // Handle other errors
+        const errorMessage =
+          typeof errorData.detail === "string"
+            ? errorData.detail
+            : errorData.error || "Failed to submit paper for review";
+        throw new Error(errorMessage);
       }
 
       // API returns immediately with review_id and status

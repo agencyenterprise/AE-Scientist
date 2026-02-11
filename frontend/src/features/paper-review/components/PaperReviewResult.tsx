@@ -18,7 +18,7 @@ import { withAuthHeaders } from "@/shared/lib/session-token";
 import type { components } from "@/types/api.gen";
 
 // Use generated type for token usage
-export type TokenUsage = components["schemas"]["TokenUsageResponse"];
+export type TokenUsage = components["schemas"]["TokenUsage"];
 
 // Local types for nested review structure (different from flat API response)
 export interface ReviewContent {

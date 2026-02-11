@@ -276,6 +276,24 @@ class BillingService:
             updated_session.amount_added_cents / 100,
         )
 
+        # Unlock research runs and paper reviews if balance is now positive
+        new_balance = await self.db.get_user_wallet_balance(updated_session.user_id)
+        if new_balance > 0:
+            unlocked_runs = await self.db.unlock_research_runs_for_user(updated_session.user_id)
+            unlocked_reviews = await self.db.unlock_paper_reviews_for_user(updated_session.user_id)
+            if unlocked_runs > 0:
+                logger.info(
+                    "Unlocked %d research runs for user %s after balance became positive.",
+                    unlocked_runs,
+                    updated_session.user_id,
+                )
+            if unlocked_reviews > 0:
+                logger.info(
+                    "Unlocked %d paper reviews for user %s after balance became positive.",
+                    unlocked_reviews,
+                    updated_session.user_id,
+                )
+
     async def _handle_refund_created(self, refund: Dict[str, Any]) -> None:
         """Handle a refund.created webhook event.
 

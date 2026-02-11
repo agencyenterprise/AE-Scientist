@@ -38,7 +38,6 @@ export function CreateProjectModal({
 }: CreateProjectModalProps) {
   const [error, setError] = useState("");
   const isConfirmDisabled = isLoading || isGpuTypeLoading || !selectedGpuType;
-  const selectedPriceLabel = selectedGpuType ? formatHourlyPrice(gpuPrices[selectedGpuType]) : null;
 
   const handleConfirm = async () => {
     setError("");
@@ -126,11 +125,16 @@ export function CreateProjectModal({
                   No GPU types are currently available. Please try again later.
                 </div>
               )}
-              {selectedGpuType && (
-                <p className="text-xs text-muted-foreground">
-                  Estimated cost: {selectedPriceLabel ?? "unavailable"} (USD/hour)
-                </p>
-              )}
+            </div>
+
+            <div className="rounded-md border border-slate-700 bg-slate-800/50 p-3 space-y-2">
+              <p className="text-sm text-slate-300">
+                <span className="font-medium">Typical run:</span> ~$25 USD over 4-6 hours (based on
+                a ~$1/hr GPU)
+              </p>
+              <p className="text-xs text-slate-400">
+                If your balance goes negative, results are locked until you add credits.
+              </p>
             </div>
           </div>
 

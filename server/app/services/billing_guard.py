@@ -109,6 +109,9 @@ async def charge_cents(
     This does NOT check balance - the user's balance can go negative.
     Use enforce_minimum_balance() first if you need a pre-check.
 
+    If the balance goes negative after the charge, all user content
+    (research runs and paper reviews) will be locked.
+
     Args:
         user_id: The user's ID.
         amount_cents: Amount to charge (in cents). Must be positive.
@@ -128,6 +131,20 @@ async def charge_cents(
         description=description,
         metadata=transaction_metadata,
     )
+
+    # Check if balance went negative and lock active user content if so
+    balance = await db.get_user_wallet_balance(user_id)
+    if balance <= 0:
+        locked_runs = await db.lock_active_research_runs_for_user(user_id)
+        locked_reviews = await db.lock_active_paper_reviews_for_user(user_id)
+        if locked_runs > 0 or locked_reviews > 0:
+            logger.info(
+                "User %d balance went negative (%d cents); locked %d active runs and %d active reviews",
+                user_id,
+                balance,
+                locked_runs,
+                locked_reviews,
+            )
 
 
 async def charge_for_llm_usage(

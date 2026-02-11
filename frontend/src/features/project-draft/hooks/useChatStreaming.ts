@@ -159,12 +159,28 @@ export function useChatStreaming({
           }
         );
 
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-
         if (!response.body) {
           throw new Error("No response body");
+        }
+
+        // For non-OK responses (like 402), try to read the SSE error event
+        if (!response.ok) {
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          const { value } = await reader.read();
+          if (value) {
+            const text = decoder.decode(value);
+            let eventData: { type?: string; data?: string } | null = null;
+            try {
+              eventData = JSON.parse(text.trim());
+            } catch {
+              // If we can't parse the SSE event, fall through to generic error
+            }
+            if (eventData?.type === "error" && eventData?.data) {
+              throw new Error(eventData.data);
+            }
+          }
+          throw new Error(`HTTP ${response.status}`);
         }
 
         const reader = response.body.getReader();
@@ -269,13 +285,17 @@ export function useChatStreaming({
         // Handle abort errors gracefully - this happens when user navigates away
         // The backend will continue processing and save the message
         const isAbortError = err instanceof Error && err.name === "AbortError";
+        // Check if this is an expected error (like insufficient balance)
+        const isExpectedError =
+          err instanceof Error && err.message.startsWith("Insufficient balance");
 
         if (isAbortError) {
           // eslint-disable-next-line no-console
           console.info(
             "Stream aborted (user navigated away) - backend will continue and save message"
           );
-        } else {
+        } else if (!isExpectedError) {
+          // Only log unexpected errors
           // eslint-disable-next-line no-console
           console.error("Streaming error:", err);
         }

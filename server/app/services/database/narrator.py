@@ -59,11 +59,11 @@ class NarratorMixin(ConnectionProvider):
 
         query = """
             INSERT INTO rp_timeline_events (
-                run_id, event_id, event_type, event_data, 
+                run_id, event_id, event_type, event_data,
                 timestamp, stage, node_id, created_at
             )
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (event_id) DO NOTHING
+            ON CONFLICT (run_id, event_id) DO NOTHING
         """
 
         async with self.aget_connection() as conn:

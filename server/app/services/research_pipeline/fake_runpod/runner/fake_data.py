@@ -31,28 +31,38 @@ class FakeDataMixin:
     _persistence: "FakeRunnerCore._persistence"  # type: ignore[name-defined]
 
     def _emit_fake_token_usage(self) -> None:
-        """Emit fake token usage events to exercise the token_usage webhook."""
-        stages = ["1_initial_implementation", "2_baseline_tuning", "3_creative_research"]
-        for stage in stages:
+        """Emit final token usage summary events at the end of the run.
+
+        Note: Intermediate token usage events are now emitted during each
+        stage iteration via _emit_iteration_token_usage and _emit_seed_token_usage
+        in the EventsMixin. This method emits summary/final token usage for
+        paper generation and review phases.
+        """
+        # Emit token usage for paper generation phase
+        paper_gen_stages = [
+            ("paper_writeup", 25000, 15000, 8000),
+            ("citation_gathering", 8000, 5000, 2000),
+            ("paper_review", 12000, 8000, 3000),
+        ]
+        for stage_name, input_tokens, cached_tokens, output_tokens in paper_gen_stages:
             payload = TokenUsageEvent(
-                provider="openai",
-                model="gpt-4o",
-                input_tokens=15000 + hash(stage) % 5000,
-                output_tokens=3000 + hash(stage) % 1000,
-                cached_input_tokens=8000 + hash(stage) % 2000,
+                model="anthropic:claude-sonnet-4-20250514",
+                input_tokens=input_tokens,
+                cached_input_tokens=cached_tokens,
+                output_tokens=output_tokens,
             )
             try:
                 self._webhooks.publish_token_usage(payload)
             except Exception:
                 logger.exception(
-                    "[FakeRunner %s] Failed to publish token_usage for stage %s",
+                    "[FakeRunner %s] Failed to publish token_usage for %s",
                     self._run_id[:8],
-                    stage,
+                    stage_name,
                 )
         logger.info(
-            "[FakeRunner %s] Posted token_usage webhooks for %d stages",
+            "[FakeRunner %s] Posted final token_usage webhooks for %d paper generation stages",
             self._run_id[:8],
-            len(stages),
+            len(paper_gen_stages),
         )
 
     def _emit_fake_hw_stats(self) -> None:

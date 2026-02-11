@@ -2,6 +2,7 @@ import asyncio
 import logging
 from typing import Any, Dict, Set, Union
 
+from app.models.sse import ResearchRunAccessRestrictedEvent as SSEAccessRestrictedEvent
 from app.models.sse import ResearchRunArtifactEvent as SSEArtifactEvent
 from app.models.sse import ResearchRunCodeExecutionCompletedEvent as SSECodeExecutionCompletedEvent
 from app.models.sse import ResearchRunCodeExecutionStartedEvent as SSECodeExecutionStartedEvent
@@ -32,6 +33,7 @@ StreamEventModel = Union[
     SSECodeExecutionStartedEvent,
     SSECodeExecutionCompletedEvent,
     SSEStageSkipWindowEvent,
+    SSEAccessRestrictedEvent,
 ]
 
 _RUN_STREAM_SUBSCRIBERS: Dict[str, Set[asyncio.Queue[Dict[str, Any]]]] = {}

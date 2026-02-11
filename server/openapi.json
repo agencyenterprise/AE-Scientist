@@ -396,6 +396,16 @@
               }
             }
           },
+          "402": {
+            "description": "Insufficient balance - returned as SSE error event",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatStreamEvent"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -459,6 +469,16 @@
               }
             }
           },
+          "402": {
+            "description": "Insufficient balance to import conversation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsufficientBalanceError"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -499,6 +519,16 @@
               "text/event-stream": {
                 "schema": {
                   "$ref": "#/components/schemas/ConversationImportStreamEvent"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Insufficient balance to generate idea",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsufficientBalanceError"
                 }
               }
             }
@@ -3522,6 +3552,16 @@
               }
             }
           },
+          "402": {
+            "description": "Insufficient balance to launch research",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsufficientBalanceError"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -4329,6 +4369,16 @@
               }
             }
           },
+          "402": {
+            "description": "Insufficient balance to start paper review",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsufficientBalanceError"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -4441,7 +4491,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PaperReviewDetailResponse"
+                  "$ref": "#/components/schemas/PaperReviewDetail"
                 }
               }
             }
@@ -4465,7 +4515,7 @@
           "paper-reviews"
         ],
         "summary": "Get Paper Download Url",
-        "description": "Get a temporary download URL for the reviewed paper PDF.\n\nReturns a signed URL that expires after 1 hour. Only returns URLs\nfor papers owned by the authenticated user.",
+        "description": "Get a temporary download URL for the reviewed paper PDF.\n\nReturns a signed URL that expires after 1 hour. Only returns URLs\nfor papers owned by the authenticated user.\n\nReturns 402 Payment Required if the user's balance was negative when\nthe review completed.",
         "operationId": "get_paper_download_url_api_paper_reviews__review_id__download_get",
         "parameters": [
           {
@@ -4621,6 +4671,36 @@
   },
   "components": {
     "schemas": {
+      "AccessRestrictedData": {
+        "properties": {
+          "has_enough_credits": {
+            "type": "boolean",
+            "title": "Has Enough Credits"
+          },
+          "access_restricted": {
+            "type": "boolean",
+            "title": "Access Restricted"
+          },
+          "access_restricted_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Restricted Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "has_enough_credits",
+          "access_restricted"
+        ],
+        "title": "AccessRestrictedData",
+        "description": "Data for access restriction state changes."
+      },
       "ActiveNode": {
         "properties": {
           "execution_id": {
@@ -7043,6 +7123,52 @@
         ],
         "title": "InitializationProgressPayload"
       },
+      "InsufficientBalanceError": {
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/InsufficientBalanceErrorDetail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "InsufficientBalanceError",
+        "description": "Error response when user has insufficient balance.\n\nReturned with HTTP 402 Payment Required.\nMatches FastAPI's HTTPException format with a 'detail' field."
+      },
+      "InsufficientBalanceErrorDetail": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Human-readable error message"
+          },
+          "required_cents": {
+            "type": "integer",
+            "title": "Required Cents",
+            "description": "Minimum balance required for the action"
+          },
+          "available_cents": {
+            "type": "integer",
+            "title": "Available Cents",
+            "description": "User's current balance"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action",
+            "description": "The action that was attempted"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message",
+          "required_cents",
+          "available_cents",
+          "action"
+        ],
+        "title": "InsufficientBalanceErrorDetail",
+        "description": "Details of an insufficient balance error.\n\nAll amounts are in cents (e.g., 500 = $5.00)."
+      },
       "LLMDefault": {
         "properties": {
           "llm_provider": {
@@ -8466,7 +8592,7 @@
         "title": "PaperGenerationStepEvent",
         "description": "Emitted during Stage 5 (paper generation).\n\nEmission Criteria:\n- Triggered by paper_generation_progress events\n- Shows current step and progress within paper generation\n- Emitted for each major paper generation step\n\nFrequency: 4-6 per paper generation stage"
       },
-      "PaperReviewDetailResponse": {
+      "PaperReviewDetail": {
         "properties": {
           "id": {
             "type": "integer",
@@ -8489,6 +8615,51 @@
             "title": "Error Message",
             "description": "Error message if status is failed"
           },
+          "original_filename": {
+            "type": "string",
+            "title": "Original Filename",
+            "description": "Original PDF filename"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model",
+            "description": "Model used for review"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "ISO timestamp of review creation"
+          },
+          "has_enough_credits": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Has Enough Credits",
+            "description": "Whether user had positive balance when review completed. NULL if still running."
+          },
+          "access_restricted": {
+            "type": "boolean",
+            "title": "Access Restricted",
+            "description": "True if user cannot view full review details due to insufficient credits",
+            "default": false
+          },
+          "access_restricted_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Restricted Reason",
+            "description": "Message explaining why access is restricted"
+          },
           "summary": {
             "anyOf": [
               {
@@ -8499,7 +8670,7 @@
               }
             ],
             "title": "Summary",
-            "description": "Paper summary (null if not completed)"
+            "description": "Paper summary (null if not completed or restricted)"
           },
           "strengths": {
             "anyOf": [
@@ -8514,7 +8685,7 @@
               }
             ],
             "title": "Strengths",
-            "description": "List of strengths (null if not completed)"
+            "description": "List of strengths (null if not completed or restricted)"
           },
           "weaknesses": {
             "anyOf": [
@@ -8529,7 +8700,7 @@
               }
             ],
             "title": "Weaknesses",
-            "description": "List of weaknesses (null if not completed)"
+            "description": "List of weaknesses (null if not completed or restricted)"
           },
           "originality": {
             "anyOf": [
@@ -8680,34 +8851,28 @@
             ],
             "title": "Decision"
           },
-          "original_filename": {
-            "type": "string",
-            "title": "Original Filename"
-          },
-          "model": {
-            "type": "string",
-            "title": "Model"
-          },
-          "created_at": {
-            "type": "string",
-            "title": "Created At"
-          },
           "token_usage": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/TokenUsageResponse"
+                "$ref": "#/components/schemas/TokenUsage"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "Token usage (null if not completed)"
+            "description": "Token usage (null if not completed or restricted)"
           },
           "cost_cents": {
-            "type": "integer",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Cost Cents",
-            "description": "Cost charged in cents for this review",
-            "default": 0
+            "description": "Cost charged in cents (null if restricted)"
           }
         },
         "type": "object",
@@ -8718,8 +8883,8 @@
           "model",
           "created_at"
         ],
-        "title": "PaperReviewDetailResponse",
-        "description": "Detailed response for a single paper review."
+        "title": "PaperReviewDetail",
+        "description": "Paper review with computed fields for API responses.\n\nThis is used both as the service return type and the API response model."
       },
       "PaperReviewListResponse": {
         "properties": {
@@ -8788,7 +8953,7 @@
               }
             ],
             "title": "Summary",
-            "description": "Paper summary (null if pending)"
+            "description": "Paper summary (null if pending or restricted)"
           },
           "overall": {
             "anyOf": [
@@ -8800,7 +8965,7 @@
               }
             ],
             "title": "Overall",
-            "description": "Overall score (null if pending)"
+            "description": "Overall score (null if pending or restricted)"
           },
           "decision": {
             "anyOf": [
@@ -8812,7 +8977,7 @@
               }
             ],
             "title": "Decision",
-            "description": "Review decision (null if pending)"
+            "description": "Review decision (null if pending or restricted)"
           },
           "original_filename": {
             "type": "string",
@@ -8828,6 +8993,24 @@
             "type": "string",
             "title": "Created At",
             "description": "ISO timestamp of review creation"
+          },
+          "has_enough_credits": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Has Enough Credits",
+            "description": "Whether user had positive balance when review completed. NULL if still running."
+          },
+          "access_restricted": {
+            "type": "boolean",
+            "title": "Access Restricted",
+            "description": "True if user cannot view full review details due to insufficient credits",
+            "default": false
           }
         },
         "type": "object",
@@ -9215,6 +9398,28 @@
           "cost"
         ],
         "title": "ResearchRunAcceptedResponse"
+      },
+      "ResearchRunAccessRestrictedEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "access_restricted"
+            ],
+            "const": "access_restricted",
+            "title": "Type"
+          },
+          "data": {
+            "$ref": "#/components/schemas/AccessRestrictedData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "data"
+        ],
+        "title": "ResearchRunAccessRestrictedEvent",
+        "description": "Event emitted when a run's access restriction state changes (e.g., credits ran out)."
       },
       "ResearchRunArtifactEvent": {
         "properties": {
@@ -10031,6 +10236,36 @@
             ],
             "title": "Last Restart Reason",
             "description": "Reason for the last restart (heartbeat_timeout or container_died)"
+          },
+          "has_enough_credits": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Has Enough Credits",
+            "description": "Whether user had positive balance when run completed. NULL if still running."
+          },
+          "access_restricted": {
+            "type": "boolean",
+            "title": "Access Restricted",
+            "description": "True if user cannot view full run details due to insufficient credits",
+            "default": false
+          },
+          "access_restricted_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Restricted Reason",
+            "description": "Message explaining why access is restricted"
           }
         },
         "type": "object",
@@ -10375,6 +10610,36 @@
             ],
             "title": "Evaluation Decision",
             "description": "Evaluation decision ('Accept' or 'Reject') from LLM review, if available"
+          },
+          "has_enough_credits": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Has Enough Credits",
+            "description": "Whether user had positive balance when run completed. NULL if still running."
+          },
+          "access_restricted": {
+            "type": "boolean",
+            "title": "Access Restricted",
+            "description": "True if user cannot view full run details due to insufficient credits",
+            "default": false
+          },
+          "access_restricted_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Restricted Reason",
+            "description": "Message explaining why access is restricted"
           }
         },
         "type": "object",
@@ -11155,6 +11420,9 @@
             "$ref": "#/components/schemas/ResearchRunReviewCompletedEvent"
           },
           {
+            "$ref": "#/components/schemas/ResearchRunAccessRestrictedEvent"
+          },
+          {
             "$ref": "#/components/schemas/ResearchRunStageCompletedEvent"
           },
           {
@@ -11193,6 +11461,7 @@
         "discriminator": {
           "propertyName": "type",
           "mapping": {
+            "access_restricted": "#/components/schemas/ResearchRunAccessRestrictedEvent",
             "artifact": "#/components/schemas/ResearchRunArtifactEvent",
             "code_execution_completed": "#/components/schemas/ResearchRunCodeExecutionCompletedEvent",
             "code_execution_started": "#/components/schemas/ResearchRunCodeExecutionStartedEvent",
@@ -12598,6 +12867,33 @@
         ],
         "title": "TerminateExecutionResponse"
       },
+      "TokenUsage": {
+        "properties": {
+          "input_tokens": {
+            "type": "integer",
+            "title": "Input Tokens",
+            "description": "Total input tokens used"
+          },
+          "cached_input_tokens": {
+            "type": "integer",
+            "title": "Cached Input Tokens",
+            "description": "Cached input tokens"
+          },
+          "output_tokens": {
+            "type": "integer",
+            "title": "Output Tokens",
+            "description": "Total output tokens used"
+          }
+        },
+        "type": "object",
+        "required": [
+          "input_tokens",
+          "cached_input_tokens",
+          "output_tokens"
+        ],
+        "title": "TokenUsage",
+        "description": "Token usage summary for a paper review."
+      },
       "TokenUsageEvent": {
         "properties": {
           "model": {
@@ -12637,33 +12933,6 @@
           "event"
         ],
         "title": "TokenUsagePayload"
-      },
-      "TokenUsageResponse": {
-        "properties": {
-          "input_tokens": {
-            "type": "integer",
-            "title": "Input Tokens",
-            "description": "Total input tokens used"
-          },
-          "cached_input_tokens": {
-            "type": "integer",
-            "title": "Cached Input Tokens",
-            "description": "Cached input tokens"
-          },
-          "output_tokens": {
-            "type": "integer",
-            "title": "Output Tokens",
-            "description": "Total output tokens used"
-          }
-        },
-        "type": "object",
-        "required": [
-          "input_tokens",
-          "cached_input_tokens",
-          "output_tokens"
-        ],
-        "title": "TokenUsageResponse",
-        "description": "Token usage summary."
       },
       "TreeVizItem": {
         "properties": {

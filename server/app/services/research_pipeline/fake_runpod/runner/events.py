@@ -21,6 +21,7 @@ from research_pipeline.ai_scientist.api_types import (  # type: ignore[import-no
     StageSummaryEvent,
     State as StageSkipState,
     Status6 as RunCompletedStatus,
+    TokenUsageEvent,
 )
 # isort: on
 # fmt: on
@@ -366,30 +367,34 @@ class EventsMixin:
                     )
                     break
                 current_iter += 1
-                progress = (iteration + 1) / max_iterations
+                # Calculate progress BEFORE execution (matching real pipeline behavior)
+                progress_before = max(iteration, 0) / max_iterations if max_iterations > 0 else 0.0
                 logger.debug(
                     "Emitting progress run=%s stage=%s iteration=%s progress=%.2f",
                     self._run_id,
                     stage_name,
                     iteration + 1,
-                    progress,
+                    progress_before,
                 )
-                self._emit_code_execution_events(stage_name=stage_name, iteration=iteration)
+                # Emit progress event BEFORE code execution (matching real pipeline)
                 self._enqueue_event(
                     kind="run_stage_progress",
                     data=StageProgressEvent(
                         stage=stage_name,
                         iteration=iteration + 1,
                         max_iterations=max_iterations,
-                        progress=progress,
+                        progress=progress_before,
                         total_nodes=10 + iteration,
                         buggy_nodes=iteration,
                         good_nodes=9 - iteration,
-                        best_metric=f"metric-{progress:.2f}",
+                        best_metric=f"metric-{progress_before:.2f}" if iteration > 0 else None,
                         is_seed_node=False,
                         is_seed_agg_node=False,
                     ),
                 )
+                # Emit intermediate token usage during iteration
+                self._emit_iteration_token_usage(stage_name=stage_name, iteration=iteration)
+                self._emit_code_execution_events(stage_name=stage_name, iteration=iteration)
                 self._enqueue_event(
                     kind="run_log",
                     data=RunLogEvent(
@@ -474,6 +479,30 @@ class EventsMixin:
                 continue
             # Emit seed evaluation progress events (3 seeds)
             self._emit_seed_evaluation_progress(stage_name=stage_name)
+
+            # Emit final progress=1.0 event at stage completion
+            # (matching real pipeline's _emit_final_progress_if_needed in agent_manager.py)
+            try:
+                self._enqueue_event(
+                    kind="run_stage_progress",
+                    data=StageProgressEvent(
+                        stage=stage_name,
+                        iteration=iterations_to_emit,
+                        max_iterations=max_iterations,
+                        progress=1.0,
+                        total_nodes=10 + iterations_to_emit,
+                        buggy_nodes=iterations_to_emit - 1,
+                        good_nodes=10,
+                        best_metric=f"metric-1.00",
+                        is_seed_node=False,
+                        is_seed_agg_node=False,
+                    ),
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to emit final progress=1.0 event for stage %s", stage_name
+                )
+
             # Generate a realistic-looking transition summary based on stage
             stage_number = stage_index + 1
             transition_summaries = {
@@ -635,6 +664,36 @@ class EventsMixin:
 
         # Emit progress for each seed with execution events
         for seed_idx in range(num_seeds):
+            seed_number = seed_idx + 1
+
+            # Emit seed evaluation progress event BEFORE starting execution
+            # (matching real pipeline behavior in parallel_agent.py:436)
+            try:
+                self._enqueue_event(
+                    kind="run_stage_progress",
+                    data=StageProgressEvent(
+                        stage=stage_name,
+                        iteration=seed_number,
+                        max_iterations=num_seeds,
+                        progress=float(seed_number) / float(num_seeds),
+                        total_nodes=num_seeds,
+                        buggy_nodes=0,
+                        good_nodes=seed_number,
+                        best_metric=None,
+                        is_seed_node=True,
+                        is_seed_agg_node=False,
+                    ),
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to emit seed eval progress event for stage %s seed %d",
+                    stage_name,
+                    seed_number,
+                )
+
+            # Emit intermediate token usage for seed evaluation
+            self._emit_seed_token_usage(stage_name=stage_name, seed_idx=seed_idx)
+
             # Use clean UUID format matching production pipeline
             seed_execution_id = uuid.uuid4().hex
             seed_started_at = datetime.now(timezone.utc)
@@ -651,7 +710,7 @@ class EventsMixin:
                         started_at=seed_started_at.isoformat(),
                         is_seed_node=True,
                         is_seed_agg_node=False,
-                        node_index=seed_idx + 1,  # 1-based seed index
+                        node_index=seed_number,  # 1-based seed index
                     )
                 )
             except Exception:
@@ -676,7 +735,7 @@ class EventsMixin:
                         completed_at=seed_completed_at.isoformat(),
                         is_seed_node=True,
                         is_seed_agg_node=False,
-                        node_index=seed_idx + 1,  # 1-based seed index
+                        node_index=seed_number,  # 1-based seed index
                     )
                 )
             except Exception:
@@ -684,36 +743,13 @@ class EventsMixin:
                     "Failed to emit run_completed for seed %d in stage %s", seed_idx, stage_name
                 )
 
-            completed = seed_idx + 1
-            try:
-                self._enqueue_event(
-                    kind="run_stage_progress",
-                    data=StageProgressEvent(
-                        stage=stage_name,
-                        iteration=completed,
-                        max_iterations=num_seeds,
-                        progress=float(completed) / float(num_seeds),
-                        total_nodes=num_seeds,
-                        buggy_nodes=0,
-                        good_nodes=completed,
-                        best_metric=None,
-                        is_seed_node=True,
-                        is_seed_agg_node=False,
-                    ),
-                )
-                logger.info(
-                    "[FakeRunner %s]   Seed %d/%d completed for %s",
-                    self._run_id[:8],
-                    completed,
-                    num_seeds,
-                    stage_name,
-                )
-            except Exception:
-                logger.exception(
-                    "Failed to emit seed eval progress event for stage %s seed %d",
-                    stage_name,
-                    completed,
-                )
+            logger.info(
+                "[FakeRunner %s]   Seed %d/%d completed for %s",
+                self._run_id[:8],
+                seed_number,
+                num_seeds,
+                stage_name,
+            )
 
         # Emit seed aggregation node execution events
         # Use clean UUID format matching production pipeline
@@ -795,4 +831,71 @@ class EventsMixin:
         except Exception:
             logger.exception(
                 "Failed to emit run_completed for seed aggregation in stage %s", stage_name
+            )
+
+    def _emit_iteration_token_usage(self, *, stage_name: str, iteration: int) -> None:
+        """Emit intermediate token usage during a goal iteration.
+
+        This mimics the real pipeline's behavior of emitting token usage
+        events during LLM calls within each iteration.
+        """
+        # Vary token counts based on stage and iteration for realism
+        stage_multiplier = 1.0 + (hash(stage_name) % 5) * 0.1
+        iteration_variance = (iteration + 1) * 500
+
+        # Emit token usage for Codex/planning LLM call
+        codex_payload = TokenUsageEvent(
+            model="anthropic:claude-sonnet-4-20250514",
+            input_tokens=int((12000 + iteration_variance) * stage_multiplier),
+            cached_input_tokens=int((8000 + iteration_variance * 0.5) * stage_multiplier),
+            output_tokens=int((2500 + iteration * 200) * stage_multiplier),
+        )
+        try:
+            self._webhooks.publish_token_usage(codex_payload)
+        except Exception:
+            logger.exception(
+                "[FakeRunner %s] Failed to publish token_usage for stage %s iteration %d",
+                self._run_id[:8],
+                stage_name,
+                iteration + 1,
+            )
+
+        # Emit token usage for feedback/evaluation LLM call
+        feedback_payload = TokenUsageEvent(
+            model="anthropic:claude-sonnet-4-20250514",
+            input_tokens=int(4000 * stage_multiplier),
+            cached_input_tokens=int(2000 * stage_multiplier),
+            output_tokens=int(800 * stage_multiplier),
+        )
+        try:
+            self._webhooks.publish_token_usage(feedback_payload)
+        except Exception:
+            logger.exception(
+                "[FakeRunner %s] Failed to publish feedback token_usage for stage %s iteration %d",
+                self._run_id[:8],
+                stage_name,
+                iteration + 1,
+            )
+
+    def _emit_seed_token_usage(self, *, stage_name: str, seed_idx: int) -> None:
+        """Emit intermediate token usage during seed evaluation.
+
+        Seed evaluations typically use fewer tokens as they're re-running
+        existing experiments with different random seeds.
+        """
+        # Seed evaluations use less tokens than full iterations
+        seed_payload = TokenUsageEvent(
+            model="anthropic:claude-sonnet-4-20250514",
+            input_tokens=3000 + seed_idx * 200,
+            cached_input_tokens=2000 + seed_idx * 100,
+            output_tokens=500 + seed_idx * 50,
+        )
+        try:
+            self._webhooks.publish_token_usage(seed_payload)
+        except Exception:
+            logger.exception(
+                "[FakeRunner %s] Failed to publish token_usage for stage %s seed %d",
+                self._run_id[:8],
+                stage_name,
+                seed_idx,
             )

@@ -5,7 +5,11 @@ import * as Sentry from "@sentry/nextjs";
 
 import { ImportState } from "@/features/conversation-import/types/types";
 import type { SSEEvent } from "@/features/conversation-import/types/types";
-import { apiStream } from "@/shared/lib/api-client";
+import { apiStream, ApiError } from "@/shared/lib/api-client";
+import {
+  getInsufficientBalanceDetail,
+  formatInsufficientBalanceMessage,
+} from "@/shared/utils/costs";
 
 export interface UseManualIdeaImportOptions {
   onImportStart?: () => void;
@@ -189,6 +193,17 @@ export function useManualIdeaImport(
           }
         }
       } catch (err) {
+        // Handle 402 (insufficient balance) errors
+        if (err instanceof ApiError && err.status === 402) {
+          const detail = getInsufficientBalanceDetail(err.data);
+          const message = formatInsufficientBalanceMessage(detail);
+          setError(message);
+          setIsStreaming(false);
+          onImportEnd?.();
+          onError?.(message);
+          return;
+        }
+
         // Report unexpected errors to Sentry
         Sentry.captureException(err, {
           tags: {

@@ -1,38 +1,48 @@
 "use client";
 
-export interface InsufficientBalanceInfo {
-  message: string;
-  required_cents?: number;
-  available_cents?: number;
-  action?: string;
-}
+import type { components } from "@/types/api.gen";
 
-export function parseInsufficientBalanceError(data: unknown): InsufficientBalanceInfo | null {
-  const detail = (data as { detail?: unknown } | undefined)?.detail ?? data;
+// Re-export the generated types for convenience
+export type InsufficientBalanceError = components["schemas"]["InsufficientBalanceError"];
+export type InsufficientBalanceErrorDetail =
+  components["schemas"]["InsufficientBalanceErrorDetail"];
 
-  if (typeof detail === "string") {
-    return { message: detail };
+/**
+ * Extract insufficient balance error details from an API error response.
+ * Works with both the typed response (InsufficientBalanceError) and legacy formats.
+ */
+export function getInsufficientBalanceDetail(
+  error: InsufficientBalanceError | unknown
+): InsufficientBalanceErrorDetail | null {
+  // Handle the properly typed response (has detail field)
+  if (error && typeof error === "object" && "detail" in error) {
+    const detail = (error as { detail: unknown }).detail;
+    if (detail && typeof detail === "object" && "message" in detail) {
+      return detail as InsufficientBalanceErrorDetail;
+    }
   }
-
-  if (typeof detail === "object" && detail !== null) {
-    const payload = detail as Record<string, unknown>;
-    const message =
-      typeof payload.message === "string"
-        ? payload.message
-        : "Insufficient balance. Please add funds to continue.";
-    return {
-      message,
-      required_cents:
-        typeof payload.required_cents === "number" ? payload.required_cents : undefined,
-      available_cents:
-        typeof payload.available_cents === "number" ? payload.available_cents : undefined,
-      action: typeof payload.action === "string" ? payload.action : undefined,
-    };
-  }
-
   return null;
 }
 
 export function formatCentsAsDollars(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
+}
+
+/**
+ * Format a user-friendly insufficient balance error message.
+ * Shows required amount when available.
+ */
+export function formatInsufficientBalanceMessage(
+  detail: InsufficientBalanceErrorDetail | null,
+  fallback = "Insufficient balance to continue."
+): string {
+  if (!detail) {
+    return fallback;
+  }
+
+  if (detail.required_cents !== undefined) {
+    return `Insufficient balance. You need ${formatCentsAsDollars(detail.required_cents)} to start.`;
+  }
+
+  return detail.message || fallback;
 }

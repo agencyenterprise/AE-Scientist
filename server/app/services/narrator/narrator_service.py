@@ -243,6 +243,11 @@ async def _process_single_event(
         event_type: Type of execution event
         event_data: Typed event data (Pydantic model)
     """
+    # Check if run is locked (has_enough_credits = False)
+    # If locked, we still persist events but skip SSE publishing
+    run = await db.get_research_pipeline_run(run_id=run_id)
+    is_run_locked = run is not None and run.has_enough_credits is False
+
     # Use database connection (auto-commits on success, rolls back on error)
     async with db.aget_connection() as conn:
         # Step 1: Get or create state (with lock)
@@ -275,12 +280,13 @@ async def _process_single_event(
         for timeline_event in timeline_events:
             await db.insert_timeline_event(run_id=run_id, event=timeline_event)
 
-            # Publish timeline event to SSE subscribers immediately after persistence
-            publish_narrator_event(
-                run_id=run_id,
-                event_type="timeline_event",
-                data=timeline_event.model_dump(mode="json"),
-            )
+            # Publish timeline event to SSE subscribers (skip if run is locked)
+            if not is_run_locked:
+                publish_narrator_event(
+                    run_id=run_id,
+                    event_type="timeline_event",
+                    data=timeline_event.model_dump(mode="json"),
+                )
 
         # Step 4: Apply events through reducer to compute new state
         # Accumulate all state changes to publish as a single delta
@@ -298,8 +304,8 @@ async def _process_single_event(
         # Step 5: Persist updated state (no version check needed - we have lock)
         await db.upsert_research_run_state(run_id=run_id, state=new_state, conn=conn)
 
-        # Step 6: Publish state delta to SSE subscribers (only changed fields)
-        if accumulated_changes:
+        # Step 6: Publish state delta to SSE subscribers (skip if run is locked)
+        if accumulated_changes and not is_run_locked:
             # Serialize the changes for JSON transmission
 
             serialized_changes: Dict[str, Any] = {}

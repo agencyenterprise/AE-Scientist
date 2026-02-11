@@ -20,6 +20,7 @@ from ae_paper_review import ReviewResult, load_paper, perform_review
 from psycopg import AsyncConnection
 
 from app.config import settings
+from app.models.paper_review import PaperReviewDetail, TokenUsage
 from app.services.billing_guard import charge_cents, enforce_minimum_balance
 from app.services.database import PaperReviewStatus, get_database
 from app.services.s3_service import S3Service
@@ -235,11 +236,17 @@ class PaperReviewService:
                 },
             )
 
+            # Set has_enough_credits based on user's balance after charging
+            balance = await db.get_user_wallet_balance(user_id)
+            has_enough_credits = balance > 0
+            await db.set_paper_review_has_enough_credits(review_id, has_enough_credits)
+
             logger.info(
-                "Paper review completed: review_id=%d, user_id=%d, cost=%d cents",
+                "Paper review completed: review_id=%d, user_id=%d, cost=%d cents, has_enough_credits=%s",
                 review_id,
                 user_id,
                 cost_cents,
+                has_enough_credits,
             )
 
         except Exception as e:
@@ -253,6 +260,8 @@ class PaperReviewService:
                 PaperReviewStatus.FAILED,
                 error_message=error_message[:1000],  # Limit error message length
             )
+            # Set has_enough_credits=True for failed reviews so users can see error details
+            await db.set_paper_review_has_enough_credits(review_id, True)
 
         finally:
             # Clean up temporary file
@@ -334,7 +343,7 @@ class PaperReviewService:
 
         return (review_id, PaperReviewStatus.PENDING.value)
 
-    async def get_review(self, *, review_id: int, user_id: int) -> dict[str, Any] | None:
+    async def get_review(self, *, review_id: int, user_id: int) -> PaperReviewDetail | None:
         """Get a paper review by ID.
 
         Args:
@@ -342,7 +351,7 @@ class PaperReviewService:
             user_id: ID of the user (for authorization)
 
         Returns:
-            Review dict if found and owned by user, None otherwise
+            PaperReviewDetail if found and owned by user, None otherwise
         """
         db = get_database()
         review = await db.get_paper_review_by_id(review_id)
@@ -350,44 +359,28 @@ class PaperReviewService:
         if not review or review.user_id != user_id:
             return None
 
-        token_usage = await db.get_total_token_usage_by_review_id(review_id)
+        token_usage_dict = await db.get_total_token_usage_by_review_id(review_id)
 
-        # Calculate cost in cents from token usage
+        # Build TokenUsage if we have data
+        token_usage: TokenUsage | None = None
         cost_cents = 0
-        if token_usage.get("input_tokens") or token_usage.get("output_tokens"):
+        input_tokens = token_usage_dict.get("input_tokens", 0)
+        output_tokens = token_usage_dict.get("output_tokens", 0)
+        if input_tokens or output_tokens:
+            cached_input_tokens = token_usage_dict.get("cached_input_tokens", 0)
+            token_usage = TokenUsage(
+                input_tokens=input_tokens,
+                cached_input_tokens=cached_input_tokens,
+                output_tokens=output_tokens,
+            )
             cost_cents = calculate_review_cost_cents(
                 model=review.model,
-                input_tokens=token_usage["input_tokens"],
-                cached_input_tokens=token_usage["cached_input_tokens"],
-                output_tokens=token_usage["output_tokens"],
+                input_tokens=input_tokens,
+                cached_input_tokens=cached_input_tokens,
+                output_tokens=output_tokens,
             )
 
-        return {
-            "id": review.id,
-            "status": review.status,
-            "error_message": review.error_message,
-            "summary": review.summary,
-            "strengths": review.strengths,
-            "weaknesses": review.weaknesses,
-            "originality": review.originality,
-            "quality": review.quality,
-            "clarity": review.clarity,
-            "significance": review.significance,
-            "questions": review.questions,
-            "limitations": review.limitations,
-            "ethical_concerns": review.ethical_concerns,
-            "soundness": review.soundness,
-            "presentation": review.presentation,
-            "contribution": review.contribution,
-            "overall": review.overall,
-            "confidence": review.confidence,
-            "decision": review.decision,
-            "original_filename": review.original_filename,
-            "model": review.model,
-            "created_at": review.created_at.isoformat(),
-            "token_usage": token_usage,
-            "cost_cents": cost_cents,
-        }
+        return PaperReviewDetail.from_review(review, token_usage, cost_cents)
 
     async def get_pending_reviews(self, *, user_id: int) -> list[dict[str, Any]]:
         """Get all pending or processing reviews for a user.
@@ -436,28 +429,34 @@ class PaperReviewService:
             offset=offset,
         )
 
-        return [
-            {
-                "id": review.id,
-                "status": review.status,
-                "summary": review.summary,
-                "overall": review.overall,
-                "decision": review.decision,
-                "original_filename": review.original_filename,
-                "model": review.model,
-                "created_at": review.created_at.isoformat(),
-            }
-            for review in reviews
-        ]
+        result = []
+        for review in reviews:
+            access_restricted = review.has_enough_credits is False
+            result.append(
+                {
+                    "id": review.id,
+                    "status": review.status,
+                    "summary": review.summary if not access_restricted else None,
+                    "overall": review.overall if not access_restricted else None,
+                    "decision": review.decision if not access_restricted else None,
+                    "original_filename": review.original_filename,
+                    "model": review.model,
+                    "created_at": review.created_at.isoformat(),
+                    "has_enough_credits": review.has_enough_credits,
+                    "access_restricted": access_restricted,
+                }
+            )
+        return result
 
     async def get_paper_download_url(
-        self, *, review_id: int, user_id: int
+        self, *, review_id: int, user_id: int, check_credits: bool = True
     ) -> tuple[str, str] | None:
         """Get a temporary download URL for the reviewed paper PDF.
 
         Args:
             review_id: ID of the review
             user_id: ID of the user (for authorization)
+            check_credits: If True, blocks download when has_enough_credits is False
 
         Returns:
             Tuple of (download_url, filename) if found and owned by user, None otherwise
@@ -466,6 +465,10 @@ class PaperReviewService:
         review = await db.get_paper_review_by_id(review_id)
 
         if not review or review.user_id != user_id:
+            return None
+
+        # Block download if access is restricted
+        if check_credits and review.has_enough_credits is False:
             return None
 
         if not review.s3_key:

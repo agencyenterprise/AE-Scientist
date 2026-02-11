@@ -3,7 +3,7 @@
 import { api } from "@/shared/lib/api-client-typed";
 import type { components } from "@/types/api.gen";
 
-export type PaperReviewDetail = components["schemas"]["PaperReviewDetailResponse"];
+export type PaperReviewDetail = components["schemas"]["PaperReviewDetail"];
 
 export async function fetchPaperReview(reviewId: string): Promise<PaperReviewDetail> {
   const { data, error } = await api.GET("/api/paper-reviews/{review_id}", {
