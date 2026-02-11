@@ -122,9 +122,18 @@ def handle_stage_progress_event(
         except (ValueError, TypeError):
             pass
 
+    # Include node type suffix in event ID to avoid conflicts between
+    # regular iterations, seed evaluations, and aggregation (they can have same iteration numbers)
+    if event.is_seed_agg_node:
+        event_id = f"progress_{event.stage}_agg_{event.iteration}"
+    elif event.is_seed_node:
+        event_id = f"progress_{event.stage}_seed_{event.iteration}"
+    else:
+        event_id = f"progress_{event.stage}_{event.iteration}"
+
     events.append(
         ProgressUpdateEvent(
-            id=f"progress_{event.stage}_{event.iteration}",
+            id=event_id,
             timestamp=now + timedelta(milliseconds=offset_ms),
             stage=event.stage,
             node_id=None,
