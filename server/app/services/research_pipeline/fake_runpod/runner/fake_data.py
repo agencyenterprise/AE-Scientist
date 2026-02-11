@@ -108,6 +108,37 @@ torch.manual_seed(SEED)
 """
 
 
+def generate_seed_runfile_code(seed_value: int) -> str:
+    """Generate fake generated Python code for a seed run.
+
+    This simulates the code that Codex would generate after modifying
+    the seed values in the original experiment code.
+    """
+    return f"""import os
+
+working_dir = os.path.join(os.getcwd(), "working")
+os.makedirs(working_dir, exist_ok=True)
+
+import random
+import numpy as np
+import torch
+
+# Seed modified by Codex to: {seed_value}
+SEED = {seed_value}
+random.seed(SEED)
+np.random.seed(SEED)
+torch.manual_seed(SEED)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed_all(SEED)
+
+# ... experiment code with seed {seed_value} ...
+
+# Save results
+np.save(os.path.join(working_dir, "experiment_data.npy"), {{"seed": SEED, "results": [0.85, 0.87, 0.86]}})
+print(f"Experiment completed with seed {{SEED}}")
+"""
+
+
 class FakeDataMixin:
     """Mixin providing fake data generation methods for FakeRunner."""
 

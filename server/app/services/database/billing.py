@@ -58,9 +58,9 @@ class BillingDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-meth
 
         Balance is in cents:
         - Free users: 50,000 cents ($500.00)
-        - Paid users: 50 cents ($0.50)
+        - Paid users: 0 cents ($0.00)
         """
-        balance = 50_000 if receives_free_balance else 50
+        balance = 50_000 if receives_free_balance else 0
         await cursor.execute(
             """
             INSERT INTO billing_user_wallets (user_id, balance)

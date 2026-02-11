@@ -35,7 +35,11 @@ from ..models import (
     ExecutionRecord,
 )
 from ..state import get_executions, get_lock, get_speed_factor
-from .fake_data import generate_seed_modification_task, get_paper_generation_steps
+from .fake_data import (
+    generate_seed_modification_task,
+    generate_seed_runfile_code,
+    get_paper_generation_steps,
+)
 
 if TYPE_CHECKING:
     from .core import FakeRunnerCore
@@ -662,7 +666,7 @@ class EventsMixin:
             seed_execution_id = uuid.uuid4().hex
             seed_started_at = datetime.now(timezone.utc)
 
-            # Emit running_code event for seed node (now uses Codex to modify seeds)
+            # Emit running_code event for seed node - codex_execution (task prompt)
             seed_modification_task = generate_seed_modification_task(seed_idx)
             try:
                 self._webhooks.publish_running_code(
@@ -680,12 +684,67 @@ class EventsMixin:
                 )
             except Exception:
                 logger.exception(
-                    "Failed to emit running_code for seed %d in stage %s", seed_idx, stage_name
+                    "Failed to emit codex running_code for seed %d in stage %s",
+                    seed_idx,
+                    stage_name,
                 )
 
-            self._sleep(5)  # Simulate seed execution time
+            self._sleep(2)  # Simulate Codex thinking time
 
-            # Emit run_completed event for seed node
+            # Emit running_code event for seed node - runfile_execution (generated code)
+            seed_runfile_code = generate_seed_runfile_code(seed_idx)
+            runfile_started_at = datetime.now(timezone.utc)
+            try:
+                self._webhooks.publish_running_code(
+                    RunningCodeEventPayload(
+                        execution_id=seed_execution_id,
+                        stage=stage_name,
+                        run_type=RunType.runfile_execution,
+                        execution_type=ExecutionType.seed,
+                        code=seed_runfile_code,
+                        started_at=runfile_started_at.isoformat(),
+                        is_seed_node=True,
+                        is_seed_agg_node=False,
+                        node_index=seed_number,  # 1-based seed index
+                    )
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to emit runfile running_code for seed %d in stage %s",
+                    seed_idx,
+                    stage_name,
+                )
+
+            self._sleep(3)  # Simulate code execution time
+
+            # Emit run_completed event for runfile_execution
+            runfile_completed_at = datetime.now(timezone.utc)
+            runfile_exec_time = max(
+                0.0, (runfile_completed_at - runfile_started_at).total_seconds()
+            )
+            try:
+                self._webhooks.publish_run_completed(
+                    RunCompletedEventPayload(
+                        execution_id=seed_execution_id,
+                        stage=stage_name,
+                        run_type=RunType.runfile_execution,
+                        execution_type=ExecutionType.seed,
+                        status=RunCompletedStatus.success,
+                        exec_time=runfile_exec_time,
+                        completed_at=runfile_completed_at.isoformat(),
+                        is_seed_node=True,
+                        is_seed_agg_node=False,
+                        node_index=seed_number,  # 1-based seed index
+                    )
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to emit runfile run_completed for seed %d in stage %s",
+                    seed_idx,
+                    stage_name,
+                )
+
+            # Emit run_completed event for codex_execution
             seed_completed_at = datetime.now(timezone.utc)
             seed_exec_time = max(0.0, (seed_completed_at - seed_started_at).total_seconds())
             try:
@@ -705,7 +764,9 @@ class EventsMixin:
                 )
             except Exception:
                 logger.exception(
-                    "Failed to emit run_completed for seed %d in stage %s", seed_idx, stage_name
+                    "Failed to emit codex run_completed for seed %d in stage %s",
+                    seed_idx,
+                    stage_name,
                 )
 
             logger.info(

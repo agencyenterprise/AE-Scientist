@@ -153,11 +153,11 @@ function filterNodeExecutionEvents(events: TimelineEvent[]): TimelineEvent[] {
       if (event.run_type === "codex_execution") {
         return true;
       }
-      // For runfile_execution, only show seed and metrics types
-      // (stage_goal and aggregation runfile_executions are nested under their codex_execution)
+      // For runfile_execution, only show metrics types
+      // (stage_goal, seed, and aggregation runfile_executions are nested under their codex_execution)
       if (event.run_type === "runfile_execution") {
         const execType = "execution_type" in event ? event.execution_type : null;
-        return execType === "seed" || execType === "metrics";
+        return execType === "metrics";
       }
     }
     return true;
