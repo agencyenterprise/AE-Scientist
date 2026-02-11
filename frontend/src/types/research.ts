@@ -52,6 +52,18 @@ export type TreeVizItemApi = components["schemas"]["TreeVizItem"];
 
 // Code execution
 export type ResearchRunCodeExecution = components["schemas"]["ResearchRunCodeExecution"];
+export type ExecutionType = components["schemas"]["ExecutionType"];
+
+/**
+ * Type-safe execution type constants validated against the generated ExecutionType.
+ * Use these instead of hardcoded strings to ensure type safety.
+ */
+export const EXECUTION_TYPE = {
+  STAGE_GOAL: "stage_goal",
+  SEED: "seed",
+  AGGREGATION: "aggregation",
+  METRICS: "metrics",
+} as const satisfies Record<string, ExecutionType>;
 
 // Cost types
 export type HwCostEstimateData = components["schemas"]["ResearchRunHwCostEstimateData"];
@@ -143,6 +155,15 @@ export type TreeVizItem = TreeVizItemApi;
 // ===========================================
 
 export type RunType = components["schemas"]["RunType"];
+
+/**
+ * Type-safe run type constants validated against the generated RunType.
+ * Use these instead of hardcoded strings to ensure type safety.
+ */
+export const RUN_TYPE = {
+  CODEX_EXECUTION: "codex_execution",
+  RUNFILE_EXECUTION: "runfile_execution",
+} as const satisfies Record<string, RunType>;
 
 export interface ResearchRunDetails {
   run: ResearchRunInfo;

@@ -4509,6 +4509,8 @@ export interface components {
             stage: components["schemas"]["StageId"];
             /** @description Type of execution ('codex_execution' for the Codex session, 'runfile_execution' for the runfile command). */
             run_type: components["schemas"]["RunType"];
+            /** @description Category of execution (stage_goal, seed, aggregation, metrics). */
+            execution_type: components["schemas"]["ExecutionType"];
             /**
              * Code
              * @description Python source code submitted for execution
@@ -4566,6 +4568,7 @@ export interface components {
             execution_id: string;
             stage: components["schemas"]["StageId"];
             run_type: components["schemas"]["RunType"];
+            execution_type: components["schemas"]["ExecutionType"];
             /** Code */
             code: string;
             /** Started At */

@@ -19,6 +19,7 @@ import type {
   TerminationStatusData,
   AccessRestrictedData,
 } from "@/types/research";
+import { RUN_TYPE } from "@/types/research";
 
 export type { ResearchRunDetails };
 
@@ -155,6 +156,7 @@ function normalizeCodeExecution(
     execution_id: snapshot.execution_id,
     stage: snapshot.stage,
     run_type: snapshot.run_type as ResearchRunCodeExecution["run_type"],
+    execution_type: snapshot.execution_type,
     code: snapshot.code ?? null,
     status: snapshot.status,
     started_at: snapshot.started_at,
@@ -169,7 +171,8 @@ function mapCodeExecutionStartedEvent(
   return {
     execution_id: event.execution_id,
     stage: event.stage,
-    run_type: (event.run_type ?? "codex_execution") as ResearchRunCodeExecution["run_type"],
+    run_type: (event.run_type ?? RUN_TYPE.CODEX_EXECUTION) as ResearchRunCodeExecution["run_type"],
+    execution_type: event.execution_type,
     code: event.code,
     status: "running",
     started_at: event.started_at,

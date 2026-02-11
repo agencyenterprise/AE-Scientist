@@ -59,6 +59,23 @@ def parse_run_type(*, run_type: str) -> RunType:
     return RunType.RUNFILE_EXECUTION
 
 
+def parse_execution_type(*, execution_type: str) -> ExecutionType:
+    """
+    Convert persisted execution_type strings into the supported ExecutionType enum.
+
+    Notes:
+    - Unknown values are mapped to STAGE_GOAL to avoid 500s while keeping the API stable.
+    """
+    normalized = execution_type.strip().lower()
+    if normalized == ExecutionType.SEED.value:
+        return ExecutionType.SEED
+    if normalized == ExecutionType.AGGREGATION.value:
+        return ExecutionType.AGGREGATION
+    if normalized == ExecutionType.METRICS.value:
+        return ExecutionType.METRICS
+    return ExecutionType.STAGE_GOAL
+
+
 # ============================================================================
 # List API Models
 # ============================================================================
@@ -389,6 +406,10 @@ class ResearchRunCodeExecution(BaseModel):
         ...,
         description="Type of execution ('codex_execution' for the Codex session, 'runfile_execution' for the runfile command).",
     )
+    execution_type: ExecutionType = Field(
+        ...,
+        description="Category of execution (stage_goal, seed, aggregation, metrics).",
+    )
     code: Optional[str] = Field(None, description="Python source code submitted for execution")
     status: str = Field(..., description="Execution status reported by the worker")
     started_at: str = Field(..., description="ISO timestamp when execution began")
@@ -401,6 +422,7 @@ class ResearchRunCodeExecution(BaseModel):
             execution_id=record.execution_id,
             stage=record.stage,
             run_type=parse_run_type(run_type=record.run_type),
+            execution_type=parse_execution_type(execution_type=record.execution_type),
             code=record.code,
             status=record.status,
             started_at=record.started_at.isoformat(),

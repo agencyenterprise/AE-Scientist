@@ -9518,6 +9518,10 @@
             "$ref": "#/components/schemas/RunType",
             "description": "Type of execution ('codex_execution' for the Codex session, 'runfile_execution' for the runfile command)."
           },
+          "execution_type": {
+            "$ref": "#/components/schemas/ExecutionType",
+            "description": "Category of execution (stage_goal, seed, aggregation, metrics)."
+          },
           "code": {
             "anyOf": [
               {
@@ -9570,6 +9574,7 @@
           "execution_id",
           "stage",
           "run_type",
+          "execution_type",
           "status",
           "started_at"
         ],
@@ -9649,6 +9654,9 @@
           "run_type": {
             "$ref": "#/components/schemas/RunType"
           },
+          "execution_type": {
+            "$ref": "#/components/schemas/ExecutionType"
+          },
           "code": {
             "type": "string",
             "title": "Code"
@@ -9663,6 +9671,7 @@
           "execution_id",
           "stage",
           "run_type",
+          "execution_type",
           "code",
           "started_at"
         ],

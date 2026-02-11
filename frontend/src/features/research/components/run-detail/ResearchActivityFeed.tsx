@@ -34,6 +34,7 @@ import type { components } from "@/types/api.gen";
 import { humanizeEventHeadline, TOOLTIP_EXPLANATIONS } from "../../utils/research-utils";
 import type { StageSkipStateMap } from "@/features/research/hooks/useResearchRunDetails";
 import type { StageTransitionEvent } from "@/types/research";
+import { EXECUTION_TYPE, RUN_TYPE } from "@/types/research";
 
 type ResearchRunState = components["schemas"]["ResearchRunState"];
 type ApiTimelineEvent = NonNullable<ResearchRunState["timeline"]>[number];
@@ -150,14 +151,14 @@ function filterNodeExecutionEvents(events: TimelineEvent[]): TimelineEvent[] {
     // For execution events, check run_type and execution_type
     if ("run_type" in event) {
       // Always show codex_execution events
-      if (event.run_type === "codex_execution") {
+      if (event.run_type === RUN_TYPE.CODEX_EXECUTION) {
         return true;
       }
       // For runfile_execution, only show metrics types
       // (stage_goal, seed, and aggregation runfile_executions are nested under their codex_execution)
-      if (event.run_type === "runfile_execution") {
+      if (event.run_type === RUN_TYPE.RUNFILE_EXECUTION) {
         const execType = "execution_type" in event ? event.execution_type : null;
-        return execType === "metrics";
+        return execType === EXECUTION_TYPE.METRICS;
       }
     }
     return true;
@@ -179,7 +180,7 @@ function findRunfileExecution(
         "execution_id" in e &&
         e.execution_id === executionId &&
         "run_type" in e &&
-        e.run_type === "runfile_execution"
+        e.run_type === RUN_TYPE.RUNFILE_EXECUTION
     ) ?? null
   );
 }
@@ -542,7 +543,7 @@ function getExecutionType(event: TimelineEvent): ExecutionType | null {
  * Check if an execution event is for metrics parsing
  */
 function isMetricsExecution(event: TimelineEvent): boolean {
-  return getExecutionType(event) === "metrics";
+  return getExecutionType(event) === EXECUTION_TYPE.METRICS;
 }
 
 /**
@@ -555,14 +556,14 @@ function getExecutionTypeBadge(executionType: ExecutionType): {
   textClass: string;
 } | null {
   switch (executionType) {
-    case "metrics":
+    case EXECUTION_TYPE.METRICS:
       return {
         label: "Metrics",
         tooltip: "Parsing and extracting metrics from experiment outputs.",
         bgClass: "bg-purple-500/20",
         textClass: "text-purple-400",
       };
-    case "seed":
+    case EXECUTION_TYPE.SEED:
       return {
         label: "Seed",
         tooltip:
@@ -570,7 +571,7 @@ function getExecutionTypeBadge(executionType: ExecutionType): {
         bgClass: "bg-pink-500/20",
         textClass: "text-pink-400",
       };
-    case "aggregation":
+    case EXECUTION_TYPE.AGGREGATION:
       return {
         label: "Aggregation",
         tooltip:
@@ -578,7 +579,7 @@ function getExecutionTypeBadge(executionType: ExecutionType): {
         bgClass: "bg-teal-500/20",
         textClass: "text-teal-400",
       };
-    case "stage_goal":
+    case EXECUTION_TYPE.STAGE_GOAL:
       return {
         label: "Experiment",
         tooltip:
@@ -646,7 +647,7 @@ function CompactEventItem({ event, allEvents, onTerminateExecution }: CompactEve
   const isActiveExecution =
     event.type === "node_execution_started" &&
     "run_type" in event &&
-    event.run_type === "codex_execution" &&
+    event.run_type === RUN_TYPE.CODEX_EXECUTION &&
     "execution_id" in event;
 
   // Get execution type badge configuration (only show on started events, not completed)
@@ -757,9 +758,9 @@ function CompactEventItem({ event, allEvents, onTerminateExecution }: CompactEve
               onToggle={e => setIsTaskDetailsOpen(e.currentTarget.open)}
               className={cn(
                 "mt-2 rounded-md border",
-                executionType === "aggregation"
+                executionType === EXECUTION_TYPE.AGGREGATION
                   ? "border-teal-500/30 bg-teal-500/5"
-                  : executionType === "seed"
+                  : executionType === EXECUTION_TYPE.SEED
                     ? "border-pink-500/30 bg-pink-500/5"
                     : "border-blue-500/30 bg-blue-500/5"
               )}
@@ -767,9 +768,9 @@ function CompactEventItem({ event, allEvents, onTerminateExecution }: CompactEve
               <summary
                 className={cn(
                   "cursor-pointer px-3 py-2 text-xs font-medium flex items-center gap-2",
-                  executionType === "aggregation"
+                  executionType === EXECUTION_TYPE.AGGREGATION
                     ? "text-teal-300 hover:text-teal-200"
-                    : executionType === "seed"
+                    : executionType === EXECUTION_TYPE.SEED
                       ? "text-pink-300 hover:text-pink-200"
                       : "text-blue-300 hover:text-blue-200"
                 )}
@@ -777,17 +778,17 @@ function CompactEventItem({ event, allEvents, onTerminateExecution }: CompactEve
                 <span
                   className={cn(
                     "inline-block w-2 h-2 rounded-full animate-pulse",
-                    executionType === "aggregation"
+                    executionType === EXECUTION_TYPE.AGGREGATION
                       ? "bg-teal-400"
-                      : executionType === "seed"
+                      : executionType === EXECUTION_TYPE.SEED
                         ? "bg-pink-400"
                         : "bg-blue-400"
                   )}
                 />
                 <span className="flex-1">
-                  {executionType === "aggregation"
+                  {executionType === EXECUTION_TYPE.AGGREGATION
                     ? "Aggregation Task"
-                    : executionType === "seed"
+                    : executionType === EXECUTION_TYPE.SEED
                       ? "Seed Evaluation Task"
                       : "Coding Agent Task"}
                 </span>
@@ -796,9 +797,9 @@ function CompactEventItem({ event, allEvents, onTerminateExecution }: CompactEve
               <div
                 className={cn(
                   "max-h-96 overflow-y-auto border-t p-3",
-                  executionType === "aggregation"
+                  executionType === EXECUTION_TYPE.AGGREGATION
                     ? "border-teal-500/20"
-                    : executionType === "seed"
+                    : executionType === EXECUTION_TYPE.SEED
                       ? "border-pink-500/20"
                       : "border-blue-500/20"
                 )}
@@ -806,9 +807,9 @@ function CompactEventItem({ event, allEvents, onTerminateExecution }: CompactEve
                 <p
                   className={cn(
                     "text-[10px] uppercase tracking-wide mb-2",
-                    executionType === "aggregation"
+                    executionType === EXECUTION_TYPE.AGGREGATION
                       ? "text-teal-400"
-                      : executionType === "seed"
+                      : executionType === EXECUTION_TYPE.SEED
                         ? "text-pink-400"
                         : "text-blue-400"
                   )}
@@ -978,17 +979,17 @@ function NodeExecutionGroupItem({
 
   // Determine border color based on execution type
   const borderColor =
-    group.executionType === "aggregation"
+    group.executionType === EXECUTION_TYPE.AGGREGATION
       ? "border-l-teal-500/50"
-      : group.executionType === "seed"
+      : group.executionType === EXECUTION_TYPE.SEED
         ? "border-l-pink-500/50"
         : "border-l-blue-500/50";
 
   // Determine header label based on execution type
   const headerLabel =
-    group.executionType === "aggregation"
+    group.executionType === EXECUTION_TYPE.AGGREGATION
       ? "Aggregation"
-      : group.executionType === "seed"
+      : group.executionType === EXECUTION_TYPE.SEED
         ? `Seed ${group.nodeIndex ?? "?"}`
         : `Node ${group.nodeIndex ?? "?"} execution`;
 
@@ -1070,14 +1071,14 @@ function GroupedEventsList({
         nodeGroups.set(baseNodeId, {
           baseNodeId,
           nodeIndex,
-          executionType: eventExecType !== "metrics" ? eventExecType : null,
+          executionType: eventExecType !== EXECUTION_TYPE.METRICS ? eventExecType : null,
           codeEvents: [],
           metricsEvents: [],
         });
       }
       const group = nodeGroups.get(baseNodeId)!;
       // Update execution type if we find a non-metrics type
-      if (eventExecType && eventExecType !== "metrics" && !group.executionType) {
+      if (eventExecType && eventExecType !== EXECUTION_TYPE.METRICS && !group.executionType) {
         group.executionType = eventExecType;
       }
       if (isMetricsExecution(event)) {

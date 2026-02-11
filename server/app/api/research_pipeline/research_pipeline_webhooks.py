@@ -677,6 +677,7 @@ async def ingest_running_code(
                     execution_id=event.execution_id,
                     stage=event.stage,
                     run_type=event.run_type,
+                    execution_type=event.execution_type,
                     code=event.code,
                     started_at=event.started_at,
                 ),

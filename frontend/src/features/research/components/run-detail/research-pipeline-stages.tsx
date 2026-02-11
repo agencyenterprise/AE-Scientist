@@ -8,6 +8,7 @@ import type {
   StageSummary,
   ResearchRunCodeExecution,
 } from "@/types/research";
+import { EXECUTION_TYPE } from "@/types/research";
 import { cn } from "@/shared/lib/utils";
 import { extractStageNumber, PIPELINE_STAGES, STAGE_ID } from "@/shared/lib/stage-utils";
 import { Modal } from "@/shared/components/Modal";
@@ -619,7 +620,7 @@ function ActiveExecutionCard({
             Termination requested. Waiting for the worker to stop…
           </p>
         )}
-        {onTerminateExecution && (
+        {onTerminateExecution && codexExecution?.execution_type === EXECUTION_TYPE.STAGE_GOAL && (
           <div className="flex justify-end">
             <Button variant="destructive" size="sm" onClick={() => setIsDialogOpen(true)}>
               Terminate
@@ -628,7 +629,7 @@ function ActiveExecutionCard({
         )}
       </div>
 
-      {onTerminateExecution && (
+      {onTerminateExecution && codexExecution?.execution_type === EXECUTION_TYPE.STAGE_GOAL && (
         <Modal
           isOpen={isDialogOpen}
           onClose={handleClose}

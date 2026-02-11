@@ -13,6 +13,7 @@ from app.models.conversations import ConversationResponse
 from app.models.ideas import Idea
 from app.models.research_pipeline import (
     ChildConversationInfo,
+    ExecutionType,
     LlmReviewResponse,
     ResearchRunArtifactMetadata,
     ResearchRunCodeExecution,
@@ -308,6 +309,7 @@ class ResearchRunCodeExecutionStartedData(BaseModel):
     execution_id: str
     stage: StageId
     run_type: RunType
+    execution_type: ExecutionType
     code: str
     started_at: str
 

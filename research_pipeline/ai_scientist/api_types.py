@@ -2609,6 +2609,12 @@ class ResearchRunCodeExecution(BaseModel):
             description="Type of execution ('codex_execution' for the Codex session, 'runfile_execution' for the runfile command)."
         ),
     ]
+    execution_type: Annotated[
+        ExecutionType,
+        Field(
+            description="Category of execution (stage_goal, seed, aggregation, metrics)."
+        ),
+    ]
     code: Annotated[
         str | None,
         Field(description="Python source code submitted for execution", title="Code"),
@@ -2648,6 +2654,7 @@ class ResearchRunCodeExecutionStartedData(BaseModel):
     execution_id: Annotated[str, Field(title="Execution Id")]
     stage: StageId
     run_type: RunType
+    execution_type: ExecutionType
     code: Annotated[str, Field(title="Code")]
     started_at: Annotated[str, Field(title="Started At")]
 
