@@ -18,7 +18,7 @@ const FLOW_STEPS = [
     icon: FileText,
     title: "PDF Text Extraction",
     detail:
-      "Your paper is securely uploaded and parsed using advanced PDF extraction to capture all text content, preserving structure and formatting.",
+      "Your paper’s content is parsed to capture all text while preserving its structure and formatting.",
   },
   {
     icon: Layers,

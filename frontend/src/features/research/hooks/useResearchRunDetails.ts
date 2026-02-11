@@ -233,24 +233,22 @@ export function useResearchRunDetails({
   }, []);
 
   const handleAccessRestricted = useCallback((data: AccessRestrictedData) => {
-      // eslint-disable-next-line no-console
-      console.log("[Research Run SSE] Access restricted event received:", data);
-      setDetails(prev =>
-        prev
-          ? {
-              ...prev,
-              run: {
-                ...prev.run,
-                has_enough_credits: data.has_enough_credits,
-                access_restricted: data.access_restricted,
-                access_restricted_reason: data.access_restricted_reason,
-              },
-            }
-          : prev
-      );
-    },
-    []
-  );
+    // eslint-disable-next-line no-console
+    console.log("[Research Run SSE] Access restricted event received:", data);
+    setDetails(prev =>
+      prev
+        ? {
+            ...prev,
+            run: {
+              ...prev.run,
+              has_enough_credits: data.has_enough_credits,
+              access_restricted: data.access_restricted,
+              access_restricted_reason: data.access_restricted_reason,
+            },
+          }
+        : prev
+    );
+  }, []);
 
   const handleRunEvent = useCallback(
     async (event: { event_type?: string; metadata?: Record<string, unknown> } | unknown) => {

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { AutoEvaluationCard } from "../AutoEvaluationCard";
+import { PaperReviewHowItWorks } from "@/features/paper-review/components/PaperReviewHowItWorks";
 import type { LlmReviewResponse } from "@/types/research";
 import { cn } from "@/shared/lib/utils";
 import {
@@ -94,6 +95,8 @@ export function EvaluationTab({
 }: EvaluationTabProps) {
   return (
     <div className="flex flex-col gap-6">
+      <PaperReviewHowItWorks />
+
       <AutoEvaluationCard
         review={review}
         loading={reviewLoading}
