@@ -124,8 +124,8 @@ def handle_node_execution_completed(
     """Handle node_execution_completed event - update and remove node from active_nodes."""
     updated_active_nodes = []
     for node in state.active_nodes:
-        if node.execution_id == event.execution_id:
-            # remove completed nodes from active list
+        if node.execution_id == event.execution_id and node.run_type == event.run_type:
+            # remove completed nodes from active list (must match both execution_id AND run_type)
             continue
         updated_active_nodes.append(node)
 
