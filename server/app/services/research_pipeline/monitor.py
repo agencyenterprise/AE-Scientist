@@ -449,7 +449,7 @@ class ResearchPipelineMonitor:
             },
             occurred_at=now.isoformat(),
         )
-        publish_stream_event(
+        await publish_stream_event(
             run.run_id,
             SSERunEvent(
                 type="run_event",
@@ -473,7 +473,7 @@ class ResearchPipelineMonitor:
             run_id=run.run_id,
             trigger=f"pipeline_monitor_failure:{reason}",
         )
-        publish_termination_status_event(run_id=run.run_id, termination=termination)
+        await publish_termination_status_event(run_id=run.run_id, termination=termination)
         notify_termination_requested()
 
     async def _bill_run_if_needed(
@@ -566,7 +566,7 @@ class ResearchPipelineMonitor:
                 user_id,
                 available,
             )
-            publish_stream_event(
+            await publish_stream_event(
                 run.run_id,
                 SSEAccessRestrictedEvent(
                     type="access_restricted",

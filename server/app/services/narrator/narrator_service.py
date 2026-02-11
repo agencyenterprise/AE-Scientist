@@ -282,7 +282,7 @@ async def _process_single_event(
 
             # Publish timeline event to SSE subscribers (skip if run is locked)
             if not is_run_locked:
-                publish_narrator_event(
+                await publish_narrator_event(
                     run_id=run_id,
                     event_type="timeline_event",
                     data=timeline_event.model_dump(mode="json"),
@@ -323,7 +323,7 @@ async def _process_single_event(
                     # Primitive type - use as is
                     serialized_changes[key] = value
 
-            publish_narrator_event(
+            await publish_narrator_event(
                 run_id=run_id,
                 event_type="state_delta",
                 data=serialized_changes,

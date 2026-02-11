@@ -167,6 +167,14 @@ class BillingLimitsConfig(NamedTuple):
     min_balance_cents_for_paper_review: int
 
 
+class RedisConfig(NamedTuple):
+    """Redis configuration for SSE event streaming."""
+
+    url: str
+    stream_maxlen: int  # Max events to keep per stream (approximate, uses ~)
+    stream_ttl_seconds: int  # TTL for stream keys (0 = no expiry)
+
+
 class ServerConfig(NamedTuple):
     """Server runtime configuration."""
 
@@ -188,6 +196,7 @@ class Settings(NamedTuple):
 
     server: ServerConfig
     database: DatabaseConfig
+    redis: RedisConfig
     runpod: RunPodConfig
     research_pipeline: ResearchPipelineConfig
     aws: AWSConfig
@@ -302,6 +311,13 @@ def _load_settings() -> Settings:
         skip_connection=get_optional_bool("SKIP_DB_CONNECTION", False),
     )
 
+    # Redis config (optional - defaults for local development)
+    redis = RedisConfig(
+        url=get_required("REDIS_URL"),
+        stream_maxlen=get_optional_int("REDIS_STREAM_MAXLEN", 1000),
+        stream_ttl_seconds=get_optional_int("REDIS_STREAM_TTL_SECONDS", 86400),  # 24 hours
+    )
+
     # RunPod config (required)
     runpod = RunPodConfig(
         api_key=get_required("RUNPOD_API_KEY"),
@@ -393,6 +409,7 @@ def _load_settings() -> Settings:
     return Settings(
         server=server,
         database=database,
+        redis=redis,
         runpod=runpod,
         research_pipeline=research_pipeline,
         aws=aws,

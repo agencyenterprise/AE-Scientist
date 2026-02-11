@@ -1,6 +1,15 @@
-import asyncio
+"""
+Research Pipeline Stream Infrastructure
+
+Cross-worker pub/sub for research pipeline events using Redis Streams.
+
+Events published to Redis can be consumed by any worker's SSE connections,
+solving the multi-worker deployment issue where webhooks and SSE connections
+may be handled by different workers.
+"""
+
 import logging
-from typing import Any, Dict, Set, Union
+from typing import Any, AsyncIterator, Dict, Optional, Union
 
 from app.models.sse import ResearchRunAccessRestrictedEvent as SSEAccessRestrictedEvent
 from app.models.sse import ResearchRunArtifactEvent as SSEArtifactEvent
@@ -16,6 +25,7 @@ from app.models.sse import ResearchRunStageProgressEvent as SSEStageProgressEven
 from app.models.sse import ResearchRunStageSkipWindowEvent as SSEStageSkipWindowEvent
 from app.models.sse import ResearchRunStageSummaryEvent as SSEStageSummaryEvent
 from app.models.sse import ResearchRunTerminationStatusEvent as SSETerminationStatusEvent
+from app.services import redis_streams
 
 logger = logging.getLogger(__name__)
 
@@ -36,42 +46,87 @@ StreamEventModel = Union[
     SSEAccessRestrictedEvent,
 ]
 
-_RUN_STREAM_SUBSCRIBERS: Dict[str, Set[asyncio.Queue[Dict[str, Any]]]] = {}
+
+async def publish_stream_event(run_id: str, event: StreamEventModel) -> None:
+    """
+    Publish a research pipeline event to the Redis stream.
+
+    Args:
+        run_id: Research run ID
+        event: Event model to publish
+    """
+    try:
+        # Pydantic model has .type attribute for the event type
+        event_type = event.type
+        # Serialize the event data
+        data = event.model_dump()
+
+        await redis_streams.publish_event(
+            stream_type="pipeline",
+            run_id=run_id,
+            event_type=event_type,
+            data=data,
+        )
+    except Exception as exc:
+        logger.error(
+            "Failed to publish pipeline event: run_id=%s type=%s error=%s",
+            run_id,
+            event.type,
+            exc,
+        )
 
 
-def register_stream_queue(run_id: str) -> asyncio.Queue[Dict[str, Any]]:
-    queue: asyncio.Queue[Dict[str, Any]] = asyncio.Queue(maxsize=1000)
-    subscribers = _RUN_STREAM_SUBSCRIBERS.setdefault(run_id, set())
-    subscribers.add(queue)
-    return queue
+async def read_pipeline_events(
+    run_id: str,
+    last_id: str = "0",
+    block_ms: int = 30000,
+) -> AsyncIterator[Dict[str, Any]]:
+    """
+    Read pipeline events from the Redis stream.
+
+    This is an async generator for use in SSE endpoints.
+
+    Args:
+        run_id: Research run ID
+        last_id: Last seen message ID ("0" for all events, "$" for new only)
+        block_ms: How long to block waiting for new events
+
+    Yields:
+        Dict with event data including "type" field
+    """
+    async for event in redis_streams.read_events(
+        stream_type="pipeline",
+        run_id=run_id,
+        last_id=last_id,
+        block_ms=block_ms,
+    ):
+        yield event
 
 
-def unregister_stream_queue(run_id: str, queue: asyncio.Queue[Dict[str, Any]]) -> None:
-    subscribers = _RUN_STREAM_SUBSCRIBERS.get(run_id)
-    if not subscribers:
-        return
-    subscribers.discard(queue)
-    if not subscribers:
-        _RUN_STREAM_SUBSCRIBERS.pop(run_id, None)
+async def get_pipeline_events(
+    run_id: str,
+    start_id: str = "-",
+    end_id: str = "+",
+    count: Optional[int] = None,
+) -> list[Dict[str, Any]]:
+    """
+    Get all pipeline events from the stream (non-blocking).
 
+    Useful for fetching initial state when SSE connection is established.
 
-def publish_stream_event(run_id: str, event: StreamEventModel) -> None:
-    subscribers = _RUN_STREAM_SUBSCRIBERS.get(run_id)
-    if not subscribers:
-        return
-    payload = event.model_dump()
-    stale: list[asyncio.Queue[Dict[str, Any]]] = []
-    for queue in list(subscribers):
-        try:
-            queue.put_nowait(payload)
-        except asyncio.QueueFull:
-            logger.warning(
-                "Dropping stream event type=%s for run_id=%s due to full queue; unsubscribing consumer",
-                event.type,
-                run_id,
-            )
-            stale.append(queue)
-    for queue in stale:
-        subscribers.discard(queue)
-    if not subscribers:
-        _RUN_STREAM_SUBSCRIBERS.pop(run_id, None)
+    Args:
+        run_id: Research run ID
+        start_id: Start ID ("-" for beginning)
+        end_id: End ID ("+" for end)
+        count: Max events to return
+
+    Returns:
+        List of events with event data
+    """
+    return await redis_streams.get_all_events(
+        stream_type="pipeline",
+        run_id=run_id,
+        start_id=start_id,
+        end_id=end_id,
+        count=count,
+    )

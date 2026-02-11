@@ -173,7 +173,7 @@ async def _record_pod_billing_event(
         metadata=metadata,
         occurred_at=now.isoformat(),
     )
-    publish_stream_event(
+    await publish_stream_event(
         run_id,
         SSERunEvent(
             type="run_event",
@@ -196,13 +196,13 @@ def build_termination_status_payload(
     }
 
 
-def publish_termination_status_event(
+async def publish_termination_status_event(
     *,
     run_id: str,
     termination: ResearchPipelineRunTermination | None,
 ) -> None:
     data = build_termination_status_payload(termination=termination)
-    publish_stream_event(
+    await publish_stream_event(
         run_id,
         ResearchRunTerminationStatusEvent(
             type="termination_status",
@@ -456,7 +456,7 @@ class PodTerminationWorker:
                 error=error_message,
             )
             updated = await db.get_research_pipeline_run_termination(run_id=run_id)
-            publish_termination_status_event(run_id=run_id, termination=updated)
+            await publish_termination_status_event(run_id=run_id, termination=updated)
             return
 
         sentry_sdk.capture_message(error_message, level="error")
@@ -466,7 +466,7 @@ class PodTerminationWorker:
             error=error_message,
         )
         updated = await db.get_research_pipeline_run_termination(run_id=run_id)
-        publish_termination_status_event(run_id=run_id, termination=updated)
+        await publish_termination_status_event(run_id=run_id, termination=updated)
 
     async def _process_termination(
         self,
@@ -493,7 +493,7 @@ class PodTerminationWorker:
                 error=f"Run {run_id} not found while processing termination.",
             )
             updated = await db.get_research_pipeline_run_termination(run_id=run_id)
-            publish_termination_status_event(run_id=run_id, termination=updated)
+            await publish_termination_status_event(run_id=run_id, termination=updated)
             return
 
         attempt_number = int(termination.attempts or 0) + 1
@@ -559,7 +559,7 @@ class PodTerminationWorker:
                     error=upload_failed_error,
                 )
                 updated = await db.get_research_pipeline_run_termination(run_id=run_id)
-                publish_termination_status_event(run_id=run_id, termination=updated)
+                await publish_termination_status_event(run_id=run_id, termination=updated)
                 return
 
             if upload_failed_error is not None:
@@ -622,7 +622,7 @@ class PodTerminationWorker:
                         error=error_message,
                     )
                     updated = await db.get_research_pipeline_run_termination(run_id=run_id)
-                    publish_termination_status_event(run_id=run_id, termination=updated)
+                    await publish_termination_status_event(run_id=run_id, termination=updated)
                     return
 
                 sentry_sdk.capture_message(error_message, level="error")
@@ -632,7 +632,7 @@ class PodTerminationWorker:
                     error=error_message,
                 )
                 updated = await db.get_research_pipeline_run_termination(run_id=run_id)
-                publish_termination_status_event(run_id=run_id, termination=updated)
+                await publish_termination_status_event(run_id=run_id, termination=updated)
                 logger.warning(
                     "Termination failed; emitting complete (run_id=%s status=%s).",
                     run_id,
@@ -652,7 +652,7 @@ class PodTerminationWorker:
                     # Unknown status, default to failed
                     early_sse_status = "failed"
 
-                publish_stream_event(
+                await publish_stream_event(
                     run_id,
                     SSECompleteEvent(
                         type="complete",
@@ -671,7 +671,7 @@ class PodTerminationWorker:
             attempts=attempt_number,
         )
         updated = await db.get_research_pipeline_run_termination(run_id=run_id)
-        publish_termination_status_event(run_id=run_id, termination=updated)
+        await publish_termination_status_event(run_id=run_id, termination=updated)
 
         # Record pod billing summary now that termination is complete
         billing_context = termination.last_trigger or "termination_worker"
@@ -732,7 +732,7 @@ class PodTerminationWorker:
             # Unknown status, default to failed
             sse_status = "failed"
 
-        publish_stream_event(
+        await publish_stream_event(
             run_id,
             SSECompleteEvent(
                 type="complete",

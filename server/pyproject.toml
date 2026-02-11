@@ -41,6 +41,7 @@ dependencies = [
     "pyjwt[crypto]>=2.10.1",
     "runpod>=1.8.1",
     "python-json-logger>=2.0.0",
+    "redis>=5.0.0",
 ]
 
 [dependency-groups]

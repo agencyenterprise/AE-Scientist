@@ -1,7 +1,8 @@
 """
 Narrator SSE Endpoint
 
-Streams timeline events and state updates to frontend.
+Streams timeline events and state updates to frontend using Redis Streams
+for cross-worker event delivery.
 """
 
 import asyncio
@@ -18,7 +19,7 @@ from app.middleware.auth import get_current_user
 from app.models.narrator_state import ResearchRunState
 from app.services.database import DatabaseManager, get_database
 
-from .narrator_stream import register_narrator_queue, unregister_narrator_queue
+from .narrator_stream import read_narrator_events
 
 logger = logging.getLogger(__name__)
 
@@ -89,10 +90,14 @@ async def narrative_stream(
     """
     SSE endpoint that streams narrator timeline events and state updates.
 
+    Uses Redis Streams for cross-worker event delivery - events published
+    by any worker are received by all SSE connections regardless of which
+    worker they're connected to.
+
     Event Types:
+    - "connected": Sent immediately on connect
     - "state_snapshot": Complete state snapshot (sent on connect)
     - "timeline_event": Individual timeline event (sent on connect + live)
-    - "state_delta": Partial state update with only changed fields (live)
     - "ping": Keepalive ping (every 30s)
 
     Args:
@@ -125,8 +130,6 @@ async def narrative_stream(
         return f"event: {event_type}\ndata: {data}\n\n"
 
     async def event_generator() -> AsyncGenerator[str, None]:
-        queue = register_narrator_queue(run_id)
-
         try:
             # Always send an immediate event to ensure Firefox resolves the fetch promise
             # (Firefox may wait for body data before resolving, unlike Chrome)
@@ -148,28 +151,23 @@ async def narrative_stream(
                         "timeline_event", json.dumps(event.model_dump(mode="json"))
                     )
 
-            # Stream live events
-            while True:
-                try:
-                    # Wait for next event with timeout (for keepalive)
-                    payload = await asyncio.wait_for(queue.get(), timeout=30.0)
+            # Stream live events from Redis
+            # Use "$" to only get new events (events after this point in time)
+            # The initial state above already sent all existing events
+            async for redis_event in read_narrator_events(run_id, last_id="$"):
+                redis_event_type = redis_event["type"]
 
-                    # payload is {"type": str, "data": Dict[str, Any]}
-                    event_type = str(payload["type"])
-                    event_data = payload["data"]
-
-                    # Serialize datetime objects before JSON encoding
-                    serialized_data = _serialize_for_json(event_data)
-                    yield _format_sse_event(event_type, json.dumps(serialized_data))
-                except asyncio.TimeoutError:
-                    # Send keepalive ping
+                if redis_event_type == "keepalive":
+                    # Redis read timed out - send ping
                     yield _format_sse_event("ping", "keepalive")
+                else:
+                    # Real event from Redis
+                    event_data = redis_event["data"]
+                    serialized_data = _serialize_for_json(event_data)
+                    yield _format_sse_event(redis_event_type, json.dumps(serialized_data))
 
         except asyncio.CancelledError:
             logger.debug("Narrator stream: Client disconnected for run_id=%s", run_id)
-
-        finally:
-            unregister_narrator_queue(run_id, queue)
 
     return StreamingResponse(
         event_generator(),

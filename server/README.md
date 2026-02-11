@@ -278,6 +278,47 @@ This application uses **PostgreSQL** as its database. You'll need to set up a Po
    make migrate-db
    ```
 
+### Redis Setup (Required for SSE Event Streaming)
+
+Redis is used for real-time event streaming (Server-Sent Events) to broadcast research pipeline progress and narrator updates to connected clients. This enables multi-worker deployments where webhooks and SSE connections may be handled by different workers.
+
+#### Option 1: Use Makefile (Recommended for Local Development)
+
+```bash
+# Start Redis container (uses redis:7-alpine image)
+make redis
+
+# Stop Redis container
+make redis-stop
+
+# Remove Redis container completely
+make redis-rm
+```
+
+#### Option 2: Use Railway Redis (Recommended for Production)
+1. Add a Redis plugin to your Railway project
+2. Copy the `REDIS_URL` from Railway
+3. Set it in your `.env` file
+
+#### Option 3: Local Redis Installation
+```bash
+# macOS
+brew install redis
+brew services start redis
+
+# Linux
+sudo apt install redis-server
+sudo systemctl start redis
+```
+
+#### Configuration
+
+| Variable | Description | Default |
+| --- | --- | --- |
+| `REDIS_URL` | Redis connection URL | `redis://localhost:6379` |
+| `REDIS_STREAM_MAXLEN` | Max events to keep per stream (approximate) | `1000` |
+| `REDIS_STREAM_TTL_SECONDS` | TTL for stream keys (0 = no expiry) | `86400` (24 hours) |
+
 ### Database Migrations
 
 This application uses **Alembic** for database schema management. The database schema is now versioned and managed through migration files.

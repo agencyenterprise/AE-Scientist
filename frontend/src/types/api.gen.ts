@@ -1755,10 +1755,14 @@ export interface paths {
          * Narrative Stream
          * @description SSE endpoint that streams narrator timeline events and state updates.
          *
+         *     Uses Redis Streams for cross-worker event delivery - events published
+         *     by any worker are received by all SSE connections regardless of which
+         *     worker they're connected to.
+         *
          *     Event Types:
+         *     - "connected": Sent immediately on connect
          *     - "state_snapshot": Complete state snapshot (sent on connect)
          *     - "timeline_event": Individual timeline event (sent on connect + live)
-         *     - "state_delta": Partial state update with only changed fields (live)
          *     - "ping": Keepalive ping (every 30s)
          *
          *     Args:
