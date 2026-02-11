@@ -138,6 +138,7 @@ jobs:
         env:
           SERVER_AUTO_RELOAD: "false"
           LOG_LEVEL: INFO
+          REDIS_URL: redis://localhost:6379
           SKIP_DB_CONNECTION: "true"
           DATABASE_URL: postgresql://dummy:dummy@localhost:5432/dummy
           DB_POOL_MIN_CONN: "1"
