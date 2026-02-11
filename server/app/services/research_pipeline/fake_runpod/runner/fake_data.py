@@ -21,6 +21,93 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def get_paper_generation_steps() -> list[tuple[str, list[str], dict[str, object]]]:
+    """Return the fake paper generation steps with substeps and details.
+
+    Returns a list of tuples: (step_name, substeps, step_details)
+    """
+    return [
+        (
+            "plot_aggregation",
+            ["collecting_figures", "validating_plots", "generating_captions"],
+            {"figures_collected": 8, "valid_plots": 7},
+        ),
+        (
+            "citation_gathering",
+            ["searching_literature", "filtering_relevant", "formatting_citations"],
+            {"citations_found": 15, "relevant_citations": 12},
+        ),
+        (
+            "paper_writeup",
+            [
+                "writing_abstract",
+                "writing_introduction",
+                "writing_methodology",
+                "writing_results",
+                "writing_discussion",
+                "writing_conclusion",
+            ],
+            {"sections_completed": 6, "word_count": 4500},
+        ),
+        (
+            "paper_review",
+            ["review_1", "review_2", "review_3"],
+            {
+                "avg_score": 7.2,
+                "review_scores": [7.0, 7.5, 7.1],
+                "strengths": ["novel approach", "thorough experiments"],
+                "weaknesses": ["limited comparison", "minor clarity issues"],
+            },
+        ),
+    ]
+
+
+def generate_seed_modification_task(seed_value: int) -> str:
+    """Generate a fake seed modification task prompt for testing.
+
+    This mirrors the format of the actual seed modification task template
+    used by the research pipeline.
+    """
+    return f"""# Seed Modification Task
+
+**Your ONLY job is to change the random seed value in the code and run it.**
+
+## Target Seed Value
+**NEW_SEED = {seed_value}**
+
+## Instructions
+1. Find ALL places in the code where random seeds are set:
+   - `SEED = ...` or `seed = ...` variable assignments
+   - `random.seed(...)`
+   - `np.random.seed(...)`
+   - `torch.manual_seed(...)`
+   - `torch.cuda.manual_seed(...)` / `torch.cuda.manual_seed_all(...)`
+2. Change ALL seed values to **{seed_value}**
+3. Write the modified code to `run.py`
+4. Run: `/workspace/.venv/bin/python run.py`
+
+## Do NOT change anything else
+- Do not change any logic, algorithms, or model architecture
+- Do not change where results are saved (must remain `./working/experiment_data.npy`)
+- Do not change plot output locations (must remain `./working/*.png`)
+- Do not modify hyperparameters (except seeds)
+
+## Base Code
+```python
+import random
+import numpy as np
+import torch
+
+SEED = 42
+random.seed(SEED)
+np.random.seed(SEED)
+torch.manual_seed(SEED)
+
+# ... experiment code ...
+```
+"""
+
+
 class FakeDataMixin:
     """Mixin providing fake data generation methods for FakeRunner."""
 

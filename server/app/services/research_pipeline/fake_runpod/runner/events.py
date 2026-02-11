@@ -35,6 +35,7 @@ from ..models import (
     ExecutionRecord,
 )
 from ..state import get_executions, get_lock, get_speed_factor
+from .fake_data import generate_seed_modification_task, get_paper_generation_steps
 
 if TYPE_CHECKING:
     from .core import FakeRunnerCore
@@ -493,15 +494,13 @@ class EventsMixin:
                         total_nodes=10 + iterations_to_emit,
                         buggy_nodes=iterations_to_emit - 1,
                         good_nodes=10,
-                        best_metric=f"metric-1.00",
+                        best_metric="metric-1.00",
                         is_seed_node=False,
                         is_seed_agg_node=False,
                     ),
                 )
             except Exception:
-                logger.exception(
-                    "Failed to emit final progress=1.0 event for stage %s", stage_name
-                )
+                logger.exception("Failed to emit final progress=1.0 event for stage %s", stage_name)
 
             # Generate a realistic-looking transition summary based on stage
             stage_number = stage_index + 1
@@ -563,42 +562,7 @@ class EventsMixin:
 
     def _emit_paper_generation_flow(self) -> None:
         """Emit Stage 5 paper generation progress events."""
-        # Define the paper generation steps with their substeps
-        paper_steps: list[tuple[str, list[str], dict[str, object]]] = [
-            (
-                "plot_aggregation",
-                ["collecting_figures", "validating_plots", "generating_captions"],
-                {"figures_collected": 8, "valid_plots": 7},
-            ),
-            (
-                "citation_gathering",
-                ["searching_literature", "filtering_relevant", "formatting_citations"],
-                {"citations_found": 15, "relevant_citations": 12},
-            ),
-            (
-                "paper_writeup",
-                [
-                    "writing_abstract",
-                    "writing_introduction",
-                    "writing_methodology",
-                    "writing_results",
-                    "writing_discussion",
-                    "writing_conclusion",
-                ],
-                {"sections_completed": 6, "word_count": 4500},
-            ),
-            (
-                "paper_review",
-                ["review_1", "review_2", "review_3"],
-                {
-                    "avg_score": 7.2,
-                    "review_scores": [7.0, 7.5, 7.1],
-                    "strengths": ["novel approach", "thorough experiments"],
-                    "weaknesses": ["limited comparison", "minor clarity issues"],
-                },
-            ),
-        ]
-
+        paper_steps = get_paper_generation_steps()
         total_steps = len(paper_steps)
         for step_idx, (step_name, substeps, step_details) in enumerate(paper_steps):
             logger.info(
@@ -698,15 +662,16 @@ class EventsMixin:
             seed_execution_id = uuid.uuid4().hex
             seed_started_at = datetime.now(timezone.utc)
 
-            # Emit running_code event for seed node
+            # Emit running_code event for seed node (now uses Codex to modify seeds)
+            seed_modification_task = generate_seed_modification_task(seed_idx)
             try:
                 self._webhooks.publish_running_code(
                     RunningCodeEventPayload(
                         execution_id=seed_execution_id,
                         stage=stage_name,
-                        run_type=RunType.runfile_execution,
+                        run_type=RunType.codex_execution,
                         execution_type=ExecutionType.seed,
-                        code=f"# Seed evaluation {seed_idx}\nimport random\nrandom.seed({seed_idx})\n# Re-running parent experiment with seed {seed_idx}",
+                        code=seed_modification_task,
                         started_at=seed_started_at.isoformat(),
                         is_seed_node=True,
                         is_seed_agg_node=False,
@@ -728,7 +693,7 @@ class EventsMixin:
                     RunCompletedEventPayload(
                         execution_id=seed_execution_id,
                         stage=stage_name,
-                        run_type=RunType.runfile_execution,
+                        run_type=RunType.codex_execution,
                         execution_type=ExecutionType.seed,
                         status=RunCompletedStatus.success,
                         exec_time=seed_exec_time,
