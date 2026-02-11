@@ -698,10 +698,16 @@ class PodTerminationWorker:
             )
 
         if upload_failed_error is not None and attempt_number >= _TERMINATION_MAX_UPLOAD_ATTEMPTS:
-            sentry_sdk.capture_message(
-                f"Run {run_id} terminated without successful artifact upload: {upload_failed_error}",
-                level="warning",
+            # Don't report to Sentry if the run was stopped by the user before SSH info
+            # was available (e.g., cancelled during pod initialization)
+            is_user_cancelled_early = (
+                "missing SSH info" in upload_failed_error and run.started_running_at is None
             )
+            if not is_user_cancelled_early:
+                sentry_sdk.capture_message(
+                    f"Run {run_id} terminated without successful artifact upload: {upload_failed_error}",
+                    level="warning",
+                )
             logger.warning(
                 "Run terminated without successful artifact upload (run_id=%s).",
                 run_id,
