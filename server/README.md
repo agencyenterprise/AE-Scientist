@@ -152,18 +152,20 @@ stripe prices create \
 
 Add the resulting Price IDs (e.g., `price_xxx,price_yyy`) to `STRIPE_PRICE_IDS`.
 
-#### Other Billing Settings
+#### Admin Credit Management
 
-| Variable | Description |
-| --- | --- |
-| `WHITELIST_EMAILS_FREE_CREDIT` | Comma-separated list of email addresses that receive free balance upon registration |
+Admins can manage user credits through the `/admin` page in the frontend. This replaces the previous environment variable-based email whitelist.
 
-#### API Endpoints
+**Setup:**
+1. Manually set admin users in the database:
+   ```sql
+   UPDATE users SET is_admin = true WHERE email = 'admin@example.com';
+   ```
 
-- `GET /api/billing/wallet` – current balance (in cents) + recent transactions
-- `GET /api/billing/funding-options` – available Stripe funding options
-- `POST /api/billing/checkout-session` – creates a Checkout session
-- `POST /api/billing/stripe-webhook` – receives Stripe events (whitelisted in auth middleware)
+**Features:**
+- **View user balances**: Search and browse all active users with their current wallet balances
+- **Add credit to users**: Grant credits to any active user with a required description for audit trail
+- **Pending credits**: Pre-grant credits to emails that haven't registered yet - credits are automatically claimed when the user signs up
 
 ### MCP Server Integration (Claude Code & Cursor)
 
@@ -209,14 +211,6 @@ The `run_pipeline` tool accepts:
 - `idea`: A concise, descriptive title for the research idea
 - `content`: Markdown content with sections for hypothesis, related work, abstract, experiments, expected outcomes, and risk factors
 
-#### API Endpoints
-
-| Endpoint | Description |
-| --- | --- |
-| `POST /mcp` | MCP JSON-RPC endpoint (authenticates via Bearer token with MCP API key) |
-| `GET /api/mcp-integration/key` | Get current user's MCP API key |
-| `POST /api/mcp-integration/generate-key` | Generate a new MCP API key |
-| `DELETE /api/mcp-integration/key` | Revoke the current MCP API key |
 
 #### Response
 

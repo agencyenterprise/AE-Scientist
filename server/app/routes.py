@@ -7,6 +7,7 @@ This module aggregates all API routes from individual modules.
 from dotenv import load_dotenv
 from fastapi import APIRouter
 
+from app.api.admin import router as admin_router
 from app.api.auth import router as auth_router
 from app.api.billing import router as billing_router
 from app.api.chat import router as chat_router
@@ -33,6 +34,7 @@ load_dotenv()
 router = APIRouter(prefix="/api")
 
 # Include sub-routers
+router.include_router(admin_router)
 router.include_router(auth_router)
 router.include_router(billing_router)
 router.include_router(chat_router)

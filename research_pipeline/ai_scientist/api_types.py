@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 from typing import Annotated, Any, Literal
-from pydantic import AnyUrl, AwareDatetime, BaseModel, Field, RootModel
+from pydantic import AnyUrl, AwareDatetime, BaseModel, EmailStr, Field, RootModel
 from enum import StrEnum
 
 
@@ -20,6 +20,32 @@ class Status(StrEnum):
     running = "running"
     completed = "completed"
     failed = "failed"
+
+
+class AddCreditRequest(BaseModel):
+    user_id: Annotated[
+        int, Field(description="User ID to add credit to", title="User Id")
+    ]
+    amount_cents: Annotated[
+        int,
+        Field(
+            description="Amount in cents (must be positive)", gt=0, title="Amount Cents"
+        ),
+    ]
+    description: Annotated[
+        str,
+        Field(
+            description="Description of the credit",
+            max_length=500,
+            min_length=1,
+            title="Description",
+        ),
+    ]
+
+
+class AddCreditResponse(BaseModel):
+    success: Annotated[bool, Field(title="Success")]
+    message: Annotated[str, Field(title="Message")]
 
 
 class ArtifactExistsResponse(BaseModel):
@@ -69,6 +95,9 @@ class AuthUser(BaseModel):
     id: Annotated[int, Field(description="Database user ID", title="Id")]
     email: Annotated[str, Field(description="User email address", title="Email")]
     name: Annotated[str, Field(description="User display name", title="Name")]
+    is_admin: Annotated[
+        bool | None, Field(description="Whether the user is an admin", title="Is Admin")
+    ] = False
 
 
 class BodyCreatePaperReviewApiPaperReviewsPost(BaseModel):
@@ -289,6 +318,29 @@ class ConversationUpdate(BaseModel):
             description="New title for the conversation", min_length=1, title="Title"
         ),
     ]
+
+
+class Description(RootModel[str]):
+    root: Annotated[
+        str,
+        Field(description="Optional description", max_length=500, title="Description"),
+    ]
+
+
+class CreatePendingCreditRequest(BaseModel):
+    email: Annotated[
+        EmailStr, Field(description="Email address to grant credit to", title="Email")
+    ]
+    amount_cents: Annotated[
+        int,
+        Field(
+            description="Amount in cents (must be positive)", gt=0, title="Amount Cents"
+        ),
+    ]
+    description: Annotated[
+        Description | None,
+        Field(description="Optional description", title="Description"),
+    ] = None
 
 
 class CreditTransactionModel(BaseModel):
@@ -993,6 +1045,22 @@ class ParentRunFilesRequest(BaseModel):
 class ParentRunFilesResponse(BaseModel):
     files: Annotated[list[ParentRunFileInfo], Field(title="Files")]
     expires_in: Annotated[int, Field(title="Expires In")]
+
+
+class PendingCreditModel(BaseModel):
+    id: Annotated[int, Field(title="Id")]
+    email: Annotated[str, Field(title="Email")]
+    amount_cents: Annotated[int, Field(title="Amount Cents")]
+    description: Annotated[str | None, Field(title="Description")]
+    granted_by_email: Annotated[str, Field(title="Granted By Email")]
+    claimed_by_user_id: Annotated[int | None, Field(title="Claimed By User Id")]
+    claimed_at: Annotated[str | None, Field(title="Claimed At")]
+    created_at: Annotated[str, Field(title="Created At")]
+
+
+class PendingCreditsListResponse(BaseModel):
+    pending_credits: Annotated[list[PendingCreditModel], Field(title="Pending Credits")]
+    total_count: Annotated[int, Field(title="Total Count")]
 
 
 class PendingReviewSummary(BaseModel):
@@ -1938,6 +2006,15 @@ class UserListResponse(BaseModel):
         list[UserListItem], Field(description="List of users", title="Items")
     ]
     total: Annotated[int, Field(description="Total count of users", title="Total")]
+
+
+class UserWithBalanceModel(BaseModel):
+    id: Annotated[int, Field(title="Id")]
+    email: Annotated[str, Field(title="Email")]
+    name: Annotated[str, Field(title="Name")]
+    is_active: Annotated[bool, Field(title="Is Active")]
+    balance_cents: Annotated[int, Field(title="Balance Cents")]
+    created_at: Annotated[str, Field(title="Created At")]
 
 
 class ValidationError(BaseModel):
@@ -2950,6 +3027,11 @@ class StageGoal(BaseModel):
     progress: Annotated[
         float | None, Field(description="Progress 0.0-1.0", title="Progress")
     ] = None
+
+
+class UserListWithBalancesResponse(BaseModel):
+    users: Annotated[list[UserWithBalanceModel], Field(title="Users")]
+    total_count: Annotated[int, Field(title="Total Count")]
 
 
 class ChatHistoryResponse(BaseModel):

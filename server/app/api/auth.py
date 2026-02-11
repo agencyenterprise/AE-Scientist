@@ -35,7 +35,7 @@ async def get_current_user_info(request: Request) -> AuthUser:
     """
     user = get_current_user(request)
 
-    return AuthUser(id=user.id, email=user.email, name=user.name)
+    return AuthUser(id=user.id, email=user.email, name=user.name, is_admin=user.is_admin)
 
 
 @router.get("/status", response_model=AuthStatus)
@@ -62,7 +62,8 @@ async def get_auth_status(request: Request) -> AuthStatus:
         return AuthStatus(authenticated=False, user=None)
 
     return AuthStatus(
-        authenticated=True, user=AuthUser(id=user.id, email=user.email, name=user.name)
+        authenticated=True,
+        user=AuthUser(id=user.id, email=user.email, name=user.name, is_admin=user.is_admin),
     )
 
 
@@ -154,6 +155,7 @@ async def clerk_session_exchange(request: Request) -> Dict[str, Any]:
                 "id": user.id,
                 "email": user.email,
                 "name": user.name,
+                "is_admin": user.is_admin,
             },
         }
 

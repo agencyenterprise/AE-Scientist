@@ -4,6 +4,79 @@
  */
 
 export interface paths {
+    "/api/admin/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Users With Balances
+         * @description List all active users with their wallet balances.
+         *
+         *     Admin only endpoint.
+         */
+        get: operations["list_users_with_balances_api_admin_users_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/credits/add": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Credit To User
+         * @description Add credit to an existing user's wallet.
+         *
+         *     Admin only endpoint.
+         */
+        post: operations["add_credit_to_user_api_admin_credits_add_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/credits/pending": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Pending Credits
+         * @description List pending credits.
+         *
+         *     Admin only endpoint.
+         */
+        get: operations["list_pending_credits_api_admin_credits_pending_get"];
+        put?: never;
+        /**
+         * Create Pending Credit
+         * @description Create a pending credit for an email that hasn't registered yet.
+         *
+         *     The credit will be automatically applied when the user registers.
+         *     Admin only endpoint.
+         */
+        post: operations["create_pending_credit_api_admin_credits_pending_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/me": {
         parameters: {
             query?: never;
@@ -1947,6 +2020,37 @@ export interface components {
              */
             run_type: string;
         };
+        /**
+         * AddCreditRequest
+         * @description Request to add credit to a user.
+         */
+        AddCreditRequest: {
+            /**
+             * User Id
+             * @description User ID to add credit to
+             */
+            user_id: number;
+            /**
+             * Amount Cents
+             * @description Amount in cents (must be positive)
+             */
+            amount_cents: number;
+            /**
+             * Description
+             * @description Description of the credit
+             */
+            description: string;
+        };
+        /**
+         * AddCreditResponse
+         * @description Response after adding credit.
+         */
+        AddCreditResponse: {
+            /** Success */
+            success: boolean;
+            /** Message */
+            message: string;
+        };
         /** ArtifactExistsRequest */
         ArtifactExistsRequest: {
             artifact_type: components["schemas"]["ArtifactType"];
@@ -2043,6 +2147,12 @@ export interface components {
              * @description User display name
              */
             name: string;
+            /**
+             * Is Admin
+             * @description Whether the user is an admin
+             * @default false
+             */
+            is_admin: boolean;
         };
         /**
          * BillingWalletResponse
@@ -2642,6 +2752,28 @@ export interface components {
         ConversationUpdateResponse: {
             /** @description Updated conversation */
             conversation: components["schemas"]["ConversationResponse"];
+        };
+        /**
+         * CreatePendingCreditRequest
+         * @description Request to create a pending credit for an unregistered email.
+         */
+        CreatePendingCreditRequest: {
+            /**
+             * Email
+             * Format: email
+             * @description Email address to grant credit to
+             */
+            email: string;
+            /**
+             * Amount Cents
+             * @description Amount in cents (must be positive)
+             */
+            amount_cents: number;
+            /**
+             * Description
+             * @description Optional description
+             */
+            description?: string | null;
         };
         /**
          * CreditTransactionModel
@@ -4254,6 +4386,38 @@ export interface components {
             files: components["schemas"]["ParentRunFileInfo"][];
             /** Expires In */
             expires_in: number;
+        };
+        /**
+         * PendingCreditModel
+         * @description Pending credit record.
+         */
+        PendingCreditModel: {
+            /** Id */
+            id: number;
+            /** Email */
+            email: string;
+            /** Amount Cents */
+            amount_cents: number;
+            /** Description */
+            description: string | null;
+            /** Granted By Email */
+            granted_by_email: string;
+            /** Claimed By User Id */
+            claimed_by_user_id: number | null;
+            /** Claimed At */
+            claimed_at: string | null;
+            /** Created At */
+            created_at: string;
+        };
+        /**
+         * PendingCreditsListResponse
+         * @description Response for listing pending credits.
+         */
+        PendingCreditsListResponse: {
+            /** Pending Credits */
+            pending_credits: components["schemas"]["PendingCreditModel"][];
+            /** Total Count */
+            total_count: number;
         };
         /**
          * PendingReviewSummary
@@ -6240,6 +6404,34 @@ export interface components {
              */
             total: number;
         };
+        /**
+         * UserListWithBalancesResponse
+         * @description Response for listing users with balances.
+         */
+        UserListWithBalancesResponse: {
+            /** Users */
+            users: components["schemas"]["UserWithBalanceModel"][];
+            /** Total Count */
+            total_count: number;
+        };
+        /**
+         * UserWithBalanceModel
+         * @description User with wallet balance.
+         */
+        UserWithBalanceModel: {
+            /** Id */
+            id: number;
+            /** Email */
+            email: string;
+            /** Name */
+            name: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Balance Cents */
+            balance_cents: number;
+            /** Created At */
+            created_at: string;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -6287,6 +6479,138 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    list_users_with_balances_api_admin_users_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                search?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserListWithBalancesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_credit_to_user_api_admin_credits_add_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddCreditRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddCreditResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_pending_credits_api_admin_credits_pending_get: {
+        parameters: {
+            query?: {
+                include_claimed?: boolean;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PendingCreditsListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_pending_credit_api_admin_credits_pending_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePendingCreditRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PendingCreditModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_current_user_info_api_auth_me_get: {
         parameters: {
             query?: never;

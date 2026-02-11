@@ -5,6 +5,7 @@ Provides a modular database management system organized by domain.
 Each domain has its own mixin class with specialized methods.
 """
 
+from .admin import AdminDatabaseMixin
 from .base import BaseDatabaseManager
 from .billing import BillingDatabaseMixin
 from .chat_messages import ChatMessagesMixin
@@ -58,6 +59,7 @@ class DatabaseManager(
     NarratorMixin,
     PaperReviewsMixin,
     PaperReviewTokenUsagesMixin,
+    AdminDatabaseMixin,
 ):
     """
     Main database manager that combines all domain-specific functionality.

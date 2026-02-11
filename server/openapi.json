@@ -6,6 +6,222 @@
     "version": "1.0.0"
   },
   "paths": {
+    "/api/admin/users": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "List Users With Balances",
+        "description": "List all active users with their wallet balances.\n\nAdmin only endpoint.",
+        "operationId": "list_users_with_balances_api_admin_users_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserListWithBalancesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/credits/add": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Add Credit To User",
+        "description": "Add credit to an existing user's wallet.\n\nAdmin only endpoint.",
+        "operationId": "add_credit_to_user_api_admin_credits_add_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddCreditRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddCreditResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/credits/pending": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Create Pending Credit",
+        "description": "Create a pending credit for an email that hasn't registered yet.\n\nThe credit will be automatically applied when the user registers.\nAdmin only endpoint.",
+        "operationId": "create_pending_credit_api_admin_credits_pending_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePendingCreditRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingCreditModel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "List Pending Credits",
+        "description": "List pending credits.\n\nAdmin only endpoint.",
+        "operationId": "list_pending_credits_api_admin_credits_pending_get",
+        "parameters": [
+          {
+            "name": "include_claimed",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Claimed"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingCreditsListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/auth/me": {
       "get": {
         "tags": [
@@ -4770,6 +4986,55 @@
         "title": "ActiveNode",
         "description": "Represents a node currently executing in the research pipeline."
       },
+      "AddCreditRequest": {
+        "properties": {
+          "user_id": {
+            "type": "integer",
+            "title": "User Id",
+            "description": "User ID to add credit to"
+          },
+          "amount_cents": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Amount Cents",
+            "description": "Amount in cents (must be positive)"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Description",
+            "description": "Description of the credit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "amount_cents",
+          "description"
+        ],
+        "title": "AddCreditRequest",
+        "description": "Request to add credit to a user."
+      },
+      "AddCreditResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "message"
+        ],
+        "title": "AddCreditResponse",
+        "description": "Response after adding credit."
+      },
       "ArtifactExistsRequest": {
         "properties": {
           "artifact_type": {
@@ -4950,6 +5215,12 @@
             "type": "string",
             "title": "Name",
             "description": "User display name"
+          },
+          "is_admin": {
+            "type": "boolean",
+            "title": "Is Admin",
+            "description": "Whether the user is an admin",
+            "default": false
           }
         },
         "type": "object",
@@ -6226,6 +6497,42 @@
         ],
         "title": "ConversationUpdateResponse",
         "description": "Response for conversation updates."
+      },
+      "CreatePendingCreditRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email",
+            "description": "Email address to grant credit to"
+          },
+          "amount_cents": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Amount Cents",
+            "description": "Amount in cents (must be positive)"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description",
+            "description": "Optional description"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "amount_cents"
+        ],
+        "title": "CreatePendingCreditRequest",
+        "description": "Request to create a pending credit for an unregistered email."
       },
       "CreditTransactionModel": {
         "properties": {
@@ -9085,6 +9392,98 @@
           "expires_in"
         ],
         "title": "ParentRunFilesResponse"
+      },
+      "PendingCreditModel": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "amount_cents": {
+            "type": "integer",
+            "title": "Amount Cents"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "granted_by_email": {
+            "type": "string",
+            "title": "Granted By Email"
+          },
+          "claimed_by_user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claimed By User Id"
+          },
+          "claimed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claimed At"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "amount_cents",
+          "description",
+          "granted_by_email",
+          "claimed_by_user_id",
+          "claimed_at",
+          "created_at"
+        ],
+        "title": "PendingCreditModel",
+        "description": "Pending credit record."
+      },
+      "PendingCreditsListResponse": {
+        "properties": {
+          "pending_credits": {
+            "items": {
+              "$ref": "#/components/schemas/PendingCreditModel"
+            },
+            "type": "array",
+            "title": "Pending Credits"
+          },
+          "total_count": {
+            "type": "integer",
+            "title": "Total Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pending_credits",
+          "total_count"
+        ],
+        "title": "PendingCreditsListResponse",
+        "description": "Response for listing pending credits."
       },
       "PendingReviewSummary": {
         "properties": {
@@ -13077,6 +13476,67 @@
         ],
         "title": "UserListResponse",
         "description": "Response model for listing users."
+      },
+      "UserListWithBalancesResponse": {
+        "properties": {
+          "users": {
+            "items": {
+              "$ref": "#/components/schemas/UserWithBalanceModel"
+            },
+            "type": "array",
+            "title": "Users"
+          },
+          "total_count": {
+            "type": "integer",
+            "title": "Total Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "users",
+          "total_count"
+        ],
+        "title": "UserListWithBalancesResponse",
+        "description": "Response for listing users with balances."
+      },
+      "UserWithBalanceModel": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "balance_cents": {
+            "type": "integer",
+            "title": "Balance Cents"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "name",
+          "is_active",
+          "balance_cents",
+          "created_at"
+        ],
+        "title": "UserWithBalanceModel",
+        "description": "User with wallet balance."
       },
       "ValidationError": {
         "properties": {

@@ -45,6 +45,7 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
             "/api/auth/login",
             "/api/auth/callback",
             "/api/auth/status",
+            "/api/auth/logout",
             "/api/public-config",
             "/api/auth/clerk-session",
             "/api/research-pipeline/events",

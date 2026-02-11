@@ -13,6 +13,7 @@ from psycopg.rows import dict_row
 
 from app.config import settings
 
+from .admin import AdminDatabaseMixin
 from .base import ConnectionProvider
 from .billing import BillingDatabaseMixin
 
@@ -31,6 +32,7 @@ class UserData(NamedTuple):
     updated_at: datetime
     mcp_api_key: Optional[str] = None
     stripe_customer_id: Optional[str] = None
+    is_admin: bool = False
 
 
 def should_give_free_balance(email: str) -> bool:
@@ -75,7 +77,8 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                         SET email = EXCLUDED.email,
                             name = EXCLUDED.name,
                             updated_at = NOW()
-                        RETURNING id, clerk_user_id, email, name, is_active, created_at, updated_at, mcp_api_key, stripe_customer_id
+                        RETURNING id, clerk_user_id, email, name, is_active,
+                                  created_at, updated_at, mcp_api_key, stripe_customer_id, is_admin
                         """
                 if clerk_user_id is not None
                 else """
@@ -85,7 +88,8 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                         SET name = EXCLUDED.name,
                             clerk_user_id = COALESCE(users.clerk_user_id, EXCLUDED.clerk_user_id),
                             updated_at = NOW()
-                        RETURNING id, clerk_user_id, email, name, is_active, created_at, updated_at, mcp_api_key, stripe_customer_id
+                        RETURNING id, clerk_user_id, email, name, is_active,
+                                  created_at, updated_at, mcp_api_key, stripe_customer_id, is_admin
                         """
             )
             async with self.aget_connection() as conn:
@@ -109,6 +113,26 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                                 "Failed to initialize wallet for user %s: %s",
                                 result["id"],
                                 wallet_error,
+                            )
+                        # Claim any pending credits for this email
+                        try:
+                            if isinstance(self, AdminDatabaseMixin):
+                                claimed = await self.claim_pending_credits_for_user_with_cursor(
+                                    cursor=cursor,
+                                    user_id=int(result["id"]),
+                                    email=email,
+                                )
+                                if claimed > 0:
+                                    logger.info(
+                                        "Claimed %d cents in pending credits for user %s",
+                                        claimed,
+                                        email,
+                                    )
+                        except Exception as claim_error:  # noqa: BLE001
+                            logger.exception(
+                                "Failed to claim pending credits for user %s: %s",
+                                result["id"],
+                                claim_error,
                             )
                         return UserData(**result)
                     return None
@@ -139,7 +163,8 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                                created_at,
                                updated_at,
                                mcp_api_key,
-                               stripe_customer_id
+                               stripe_customer_id,
+                               is_admin
                         FROM users
                         WHERE clerk_user_id = %s
                           AND is_active = TRUE
@@ -175,7 +200,8 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                                created_at,
                                updated_at,
                                mcp_api_key,
-                               stripe_customer_id
+                               stripe_customer_id,
+                               is_admin
                         FROM users
                         WHERE email = %s
                           AND is_active = TRUE
@@ -211,7 +237,8 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                                created_at,
                                updated_at,
                                mcp_api_key,
-                               stripe_customer_id
+                               stripe_customer_id,
+                               is_admin
                         FROM users
                         WHERE id = %s
                         """,
@@ -254,7 +281,8 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                             updated_at    = NOW()
                         WHERE id = %s
                           AND is_active = TRUE
-                        RETURNING id, clerk_user_id, email, name, is_active, created_at, updated_at, mcp_api_key, stripe_customer_id
+                        RETURNING id, clerk_user_id, email, name, is_active,
+                                  created_at, updated_at, mcp_api_key, stripe_customer_id, is_admin
                         """,
                         (email, name, clerk_user_id, user_id),
                     )
@@ -308,7 +336,9 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                 async with conn.cursor(row_factory=dict_row) as cursor:
                     await cursor.execute(
                         """
-                        SELECT u.id, u.clerk_user_id, u.email, u.name, u.is_active, u.created_at, u.updated_at, u.mcp_api_key, u.stripe_customer_id
+                        SELECT u.id, u.clerk_user_id, u.email, u.name, u.is_active,
+                               u.created_at, u.updated_at, u.mcp_api_key,
+                               u.stripe_customer_id, u.is_admin
                         FROM users u
                                  JOIN user_sessions s ON u.id = s.user_id
                         WHERE s.session_token = %s
@@ -374,7 +404,9 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                 async with conn.cursor(row_factory=dict_row) as cursor:
                     await cursor.execute(
                         """
-                        SELECT id, clerk_user_id, email, name, is_active, created_at, updated_at, mcp_api_key, stripe_customer_id
+                        SELECT id, clerk_user_id, email, name, is_active,
+                               created_at, updated_at, mcp_api_key,
+                               stripe_customer_id, is_admin
                         FROM users
                         WHERE is_active = TRUE
                         ORDER BY name ASC
@@ -409,7 +441,8 @@ class UsersDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-method
                                created_at,
                                updated_at,
                                mcp_api_key,
-                               stripe_customer_id
+                               stripe_customer_id,
+                               is_admin
                         FROM users
                         WHERE mcp_api_key = %s
                           AND is_active = TRUE

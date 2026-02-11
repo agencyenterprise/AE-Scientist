@@ -48,6 +48,7 @@ class AuthUser(BaseModel):
     id: int = Field(..., description="Database user ID")
     email: str = Field(..., description="User email address")
     name: str = Field(..., description="User display name")
+    is_admin: bool = Field(default=False, description="Whether the user is an admin")
 
 
 class AuthStatus(BaseModel):
