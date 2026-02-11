@@ -24,7 +24,7 @@ jobs:
 
       - name: Install ae-paper-review dependencies
         run: |
-          cd packages/ae-paper-review && uv venv && uv pip install -e ".[dev]"
+          cd packages/ae-paper-review && uv sync --frozen --extra dev
 
       - name: Lint ae-paper-review (black, isort, ruff, mypy, pyright)
         run: |

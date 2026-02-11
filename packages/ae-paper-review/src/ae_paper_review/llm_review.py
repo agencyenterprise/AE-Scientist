@@ -6,7 +6,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
-import pymupdf  # type: ignore[import-untyped]
+import pymupdf
 from langchain_core.messages import AIMessage, BaseMessage
 from pypdf import PdfReader
 
@@ -403,11 +403,11 @@ def load_paper(pdf_path: str, num_pages: int | None = None, min_size: int = 100)
         logger.warning(f"Error with pymupdf4llm, falling back to pymupdf: {e}")
         try:
             doc = pymupdf.open(pdf_path)
-            if num_pages:
-                doc = doc[:num_pages]
+            page_limit = num_pages if num_pages else len(doc)
             text = ""
-            for page in doc:
-                text += str(page.get_text())
+            for i in range(min(page_limit, len(doc))):
+                page = doc[i]
+                text += str(page.get_text())  # type: ignore[attr-defined]
             if len(text) < min_size:
                 raise Exception("Text too short")
         except Exception as e:

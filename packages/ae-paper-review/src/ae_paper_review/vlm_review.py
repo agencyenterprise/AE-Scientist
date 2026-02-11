@@ -6,7 +6,7 @@ import os
 import re
 from typing import Any, Dict, List, NamedTuple, Optional
 
-import pymupdf  # type: ignore[import-untyped]
+import pymupdf
 
 from .llm.token_tracking import TokenUsage
 from .llm.vlm import get_response_from_vlm, get_structured_response_from_vlm
@@ -70,7 +70,7 @@ def extract_figure_screenshots(
     for page_num in page_range:
         page = doc[page_num]
         try:
-            blocks = page.get_text("blocks")
+            blocks = page.get_text("blocks")  # type: ignore[attr-defined]
             for b in blocks:
                 txt = b[4].strip()
                 if txt:
@@ -100,7 +100,7 @@ def extract_figure_screenshots(
 
     for page_num in page_range:
         page = doc[page_num]
-        page_rect = page.rect
+        page_rect = page.rect  # type: ignore[attr-defined]
 
         page_blocks = [b for b in text_blocks if b["page"] == page_num]
         page_blocks.sort(key=lambda b: b["bbox"].y0)
@@ -143,7 +143,7 @@ def extract_figure_screenshots(
 
             if (clip_bottom > clip_top) and (clip_right > clip_left):
                 clip_rect = pymupdf.Rect(clip_left, clip_top, clip_right, clip_bottom)
-                pix = page.get_pixmap(clip=clip_rect, dpi=150)
+                pix = page.get_pixmap(clip=clip_rect, dpi=150)  # type: ignore[attr-defined]
 
                 fig_label_escaped = re.escape(fig_label)
                 fig_hash = hashlib.md5(
