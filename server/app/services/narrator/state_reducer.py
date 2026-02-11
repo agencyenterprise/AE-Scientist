@@ -108,7 +108,14 @@ def handle_node_execution_started(
         run_type=event.run_type,
     )
 
-    updated_active_nodes = state.active_nodes + [new_active_node]
+    # Remove any existing node with same (execution_id, run_type) to prevent duplicates
+    # This handles retries and ensures idempotency
+    filtered_nodes = [
+        node
+        for node in state.active_nodes
+        if not (node.execution_id == event.execution_id and node.run_type == event.run_type)
+    ]
+    updated_active_nodes = filtered_nodes + [new_active_node]
 
     changes: Dict[str, Any] = {
         "active_nodes": updated_active_nodes,
