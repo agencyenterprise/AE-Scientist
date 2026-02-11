@@ -8,7 +8,7 @@ from typing import Any, AsyncGenerator, Dict
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import ORJSONResponse, StreamingResponse
 
-from app.api.research_pipeline_stream import register_stream_queue, unregister_stream_queue
+from app.api.research_pipeline_stream import read_pipeline_events
 from app.middleware.auth import get_current_user
 from app.models import (
     ChildConversationInfo,
@@ -466,7 +466,7 @@ async def stream_research_run_events(
         nonlocal hw_stopped_running_at
         nonlocal hw_cost_actual_payload
         nonlocal hw_cost_actual_dirty
-        queue = register_stream_queue(run_id=run_id)
+
         current_run = await db.get_research_pipeline_run(run_id)
         if current_run is None:
             yield _format_stream_event(event={"type": "error", "data": "Run not found"})
@@ -478,11 +478,16 @@ async def stream_research_run_events(
                     event=_build_hw_cost_actual_stream_event(payload=hw_cost_actual_payload),
                 )
                 hw_cost_actual_dirty = False
-            while True:
+
+            # Stream live events from Redis
+            # Use "$" to only get new events (snapshot endpoint provides initial state)
+            block_ms = int(SSE_HEARTBEAT_INTERVAL_SECONDS * 1000)
+            async for redis_event in read_pipeline_events(run_id, last_id="$", block_ms=block_ms):
                 if await request.is_disconnected():
                     logger.debug("Client disconnected from SSE stream for run %s", run_id)
                     break
 
+                # Refresh run metadata if needed
                 if hw_started_running_at is None:
                     refreshed_run = await db.get_research_pipeline_run(run_id=run_id)
                     if refreshed_run is not None:
@@ -492,15 +497,10 @@ async def stream_research_run_events(
                     if refreshed_run is not None:
                         hw_cost_per_hour_cents = _run_cost_per_hour_cents(refreshed_run)
 
-                try:
-                    event = await asyncio.wait_for(
-                        fut=queue.get(),
-                        timeout=SSE_HEARTBEAT_INTERVAL_SECONDS,
-                    )
-                except asyncio.TimeoutError:
-                    if await request.is_disconnected():
-                        logger.debug("Client disconnected from SSE stream for run %s", run_id)
-                        break
+                event_type = redis_event.get("type")
+
+                if event_type == "keepalive":
+                    # Redis read timed out - send heartbeat
                     yield _format_stream_event(event={"type": "heartbeat", "data": None})
                     hw_cost_event = _build_hw_cost_stream_event(
                         started_running_at=hw_started_running_at,
@@ -517,11 +517,9 @@ async def stream_research_run_events(
                         )
                         hw_cost_actual_dirty = False
                     continue
-                except RuntimeError as exc:
-                    logger.exception("Runtime error while reading stream queue for run %s", run_id)
-                    yield _format_stream_event(event={"type": "error", "data": str(exc)})
-                    break
 
+                # Real event from Redis - the data is the full event payload
+                event = redis_event.get("data", {})
                 yield _format_stream_event(event=event)
 
                 if event.get("type") == "run_event":
@@ -554,8 +552,8 @@ async def stream_research_run_events(
 
                 if event.get("type") == "complete":
                     break
-        finally:
-            unregister_stream_queue(run_id=run_id, queue=queue)
+        except asyncio.CancelledError:
+            logger.debug("Client disconnected from SSE stream for run %s", run_id)
 
     return StreamingResponse(
         event_generator(),

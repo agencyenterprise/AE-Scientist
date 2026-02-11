@@ -16,6 +16,7 @@ from app.middleware.auth import AuthenticationMiddleware
 from app.routes import router as api_router
 from app.services.database import DatabaseManager
 from app.services.paper_review_service import recover_stale_paper_reviews
+from app.services.redis_streams import close_redis, init_redis
 from app.services.research_pipeline.monitor import pipeline_monitor
 from app.services.research_pipeline.runpod import get_supported_gpu_types, warm_gpu_price_cache
 from app.validation import validate_configuration
@@ -102,6 +103,9 @@ validate_configuration()
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    # Initialize Redis for SSE event streaming
+    await init_redis()
+
     # Recover any paper reviews that were interrupted by a previous server restart
     await recover_stale_paper_reviews()
 
@@ -113,6 +117,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        await close_redis()
         await pipeline_monitor.stop()
         await DatabaseManager.close_all_pools()
 

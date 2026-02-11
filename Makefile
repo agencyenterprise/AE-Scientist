@@ -57,4 +57,22 @@ gen-api-types:
 migrate-db:
 	$(MAKE) -C server migrate
 
-.PHONY: install-ae-paper-review install-research install-server install lint-ae-paper-review lint-research lint-server lint lint-frontend dev-frontend dev-server export-openapi gen-api-types migrate-db fake-runpod
+# Redis for SSE event streaming
+redis:
+	@echo "🔴 Starting Redis container..."
+	@docker run -d --name ae-scientist-redis -p 6379:6379 redis:7-alpine || \
+		(docker start ae-scientist-redis 2>/dev/null && echo "Redis container already exists, starting it...")
+	@echo "✅ Redis is running on localhost:6379"
+
+redis-stop:
+	@echo "🛑 Stopping Redis container..."
+	@docker stop ae-scientist-redis 2>/dev/null || true
+	@echo "✅ Redis stopped"
+
+redis-rm:
+	@echo "🗑️  Removing Redis container..."
+	@docker stop ae-scientist-redis 2>/dev/null || true
+	@docker rm ae-scientist-redis 2>/dev/null || true
+	@echo "✅ Redis container removed"
+
+.PHONY: install-ae-paper-review install-research install-server install lint-ae-paper-review lint-research lint-server lint lint-frontend dev-frontend dev-server export-openapi gen-api-types migrate-db fake-runpod redis redis-stop redis-rm

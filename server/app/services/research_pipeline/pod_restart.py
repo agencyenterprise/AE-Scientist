@@ -178,7 +178,7 @@ async def attempt_pod_restart(
         },
         occurred_at=now.isoformat(),
     )
-    publish_stream_event(
+    await publish_stream_event(
         run.run_id,
         SSERunEvent(type="run_event", data=run_event),
     )

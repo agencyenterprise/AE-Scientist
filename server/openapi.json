@@ -4521,7 +4521,7 @@
           "narrator"
         ],
         "summary": "Narrative Stream",
-        "description": "SSE endpoint that streams narrator timeline events and state updates.\n\nEvent Types:\n- \"state_snapshot\": Complete state snapshot (sent on connect)\n- \"timeline_event\": Individual timeline event (sent on connect + live)\n- \"state_delta\": Partial state update with only changed fields (live)\n- \"ping\": Keepalive ping (every 30s)\n\nArgs:\n    run_id: Research run ID\n    request: FastAPI request object (for auth)\n    db: Database manager\n\nReturns:\n    StreamingResponse streaming narrator events",
+        "description": "SSE endpoint that streams narrator timeline events and state updates.\n\nUses Redis Streams for cross-worker event delivery - events published\nby any worker are received by all SSE connections regardless of which\nworker they're connected to.\n\nEvent Types:\n- \"connected\": Sent immediately on connect\n- \"state_snapshot\": Complete state snapshot (sent on connect)\n- \"timeline_event\": Individual timeline event (sent on connect + live)\n- \"ping\": Keepalive ping (every 30s)\n\nArgs:\n    run_id: Research run ID\n    request: FastAPI request object (for auth)\n    db: Database manager\n\nReturns:\n    StreamingResponse streaming narrator events",
         "operationId": "narrative_stream_api_research_runs__run_id__narrative_stream_get",
         "parameters": [
           {

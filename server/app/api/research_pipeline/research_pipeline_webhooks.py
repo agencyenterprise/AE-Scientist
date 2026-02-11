@@ -184,7 +184,7 @@ async def ingest_stage_progress(
         best_metric=event.best_metric,
         created_at=created_at,
     )
-    publish_stream_event(
+    await publish_stream_event(
         run_id=run_id,
         event=SSEStageProgressEvent(
             type="stage_progress",
@@ -240,7 +240,7 @@ async def ingest_stage_completed(
         summary=summary,
         created_at=created_at,
     )
-    publish_stream_event(
+    await publish_stream_event(
         run_id=run_id,
         event=cast(
             StreamEventModel,
@@ -294,7 +294,7 @@ async def ingest_paper_generation_progress(
         details=event.details,
         created_at=created_at,
     )
-    publish_stream_event(
+    await publish_stream_event(
         run_id=run_id,
         event=SSEPaperGenerationEvent(
             type="paper_generation_progress",
@@ -365,7 +365,7 @@ async def ingest_artifact_uploaded(
         run_id=run_id,
         conversation_id=None,
     )
-    publish_stream_event(
+    await publish_stream_event(
         run_id=run_id,
         event=SSEArtifactEvent(
             type="artifact",
@@ -437,7 +437,7 @@ async def ingest_review_completed(
         created_at=event.created_at,
     )
 
-    publish_stream_event(
+    await publish_stream_event(
         run_id=run_id,
         event=SSEReviewCompletedEvent(
             type="review_completed",
@@ -468,7 +468,7 @@ async def ingest_stage_summary(
         summary=event.summary,
         created_at=created_at,
     )
-    publish_stream_event(
+    await publish_stream_event(
         run_id=run_id,
         event=SSEStageSummaryEvent(
             type="stage_summary",
@@ -513,7 +513,7 @@ async def ingest_stage_skip_window(
         event.state,
         event.reason,
     )
-    publish_stream_event(
+    await publish_stream_event(
         run_id=run_id,
         event=cast(
             StreamEventModel,
@@ -579,7 +579,7 @@ async def ingest_tree_viz_stored(
     )
 
     # Publish to SSE stream
-    publish_stream_event(
+    await publish_stream_event(
         run_id=run_id,
         event=SSERunEvent(
             type="run_event",
@@ -667,7 +667,7 @@ async def ingest_running_code(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
 
     event = payload.event
-    publish_stream_event(
+    await publish_stream_event(
         run_id=run_id,
         event=cast(
             StreamEventModel,
@@ -718,7 +718,7 @@ async def ingest_run_completed(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
 
     event = payload.event
-    publish_stream_event(
+    await publish_stream_event(
         run_id=run_id,
         event=cast(
             StreamEventModel,
@@ -801,7 +801,7 @@ async def ingest_run_started(
         },
         occurred_at=now.isoformat(),
     )
-    publish_stream_event(
+    await publish_stream_event(
         run_id,
         SSERunEvent(
             type="run_event",
@@ -847,7 +847,7 @@ async def ingest_initialization_progress(
         metadata={"initialization_status": message},
         occurred_at=now,
     )
-    publish_stream_event(
+    await publish_stream_event(
         run_id,
         SSEInitializationStatusEvent(
             type="initialization_status",
@@ -915,7 +915,7 @@ async def ingest_run_finished(
         },
         occurred_at=now.isoformat(),
     )
-    publish_stream_event(
+    await publish_stream_event(
         run_id,
         SSERunEvent(
             type="run_event",
@@ -931,7 +931,7 @@ async def ingest_run_finished(
             run_id,
             user_id,
         )
-        publish_stream_event(
+        await publish_stream_event(
             run_id,
             SSEAccessRestrictedEvent(
                 type="access_restricted",
@@ -960,7 +960,7 @@ async def ingest_run_finished(
         run_id=run_id,
         trigger="pipeline_event_finish",
     )
-    publish_termination_status_event(run_id=run_id, termination=termination)
+    await publish_termination_status_event(run_id=run_id, termination=termination)
     notify_termination_requested()
 
 
@@ -1132,7 +1132,7 @@ async def ingest_gpu_shortage(
             run_id=run_id,
             trigger="gpu_shortage",
         )
-        publish_termination_status_event(run_id=run_id, termination=termination)
+        await publish_termination_status_event(run_id=run_id, termination=termination)
         notify_termination_requested()
 
 

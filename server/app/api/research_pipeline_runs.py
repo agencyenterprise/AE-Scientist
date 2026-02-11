@@ -229,7 +229,7 @@ async def _notify_pod_ready_failure(
         metadata=payload,
         occurred_at=now.isoformat(),
     )
-    publish_stream_event(
+    await publish_stream_event(
         run_id,
         SSERunEvent(
             type="run_event",
@@ -755,7 +755,7 @@ async def terminate_code_execution(
         },
         occurred_at=now.isoformat(),
     )
-    publish_stream_event(
+    await publish_stream_event(
         run_id,
         SSERunEvent(
             type="run_event",
@@ -873,7 +873,7 @@ async def stop_research_run(conversation_id: int, run_id: str) -> ResearchRunSto
         run_id=run_id,
         trigger="user_stop",
     )
-    publish_termination_status_event(run_id=run_id, termination=termination)
+    await publish_termination_status_event(run_id=run_id, termination=termination)
     notify_termination_requested()
 
     # Idempotent stop: if already terminal, do not error—just return and (best-effort) push SSE so UI updates.
@@ -923,7 +923,7 @@ async def stop_research_run(conversation_id: int, run_id: str) -> ResearchRunSto
         },
         occurred_at=now.isoformat(),
     )
-    publish_stream_event(
+    await publish_stream_event(
         run_id,
         SSERunEvent(
             type="run_event",
@@ -939,7 +939,7 @@ async def stop_research_run(conversation_id: int, run_id: str) -> ResearchRunSto
             run_id,
             user_id,
         )
-        publish_stream_event(
+        await publish_stream_event(
             run_id,
             SSEAccessRestrictedEvent(
                 type="access_restricted",
