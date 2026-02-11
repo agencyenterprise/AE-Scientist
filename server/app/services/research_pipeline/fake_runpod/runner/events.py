@@ -810,7 +810,7 @@ class EventsMixin:
 
         # Emit token usage for Codex/planning LLM call
         codex_payload = TokenUsageEvent(
-            model="anthropic:claude-sonnet-4-20250514",
+            model="openai:gpt-5.2",
             input_tokens=int((12000 + iteration_variance) * stage_multiplier),
             cached_input_tokens=int((8000 + iteration_variance * 0.5) * stage_multiplier),
             output_tokens=int((2500 + iteration * 200) * stage_multiplier),
@@ -827,7 +827,7 @@ class EventsMixin:
 
         # Emit token usage for feedback/evaluation LLM call
         feedback_payload = TokenUsageEvent(
-            model="anthropic:claude-sonnet-4-20250514",
+            model="openai:gpt-5.2",
             input_tokens=int(4000 * stage_multiplier),
             cached_input_tokens=int(2000 * stage_multiplier),
             output_tokens=int(800 * stage_multiplier),
@@ -850,7 +850,7 @@ class EventsMixin:
         """
         # Seed evaluations use less tokens than full iterations
         seed_payload = TokenUsageEvent(
-            model="anthropic:claude-sonnet-4-20250514",
+            model="openai:gpt-5.2",
             input_tokens=3000 + seed_idx * 200,
             cached_input_tokens=2000 + seed_idx * 100,
             output_tokens=500 + seed_idx * 50,

@@ -133,7 +133,7 @@ class FakeDataMixin:
         ]
         for stage_name, input_tokens, cached_tokens, output_tokens in paper_gen_stages:
             payload = TokenUsageEvent(
-                model="anthropic:claude-sonnet-4-20250514",
+                model="openai:gpt-5.2",
                 input_tokens=input_tokens,
                 cached_input_tokens=cached_tokens,
                 output_tokens=output_tokens,
