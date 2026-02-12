@@ -81,8 +81,10 @@ export async function apiFetch<T>(path: string, options?: ApiFetchOptions): Prom
 
   if (!response.ok) {
     // Auto-redirect to login on 401 (session expired)
+    // Return a never-resolving promise since the page is navigating away
     if (response.status === 401) {
       window.location.href = "/login";
+      return new Promise<T>(() => {});
     }
     const errorData = await parseErrorResponse(response);
     throw new ApiError(response.status, `HTTP ${response.status}`, errorData);
@@ -131,8 +133,10 @@ export async function apiStream(path: string, options?: RequestInit): Promise<Re
 
   if (!response.ok) {
     // Auto-redirect to login on 401 (session expired)
+    // Return a never-resolving promise since the page is navigating away
     if (response.status === 401) {
       window.location.href = "/login";
+      return new Promise<Response>(() => {});
     }
     const errorData = await parseErrorResponse(response);
     throw new ApiError(response.status, `HTTP ${response.status}`, errorData);
