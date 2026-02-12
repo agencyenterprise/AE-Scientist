@@ -14,6 +14,9 @@ if TYPE_CHECKING:
 # Speed factor - set via --speed CLI argument
 _speed_factor: float = 1.0
 
+# Simulate failure flag - set via --simulate-failure CLI argument
+_simulate_failure: bool = False
+
 # Global state
 _lock = threading.Lock()
 _executions_by_id: Dict[str, ExecutionRecord] = {}
@@ -32,6 +35,17 @@ def set_speed_factor(factor: float) -> None:
 def get_speed_factor() -> float:
     """Get the current speed factor."""
     return _speed_factor
+
+
+def set_simulate_failure(enabled: bool) -> None:
+    """Set the global simulate failure flag."""
+    global _simulate_failure
+    _simulate_failure = enabled
+
+
+def get_simulate_failure() -> bool:
+    """Get the current simulate failure flag."""
+    return _simulate_failure
 
 
 def get_lock() -> threading.Lock:

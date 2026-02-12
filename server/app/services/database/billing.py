@@ -497,6 +497,58 @@ class BillingDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-meth
 
                 return total_reversed
 
+    async def get_refund_for_run(self, run_id: str) -> int | None:
+        """Get refund amount (in cents) for a failed run, if any.
+
+        Args:
+            run_id: The research run ID to check for refunds.
+
+        Returns:
+            The refund amount in cents if a refund exists, None otherwise.
+        """
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
+                    """
+                    SELECT amount FROM billing_credit_transactions
+                    WHERE transaction_type = 'adjustment'
+                      AND metadata->>'action' = 'failed_run_refund'
+                      AND metadata->>'run_id' = %s
+                    LIMIT 1
+                    """,
+                    (run_id,),
+                )
+                row = await cursor.fetchone()
+        return row["amount"] if row else None
+
+    async def get_unreversed_hold_total_for_run(self, run_id: str) -> int:
+        """Get the total unreversed hold amount (in cents) for a research run.
+
+        Args:
+            run_id: The research run ID.
+
+        Returns:
+            Total hold amount in cents (positive number). Returns 0 if no holds exist.
+        """
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
+                    """
+                    SELECT COALESCE(SUM(ABS(amount)), 0) as total
+                    FROM billing_credit_transactions
+                    WHERE transaction_type = 'hold'
+                      AND metadata->>'run_id' = %s
+                      AND NOT EXISTS (
+                          SELECT 1 FROM billing_credit_transactions r
+                          WHERE r.transaction_type = 'hold_reversal'
+                            AND r.metadata->>'reversed_transaction_id' = billing_credit_transactions.id::text
+                      )
+                    """,
+                    (run_id,),
+                )
+                row = await cursor.fetchone()
+        return int(row["total"]) if row else 0
+
     async def get_transaction_by_stripe_refund_id(
         self, refund_id: str
     ) -> Optional[CreditTransaction]:

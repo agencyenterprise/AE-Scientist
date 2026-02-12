@@ -10,7 +10,7 @@ import sys
 import uvicorn
 
 from .server import app
-from .state import set_speed_factor
+from .state import set_simulate_failure, set_speed_factor
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +60,11 @@ def main() -> None:
         default=1.0,
         help="Speed multiplier for all wait times (e.g., --speed 2 runs 2x faster)",
     )
+    parser.add_argument(
+        "--simulate-failure",
+        action="store_true",
+        help="Simulate a system failure after the first LLM cost event",
+    )
     args = parser.parse_args()
 
     if args.speed <= 0:
@@ -72,6 +77,10 @@ def main() -> None:
             args.speed,
             100 / args.speed,
         )
+
+    set_simulate_failure(args.simulate_failure)
+    if args.simulate_failure:
+        logger.info("Simulate failure mode enabled - run will fail after first LLM cost event")
 
     port_value = _require_env("FAKE_RUNPOD_PORT")
     try:

@@ -30,6 +30,7 @@ from ..local_persistence import LocalPersistence
 from ..models import FAKE_INITIALIZATION_STEP_DELAYS_SECONDS
 from ..state import get_executions, get_lock, get_speed_factor
 from ..webhooks import FakeRunPodWebhookPublisher
+from .events import SimulatedFailureError
 
 logger = logging.getLogger(__name__)
 
@@ -210,6 +211,13 @@ class FakeRunnerCore:
             self._emit_fake_figure_reviews()
             self._emit_fake_review()
             self._publish_run_finished(True, "")
+        except SimulatedFailureError as e:
+            logger.warning(
+                "[FakeRunner %s] Simulated failure triggered: %s",
+                self._run_id[:8],
+                str(e),
+            )
+            self._publish_run_finished(False, str(e))
         finally:
             self._heartbeat_stop.set()
             self._log_stop.set()

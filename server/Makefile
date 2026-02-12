@@ -29,11 +29,21 @@ export-openapi:
 	VIRTUAL_ENV= uv run --no-sync export_openapi.py > openapi.json
 
 # Fake RunPod server for local validation
-# Usage: make fake-runpod [SPEED=N] where N is the speed multiplier (default: 1)
+# Usage: make fake-runpod [SPEED=N] [SIMULATE_FAILURE=1]
+#   SPEED=N - speed multiplier (default: 1)
+#   SIMULATE_FAILURE=1 - simulate a system failure after the first LLM cost event
 SPEED ?= 1
+SIMULATE_FAILURE ?=
+FAKE_RUNPOD_FLAGS = --speed $(SPEED)
+ifdef SIMULATE_FAILURE
+FAKE_RUNPOD_FLAGS += --simulate-failure
+endif
 fake-runpod:
 	@echo "🎭 Starting fake RunPod server with auto-reload (speed=$(SPEED)x)..."
-	VIRTUAL_ENV= PYTHONPATH=../research_pipeline:..:$(PYTHONPATH) uv run watchfiles "python -m app.services.research_pipeline.fake_runpod --speed $(SPEED)" app/services/research_pipeline/fake_runpod
+ifdef SIMULATE_FAILURE
+	@echo "⚠️  Simulate failure mode enabled"
+endif
+	VIRTUAL_ENV= PYTHONPATH=../research_pipeline:..:$(PYTHONPATH) uv run watchfiles "python -m app.services.research_pipeline.fake_runpod $(FAKE_RUNPOD_FLAGS)" app/services/research_pipeline/fake_runpod
 
 # Generate API types for frontend
 gen-api-types: export-openapi

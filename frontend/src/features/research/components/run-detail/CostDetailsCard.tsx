@@ -199,6 +199,24 @@ export function CostDetailsCard({
               </div>
             </div>
           </div>
+
+          {/* Refund Section */}
+          {cost.refund_cents > 0 && (
+            <div className="bg-emerald-900/30 rounded-lg p-4 border border-emerald-500/20">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <DollarSign className="h-4 w-4 text-emerald-400" />
+                  <span className="text-sm font-medium text-emerald-300">Refunded</span>
+                </div>
+                <span className="font-mono text-lg font-semibold text-emerald-400">
+                  +{formatCurrency(cost.refund_cents / 100)}
+                </span>
+              </div>
+              <p className="text-xs text-emerald-400/70 mt-2">
+                This run failed due to a system error. Costs have been refunded to your balance.
+              </p>
+            </div>
+          )}
         </div>
       ) : (
         <p className="text-sm text-center text-slate-400">Could not load cost details.</p>

@@ -235,6 +235,16 @@ export default function ResearchRunDetailPage() {
           </div>
         )}
 
+        {run.status === "failed" && (costDetails?.refund_cents ?? 0) > 0 && (
+          <div className="flex items-center gap-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3">
+            <DollarSign className="h-5 w-5 shrink-0 text-emerald-400" />
+            <p className="text-sm text-emerald-200">
+              This run failed due to a system error. ${(costDetails!.refund_cents / 100).toFixed(2)}{" "}
+              has been refunded to your balance.
+            </p>
+          </div>
+        )}
+
         <ResearchSummaryStrip
           status={run.status}
           currentStage={currentStage}

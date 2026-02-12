@@ -349,6 +349,18 @@ class ResearchPipelineRunsMixin(ConnectionProvider):
                 rows = await cursor.fetchall() or []
         return [ResearchPipelineRunEvent(**row) for row in rows]
 
+    async def get_run_failure_reason(self, run_id: str) -> str | None:
+        """Get the failure reason for a run from its status_changed events.
+
+        Returns the 'reason' field from the most recent status_changed event
+        where to_status='failed', or None if not found.
+        """
+        events = await self.list_research_pipeline_run_events(run_id=run_id)
+        for event in reversed(events):
+            if event.event_type == "status_changed" and event.metadata.get("to_status") == "failed":
+                return event.metadata.get("reason")
+        return None
+
     async def _insert_run_event_with_cursor(
         self,
         *,

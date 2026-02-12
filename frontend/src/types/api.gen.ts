@@ -4807,6 +4807,8 @@ export interface components {
             total_cost: number;
             /** Cost By Model */
             cost_by_model: components["schemas"]["ModelCost"][];
+            /** Refund Cents */
+            refund_cents: number;
         };
         /** ResearchRunDetailsResponse */
         ResearchRunDetailsResponse: {

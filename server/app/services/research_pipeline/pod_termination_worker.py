@@ -27,6 +27,7 @@ from app.models.sse import ResearchRunRunEvent as SSERunEvent
 from app.models.sse import ResearchRunTerminationStatusData, ResearchRunTerminationStatusEvent
 from app.services import DatabaseManager, get_database
 from app.services.billing_guard import charge_cents
+from app.services.cost_calculator import calculate_llm_token_usage_cost
 from app.services.database.research_pipeline_run_termination import ResearchPipelineRunTermination
 from app.services.database.research_pipeline_runs import ResearchPipelineRun
 from app.services.research_pipeline.runpod import (
@@ -51,6 +52,68 @@ def notify_termination_requested() -> None:
 
 def get_termination_wakeup_event() -> asyncio.Event:
     return _termination_wakeup_event
+
+
+async def _refund_failed_run_if_eligible(
+    db: DatabaseManager,
+    *,
+    run_id: str,
+    user_id: int,
+    hw_cost_cents: int,
+    is_estimated: bool = False,
+) -> None:
+    """Refund costs for a failed run if it wasn't user-cancelled.
+
+    Args:
+        db: Database manager instance
+        run_id: The research run ID
+        user_id: The user ID to refund
+        hw_cost_cents: Hardware cost in cents (actual or estimated)
+        is_estimated: Whether the hw_cost_cents is an estimate (for logging)
+    """
+    run = await db.get_research_pipeline_run(run_id=run_id)
+    if not run or run.status != "failed":
+        return
+
+    failure_reason = await db.get_run_failure_reason(run_id=run_id)
+    if not failure_reason or failure_reason == "user_stop":
+        return
+
+    # Calculate total LLM costs (returns dollars, convert to cents)
+    token_usages = await db.get_llm_token_usages_by_run_aggregated_by_model(run_id)
+    token_usage_costs = calculate_llm_token_usage_cost(token_usages)
+    llm_total_cents = int(sum(c.input_cost + c.output_cost for c in token_usage_costs) * 100)
+
+    total_refund_cents = hw_cost_cents + llm_total_cents
+    if total_refund_cents <= 0:
+        return
+
+    metadata: dict[str, object] = {
+        "action": "failed_run_refund",
+        "run_id": run_id,
+        "hw_cents": hw_cost_cents,
+        "llm_cents": llm_total_cents,
+        "failure_reason": failure_reason,
+    }
+    if is_estimated:
+        metadata["estimated"] = True
+
+    await db.add_completed_transaction(
+        user_id=user_id,
+        amount=total_refund_cents,
+        transaction_type="adjustment",
+        description=f"Refund for failed run {run_id}",
+        metadata=metadata,
+    )
+    hw_label = "estimated" if is_estimated else "actual"
+    logger.info(
+        "Refunded %d cents for failed run %s (hw=%d %s, llm=%d)",
+        total_refund_cents,
+        run_id,
+        hw_cost_cents,
+        hw_label,
+        llm_total_cents,
+    )
 
 
 async def _record_pod_billing_event(
@@ -139,6 +202,14 @@ async def _record_pod_billing_event(
                         actual_cost_cents,
                         run_id,
                     )
+
+                # Refund costs if run failed due to system error (not user-cancelled)
+                await _refund_failed_run_if_eligible(
+                    db,
+                    run_id=run_id,
+                    user_id=user_id,
+                    hw_cost_cents=actual_cost_cents,
+                )
 
                 # Mark billing as successfully charged
                 await db.update_research_pipeline_run(
@@ -851,6 +922,18 @@ async def retry_billing_for_run(
                     "Marked run %s as charged_estimated (holds retained as final cost)",
                     run_id,
                 )
+
+                # Refund costs if run failed due to system error (not user-cancelled)
+                # Use estimated HW cost from unreversed holds
+                if run.status == "failed":
+                    estimated_hw_cents = await db.get_unreversed_hold_total_for_run(run_id=run_id)
+                    await _refund_failed_run_if_eligible(
+                        db,
+                        run_id=run_id,
+                        user_id=user_id,
+                        hw_cost_cents=estimated_hw_cents,
+                        is_estimated=True,
+                    )
             except Exception as fallback_error:
                 logger.exception(
                     "Failed to apply billing fallback for run %s: %s",

@@ -1189,6 +1189,7 @@ class ResearchRunCompleteEvent(BaseModel):
 class ResearchRunCostResponse(BaseModel):
     total_cost: Annotated[float, Field(title="Total Cost")]
     cost_by_model: Annotated[list[ModelCost], Field(title="Cost By Model")]
+    refund_cents: Annotated[int, Field(title="Refund Cents")]
 
 
 class ResearchRunErrorEvent(BaseModel):

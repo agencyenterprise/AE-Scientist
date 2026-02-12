@@ -34,7 +34,7 @@ from ..models import (
     MIN_FAKE_RUNFILE_RUNNING_SECONDS,
     ExecutionRecord,
 )
-from ..state import get_executions, get_lock, get_speed_factor
+from ..state import get_executions, get_lock, get_simulate_failure, get_speed_factor
 from .fake_data import (
     generate_seed_modification_task,
     generate_seed_runfile_code,
@@ -45,6 +45,12 @@ if TYPE_CHECKING:
     from .core import FakeRunnerCore
 
 logger = logging.getLogger(__name__)
+
+
+class SimulatedFailureError(Exception):
+    """Raised when simulate-failure flag triggers a fake system failure."""
+
+    pass
 
 
 class EventsMixin:
@@ -399,6 +405,15 @@ class EventsMixin:
                 )
                 # Emit intermediate token usage during iteration
                 self._emit_iteration_token_usage(stage_name=stage_name, iteration=iteration)
+
+                # Check if we should simulate a failure after the first token usage event
+                if get_simulate_failure() and stage_index == 0 and iteration == 0:
+                    logger.warning(
+                        "[FakeRunner %s] Simulating system failure after first token usage event",
+                        self._run_id[:8],
+                    )
+                    raise SimulatedFailureError("Simulated system failure for testing refunds")
+
                 self._emit_code_execution_events(stage_name=stage_name, iteration=iteration)
                 self._enqueue_event(
                     kind="run_log",

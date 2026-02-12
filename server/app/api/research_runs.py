@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 class ResearchRunCostResponse(BaseModel):
     total_cost: float
     cost_by_model: list[ModelCost]
+    refund_cents: int
 
 
 def _is_external_url(url: str | None) -> bool:
@@ -159,7 +160,11 @@ async def get_research_run_costs(request: Request, run_id: str) -> ResearchRunCo
         else:
             cost_by_model[cost.model].cost += cost.input_cost + cost.output_cost
 
+    # Check for refund (failed runs get costs refunded)
+    refund_cents = await db.get_refund_for_run(run_id=run_id) or 0
+
     return ResearchRunCostResponse(
         total_cost=total_cost,
         cost_by_model=list(cost_by_model.values()),
+        refund_cents=refund_cents,
     )

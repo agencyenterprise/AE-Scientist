@@ -10182,12 +10182,17 @@
             },
             "type": "array",
             "title": "Cost By Model"
+          },
+          "refund_cents": {
+            "type": "integer",
+            "title": "Refund Cents"
           }
         },
         "type": "object",
         "required": [
           "total_cost",
-          "cost_by_model"
+          "cost_by_model",
+          "refund_cents"
         ],
         "title": "ResearchRunCostResponse"
       },

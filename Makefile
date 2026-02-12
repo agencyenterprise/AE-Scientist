@@ -40,10 +40,13 @@ dev-frontend:
 dev-server:
 	$(MAKE) -C server dev
 
-# Usage: make fake-runpod [SPEED=N] where N is the speed multiplier (default: 1)
+# Usage: make fake-runpod [SPEED=N] [SIMULATE_FAILURE=1]
+#   SPEED=N - speed multiplier (default: 1)
+#   SIMULATE_FAILURE=1 - simulate a system failure after the first LLM cost event
 SPEED ?= 1
+SIMULATE_FAILURE ?=
 fake-runpod:
-	$(MAKE) -C server fake-runpod SPEED=$(SPEED)
+	$(MAKE) -C server fake-runpod SPEED=$(SPEED) SIMULATE_FAILURE=$(SIMULATE_FAILURE)
 
 # OpenAPI export and type generation
 export-openapi:
