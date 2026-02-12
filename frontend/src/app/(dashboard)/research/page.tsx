@@ -71,7 +71,7 @@ export default function ResearchPage() {
 
   return (
     <PageCard>
-      <div className="flex flex-col gap-6 p-6">
+      <div className="flex flex-col gap-4 p-4 sm:gap-6 sm:p-6">
         <ResearchBoardHeader
           searchTerm={searchTerm}
           onSearchChange={setSearchTerm}
@@ -85,7 +85,7 @@ export default function ResearchPage() {
         <ResearchBoardTable researchRuns={researchRuns} />
 
         {totalCount > 0 && (
-          <div className="mt-4 flex items-center justify-between">
+          <div className="mt-2 flex flex-col gap-4 sm:mt-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2">
               <span className="text-sm text-slate-400">Rows per page:</span>
               <select
@@ -103,7 +103,7 @@ export default function ResearchPage() {
 
             {totalPages > 1 && (
               <Pagination>
-                <PaginationContent>
+                <PaginationContent className="flex-wrap">
                   <PaginationItem>
                     <PaginationPrevious
                       onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
@@ -113,23 +113,28 @@ export default function ResearchPage() {
                     />
                   </PaginationItem>
 
-                  {getPageNumbers().map((page, index) =>
-                    page === "ellipsis" ? (
-                      <PaginationItem key={`ellipsis-${index}`}>
-                        <PaginationEllipsis />
-                      </PaginationItem>
-                    ) : (
-                      <PaginationItem key={page}>
-                        <PaginationLink
-                          onClick={() => setCurrentPage(page)}
-                          isActive={currentPage === page}
-                          className="cursor-pointer"
-                        >
-                          {page}
-                        </PaginationLink>
-                      </PaginationItem>
-                    )
-                  )}
+                  <span className="hidden sm:contents">
+                    {getPageNumbers().map((page, index) =>
+                      page === "ellipsis" ? (
+                        <PaginationItem key={`ellipsis-${index}`}>
+                          <PaginationEllipsis />
+                        </PaginationItem>
+                      ) : (
+                        <PaginationItem key={page}>
+                          <PaginationLink
+                            onClick={() => setCurrentPage(page)}
+                            isActive={currentPage === page}
+                            className="cursor-pointer"
+                          >
+                            {page}
+                          </PaginationLink>
+                        </PaginationItem>
+                      )
+                    )}
+                  </span>
+                  <span className="px-2 text-sm text-slate-400 sm:hidden">
+                    {currentPage} / {totalPages}
+                  </span>
 
                   <PaginationItem>
                     <PaginationNext

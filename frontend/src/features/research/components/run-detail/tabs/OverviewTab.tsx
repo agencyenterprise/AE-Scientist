@@ -105,10 +105,10 @@ function EvaluationSummary({
 }) {
   if (loading) {
     return (
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/50 w-full p-6">
+      <div className="rounded-xl border border-slate-800 bg-slate-900/50 w-full p-4 sm:rounded-2xl sm:p-6">
         <div className="flex items-center gap-2 mb-4">
           <ShieldCheck className="h-5 w-5 text-slate-400" />
-          <h3 className="text-lg font-semibold text-white">Evaluation Summary</h3>
+          <h3 className="text-base font-semibold text-white sm:text-lg">Evaluation Summary</h3>
         </div>
         <div className="flex items-center justify-center py-4 text-slate-400">
           <Loader2 className="h-5 w-5 animate-spin mr-2" />
@@ -120,10 +120,10 @@ function EvaluationSummary({
 
   if (!review) {
     return (
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/50 w-full p-6">
+      <div className="rounded-xl border border-slate-800 bg-slate-900/50 w-full p-4 sm:rounded-2xl sm:p-6">
         <div className="flex items-center gap-2 mb-4">
           <ShieldCheck className="h-5 w-5 text-slate-400" />
-          <h3 className="text-lg font-semibold text-white">Evaluation Summary</h3>
+          <h3 className="text-base font-semibold text-white sm:text-lg">Evaluation Summary</h3>
         </div>
         <p className="text-sm text-slate-400">No evaluation available for this run.</p>
       </div>
@@ -133,11 +133,11 @@ function EvaluationSummary({
   const isAccepted = review.decision === "Accept";
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900/50 w-full p-6">
-      <div className="flex items-center justify-between mb-4">
+    <div className="rounded-xl border border-slate-800 bg-slate-900/50 w-full p-4 sm:rounded-2xl sm:p-6">
+      <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
           <ShieldCheck className="h-5 w-5 text-slate-400" />
-          <h3 className="text-lg font-semibold text-white">Evaluation Summary</h3>
+          <h3 className="text-base font-semibold text-white sm:text-lg">Evaluation Summary</h3>
         </div>
         {onViewDetails && (
           <button
@@ -150,16 +150,21 @@ function EvaluationSummary({
         )}
       </div>
 
-      <div className="flex flex-wrap gap-8 mb-4">
+      <div className="flex flex-wrap gap-4 mb-4 sm:gap-8">
         <div>
           <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Verdict</p>
-          <p className={cn("text-2xl font-bold", isAccepted ? "text-emerald-400" : "text-red-400")}>
+          <p
+            className={cn(
+              "text-xl font-bold sm:text-2xl",
+              isAccepted ? "text-emerald-400" : "text-red-400"
+            )}
+          >
             {isAccepted ? "PASS" : "FAIL"}
           </p>
         </div>
         <div>
           <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Overall</p>
-          <p className="text-2xl font-bold text-yellow-300">
+          <p className="text-xl font-bold text-yellow-300 sm:text-2xl">
             {review.overall}
             <span className="text-sm text-slate-400 font-normal">/10</span>
           </p>
@@ -167,7 +172,12 @@ function EvaluationSummary({
         </div>
         <div>
           <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Decision</p>
-          <p className={cn("text-2xl font-bold", isAccepted ? "text-emerald-400" : "text-red-400")}>
+          <p
+            className={cn(
+              "text-xl font-bold sm:text-2xl",
+              isAccepted ? "text-emerald-400" : "text-red-400"
+            )}
+          >
             {review.decision}
           </p>
         </div>
@@ -175,7 +185,7 @@ function EvaluationSummary({
 
       {review.summary && (
         <div className="border-t border-slate-700 pt-4">
-          <p className="text-sm text-slate-300 line-clamp-2">{review.summary}</p>
+          <p className="text-sm text-slate-300 line-clamp-3 sm:line-clamp-2">{review.summary}</p>
         </div>
       )}
     </div>

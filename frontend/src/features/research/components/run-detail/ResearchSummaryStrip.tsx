@@ -114,9 +114,9 @@ export function ResearchSummaryStrip({
   };
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-3 sm:p-4 lg:p-5">
-      {/* Mobile: Stack vertically, Desktop: Grid layout */}
-      <div className="grid grid-cols-1 gap-3 xs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 sm:gap-4 lg:gap-6">
+    <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-3 sm:rounded-2xl sm:p-4 lg:p-5">
+      {/* Mobile: 2 columns, Tablet: 3 columns, Desktop: 5 columns */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 sm:gap-4 lg:gap-6">
         {/* Status - Primary importance */}
         <div className="flex flex-col">
           <LabelWithTooltip label="Status" tooltipKey="stage" />

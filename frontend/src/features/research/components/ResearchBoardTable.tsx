@@ -22,7 +22,6 @@ export function ResearchBoardTable({ researchRuns }: ResearchBoardTableProps) {
       currentStage: run.currentStage,
       progress: run.progress,
       gpuType: run.gpuType,
-      createdByName: run.createdByName,
       createdAt: formatRelativeTime(run.createdAt),
       artifactsCount: run.artifactsCount,
       errorMessage: run.errorMessage,

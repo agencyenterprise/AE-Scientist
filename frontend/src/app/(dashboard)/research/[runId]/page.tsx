@@ -258,7 +258,7 @@ export default function ResearchRunDetailPage() {
         />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="mb-6 h-auto w-full justify-start gap-1 rounded-lg border border-border bg-muted/50 p-1">
+          <TabsList className="mb-4 h-auto w-full justify-start gap-1 overflow-x-auto rounded-lg border border-border bg-muted/50 p-1 sm:mb-6">
             <TabsTrigger value="overview" className="gap-1.5 data-[state=active]:bg-background">
               <Layers className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Overview</span>

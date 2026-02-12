@@ -28,7 +28,7 @@ export function GettingStartedCard() {
   if (!user) return null;
 
   return (
-    <div className="rounded-2xl border border-sky-500/20 bg-gradient-to-br from-sky-950/40 to-slate-900/60 p-5">
+    <div className="rounded-xl border border-sky-500/20 bg-gradient-to-br from-sky-950/40 to-slate-900/60 p-4 sm:rounded-2xl sm:p-5">
       <div className="flex items-center gap-2 text-sm font-semibold text-sky-400">
         <Sparkles className="h-4 w-4" />
         Getting started
@@ -76,16 +76,16 @@ export function GettingStartedCard() {
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-2">
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
         <Link
           href="/billing"
-          className="rounded-lg bg-sky-600 px-3.5 py-1.5 text-sm font-medium text-white transition hover:bg-sky-500"
+          className="rounded-lg bg-sky-600 px-3.5 py-2.5 text-center text-sm font-medium text-white transition hover:bg-sky-500 sm:py-1.5"
         >
           Add Credits
         </Link>
         <a
           href={freeTrialMailto}
-          className="rounded-lg px-3.5 py-1.5 text-sm font-medium text-slate-400 transition hover:bg-slate-800 hover:text-slate-200"
+          className="rounded-lg px-3.5 py-2.5 text-center text-sm font-medium text-slate-400 transition hover:bg-slate-800 hover:text-slate-200 sm:py-1.5"
         >
           Request Free Trial
         </a>

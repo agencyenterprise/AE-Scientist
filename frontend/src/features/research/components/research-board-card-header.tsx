@@ -15,9 +15,9 @@ export function ResearchBoardCardHeader({
   parentRunId,
 }: ResearchBoardCardHeaderProps) {
   return (
-    <div className="flex items-center justify-between border-b border-slate-800/50 px-5 py-3">
+    <div className="flex items-center justify-between border-b border-slate-800/50 px-4 py-2.5 sm:px-5 sm:py-3">
       <div className="flex items-center gap-2">
-        <span className="font-mono text-sm text-slate-500">{displayRunId}</span>
+        <span className="font-mono text-xs text-slate-500 sm:text-sm">{displayRunId}</span>
         {parentRunId && (
           <a
             href={`/research/${parentRunId}`}
@@ -26,11 +26,11 @@ export function ResearchBoardCardHeader({
             onClick={e => e.stopPropagation()}
           >
             <GitBranch className="w-3 h-3" />
-            <span>from parent</span>
+            <span className="hidden sm:inline">from parent</span>
           </a>
         )}
       </div>
-      {getStatusBadge(status)}
+      {getStatusBadge(status, "sm")}
     </div>
   );
 }

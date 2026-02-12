@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { formatDistanceToNow } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import { Clock, Lock } from "lucide-react";
 import type { ResearchRun } from "@/types/research";
 import { Markdown } from "@/shared/components/Markdown";
@@ -19,6 +19,7 @@ export function ResearchHistoryCard({ research }: ResearchHistoryCardProps) {
   const createdAt = new Date(research.createdAt);
   const relativeCreated = formatDistanceToNow(createdAt, { addSuffix: true });
   const launchedAt = research.updatedAt ? new Date(research.updatedAt) : createdAt;
+  const launchedAtFormatted = format(launchedAt, "MMM d, h:mm a");
 
   const isRunning = research.status === "running";
   const isPending = research.status === "pending";
@@ -28,7 +29,7 @@ export function ResearchHistoryCard({ research }: ResearchHistoryCardProps) {
 
   return (
     <Link href={`/research/${research.runId}`}>
-      <article className="group relative overflow-hidden rounded-[1.75rem] border border-slate-800/70 bg-slate-950/70 p-5 transition hover:border-sky-500/60">
+      <article className="group relative overflow-hidden rounded-xl border border-slate-800/70 bg-slate-950/70 p-4 transition hover:border-sky-500/60 sm:rounded-[1.75rem] sm:p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1 space-y-3">
             {/* Title with status badge */}
@@ -83,8 +84,8 @@ export function ResearchHistoryCard({ research }: ResearchHistoryCardProps) {
                 <Clock className="h-3 w-3 text-slate-400" />
                 {relativeCreated}
               </span>
-              <span className="inline-flex items-center gap-1 rounded-full border border-slate-800/60 bg-slate-900/60 px-3 py-1 font-medium text-slate-200">
-                launched {launchedAt.toLocaleString()}
+              <span className="hidden items-center gap-1 rounded-full border border-slate-800/60 bg-slate-900/60 px-3 py-1 font-medium text-slate-200 sm:inline-flex">
+                launched {launchedAtFormatted}
               </span>
             </div>
           </div>

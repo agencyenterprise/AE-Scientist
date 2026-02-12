@@ -53,29 +53,29 @@ export function ResearchBoardCardBody({
   const isAccepted = evaluationDecision === "Accept";
 
   return (
-    <div className="p-5">
+    <div className="p-4 sm:p-5">
       {/* Title */}
-      <h3 className="text-lg font-semibold text-white">{ideaTitle}</h3>
+      <h3 className="text-base font-semibold text-white sm:text-lg">{ideaTitle}</h3>
 
       {/* Markdown Content */}
       {truncatedMarkdown && (
-        <div className="mt-2 text-sm leading-relaxed text-slate-400 prose-sm prose-invert max-w-none [&_p]:my-1 [&_h1]:hidden [&_h2]:hidden [&_h3]:hidden [&_h4]:hidden [&_h5]:hidden [&_h6]:hidden [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5">
+        <div className="mt-2 text-sm leading-relaxed text-slate-400 prose-sm prose-invert max-w-none line-clamp-3 sm:line-clamp-none [&_p]:my-1 [&_h1]:hidden [&_h2]:hidden [&_h3]:hidden [&_h4]:hidden [&_h5]:hidden [&_h6]:hidden [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5">
           <Markdown>{truncatedMarkdown}</Markdown>
         </div>
       )}
 
       {/* Error Message for Failed Runs */}
       {status === "failed" && errorMessage && (
-        <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3">
+        <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 p-2.5 sm:mt-4 sm:p-3">
           <div className="flex items-start gap-2">
             <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-400" />
-            <p className="text-sm text-red-300">{errorMessage}</p>
+            <p className="text-sm text-red-300 line-clamp-2">{errorMessage}</p>
           </div>
         </div>
       )}
 
       {/* Stats Grid */}
-      <div className="mt-5 grid gap-4 sm:grid-cols-4">
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:mt-5 sm:grid-cols-4 sm:gap-4">
         {/* Stage */}
         <div>
           <p className="mb-1.5 text-xs font-medium uppercase tracking-wider text-slate-500">

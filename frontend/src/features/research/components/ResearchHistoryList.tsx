@@ -22,9 +22,9 @@ export function ResearchHistoryList() {
   }
 
   return (
-    <section className="rounded-[2.4rem] border border-slate-800/70 bg-slate-950/70 p-6 shadow-[0_40px_120px_-70px_rgba(14,165,233,0.8)]">
+    <section className="rounded-2xl border border-slate-800/70 bg-slate-950/70 p-4 shadow-[0_25px_80px_-50px_rgba(14,165,233,0.6)] sm:rounded-[2.4rem] sm:p-6 sm:shadow-[0_40px_120px_-70px_rgba(14,165,233,0.8)]">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3 text-sky-200">
           <Lightbulb className="h-4 w-4" />
           <span className="text-xs font-semibold uppercase tracking-[0.35em]">

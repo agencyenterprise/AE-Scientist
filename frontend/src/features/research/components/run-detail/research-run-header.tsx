@@ -55,8 +55,8 @@ export function ResearchRunHeader({
   };
 
   return (
-    <div className="sticky top-0 z-20 -mx-6 -mt-6 mb-4 border-b border-border bg-background/95 px-6 py-4 backdrop-blur-sm">
-      <div className="flex items-center gap-4">
+    <div className="sticky top-0 z-20 -mx-4 -mt-4 mb-4 border-b border-border bg-background/95 px-4 py-3 backdrop-blur-sm sm:-mx-6 sm:-mt-6 sm:px-6 sm:py-4">
+      <div className="flex flex-wrap items-center gap-3 sm:gap-4">
         <Button
           variant="outline"
           size="icon-sm"
@@ -98,7 +98,7 @@ export function ResearchRunHeader({
           </p>
         </div>
 
-        <div className="flex flex-shrink-0 items-center gap-2">
+        <div className="flex w-full flex-shrink-0 flex-wrap items-center gap-2 sm:w-auto">
           {conversationId && (
             <Button
               variant="outline"

@@ -55,7 +55,7 @@ export function ChatGptUrlInput({
   const platform = useMemo(() => detectPlatform(url), [url]);
 
   return (
-    <div className="rounded-2xl border border-slate-800/70 bg-slate-950/60 p-5">
+    <div className="rounded-xl border border-slate-800/70 bg-slate-950/60 p-4 sm:rounded-2xl sm:p-5">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <label
           className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400"

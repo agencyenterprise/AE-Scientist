@@ -1799,8 +1799,8 @@ export function ResearchActivityFeed({
 
   if (isLoading) {
     return (
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/50 w-full p-6">
-        <h3 className="text-lg font-semibold text-white mb-4">Research Activity</h3>
+      <div className="rounded-xl border border-slate-800 bg-slate-900/50 w-full p-4 sm:rounded-2xl sm:p-6">
+        <h3 className="text-base font-semibold text-white mb-4 sm:text-lg">Research Activity</h3>
         <div className="flex items-center justify-center py-8 text-slate-400">
           <Loader2 className="h-5 w-5 animate-spin mr-2" />
           <span>Connecting to activity stream...</span>
@@ -1811,8 +1811,8 @@ export function ResearchActivityFeed({
 
   if (error) {
     return (
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/50 w-full p-6">
-        <h3 className="text-lg font-semibold text-white mb-4">Research Activity</h3>
+      <div className="rounded-xl border border-slate-800 bg-slate-900/50 w-full p-4 sm:rounded-2xl sm:p-6">
+        <h3 className="text-base font-semibold text-white mb-4 sm:text-lg">Research Activity</h3>
         <div className="flex flex-col items-center justify-center py-8 text-slate-400">
           <AlertCircle className="h-8 w-8 text-red-400 mb-2" />
           <p className="text-sm text-red-400">{error}</p>
@@ -1828,9 +1828,9 @@ export function ResearchActivityFeed({
   }
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900/50 w-full p-6">
+    <div className="rounded-xl border border-slate-800 bg-slate-900/50 w-full p-4 sm:rounded-2xl sm:p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
-        <h3 className="text-lg font-semibold text-white">Research Activity</h3>
+        <h3 className="text-base font-semibold text-white sm:text-lg">Research Activity</h3>
         {isConnected && !isRunFinished ? (
           <div className="flex items-center gap-2 rounded-full bg-emerald-500/15 px-3 py-1.5 sm:px-4 sm:py-2 self-start sm:self-auto">
             <span className="relative flex h-2.5 w-2.5 sm:h-3 sm:w-3">

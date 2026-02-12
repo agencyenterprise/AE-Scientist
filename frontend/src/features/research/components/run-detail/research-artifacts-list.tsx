@@ -99,16 +99,18 @@ function ArtifactRow({
 
   return (
     <div
-      className={`flex items-center justify-between py-3 first:pt-0 last:pb-0 ${indented ? "pl-6" : ""}`}
+      className={`flex flex-col gap-3 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between ${indented ? "pl-4 sm:pl-6" : ""}`}
     >
-      <div className="flex items-center gap-3">
+      <div className="flex min-w-0 items-center gap-3">
         <div
-          className={`flex h-10 w-10 items-center justify-center rounded-lg bg-slate-800 ${config.iconColor}`}
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-800 sm:h-10 sm:w-10 ${config.iconColor}`}
         >
           {config.icon}
         </div>
-        <div>
-          <p className="font-medium text-white">{artifact.filename}</p>
+        <div className="min-w-0">
+          <p className="truncate font-medium text-white text-sm sm:text-base">
+            {artifact.filename}
+          </p>
           <p className="text-xs text-slate-400">
             {config.label} &middot; {formatFileSize(artifact.file_size)} &middot;{" "}
             {formatRelativeTime(artifact.created_at)}
@@ -118,7 +120,7 @@ function ArtifactRow({
       <button
         onClick={() => downloadArtifact(artifact.id)}
         disabled={isDownloading}
-        className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+        className="inline-flex w-full shrink-0 items-center justify-center gap-1.5 rounded-lg bg-slate-800 px-3 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
       >
         {downloadingArtifactId === artifact.id ? (
           <>
@@ -128,7 +130,7 @@ function ArtifactRow({
         ) : (
           <>
             <Download className="h-4 w-4" />
-            Download
+            <span className="sm:inline">Download</span>
           </>
         )}
       </button>
@@ -178,15 +180,17 @@ function PdfGroup({ pdfs, downloadArtifact, isDownloading, downloadingArtifactId
 
   return (
     <div className="py-3 first:pt-0 last:pb-0">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
           <div
-            className={`flex h-10 w-10 items-center justify-center rounded-lg bg-slate-800 ${config.iconColor}`}
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-800 sm:h-10 sm:w-10 ${config.iconColor}`}
           >
             {config.icon}
           </div>
-          <div>
-            <p className="font-medium text-white">{latestPdf.filename}</p>
+          <div className="min-w-0">
+            <p className="truncate font-medium text-white text-sm sm:text-base">
+              {latestPdf.filename}
+            </p>
             <p className="text-xs text-slate-400">
               {config.label} &middot; {formatFileSize(latestPdf.file_size)} &middot;{" "}
               {formatRelativeTime(latestPdf.created_at)}
@@ -203,12 +207,12 @@ function PdfGroup({ pdfs, downloadArtifact, isDownloading, downloadingArtifactId
             ) : (
               <ChevronRight className="h-3.5 w-3.5" />
             )}
-            {olderPdfs.length} older version{olderPdfs.length > 1 ? "s" : ""}
+            {olderPdfs.length} older
           </button>
           <button
             onClick={() => downloadArtifact(latestPdf.id)}
             disabled={isDownloading}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-slate-800 px-3 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
           >
             {downloadingArtifactId === latestPdf.id ? (
               <>
@@ -226,7 +230,7 @@ function PdfGroup({ pdfs, downloadArtifact, isDownloading, downloadingArtifactId
       </div>
 
       {isExpanded && (
-        <div className="mt-2 border-l-2 border-slate-700 pl-4">
+        <div className="mt-2 border-l-2 border-slate-700 pl-2 sm:pl-4">
           {olderPdfs.map(pdf => (
             <ArtifactRow
               key={pdf.id}
@@ -265,10 +269,10 @@ export function ResearchArtifactsList({
   }
 
   return (
-    <div className="flex h-full flex-col rounded-2xl border border-slate-800 bg-slate-900/50 p-6">
+    <div className="flex h-full flex-col rounded-xl border border-slate-800 bg-slate-900/50 p-4 sm:rounded-2xl sm:p-6">
       <div className="mb-4 flex items-center gap-2">
         <Package className="h-5 w-5 text-amber-400" />
-        <h2 className="text-lg font-semibold text-white">Artifacts</h2>
+        <h2 className="text-base font-semibold text-white sm:text-lg">Artifacts</h2>
       </div>
       <div className="min-h-0 flex-1 divide-y divide-slate-800 overflow-y-auto">
         {/* PDF Group */}

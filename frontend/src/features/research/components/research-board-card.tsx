@@ -13,7 +13,6 @@ export interface ResearchBoardCardProps {
   currentStage: string | null;
   progress: number | null;
   gpuType: string;
-  createdByName: string;
   createdAt: string;
   artifactsCount: number;
   errorMessage: string | null;
@@ -31,7 +30,6 @@ export function ResearchBoardCard({
   currentStage,
   progress,
   gpuType,
-  createdByName,
   createdAt,
   artifactsCount,
   errorMessage,
@@ -40,7 +38,7 @@ export function ResearchBoardCard({
   evaluationDecision,
 }: ResearchBoardCardProps) {
   return (
-    <div className="group rounded-2xl border border-slate-800 bg-slate-900/50 transition-all hover:border-slate-700 hover:bg-slate-900/80">
+    <div className="group rounded-xl border border-slate-800 bg-slate-900/50 transition-all hover:border-slate-700 hover:bg-slate-900/80 sm:rounded-2xl">
       <ResearchBoardCardHeader
         displayRunId={displayRunId}
         status={status}
@@ -59,7 +57,6 @@ export function ResearchBoardCard({
       />
       <ResearchBoardCardFooter
         runId={runId}
-        createdByName={createdByName}
         createdAt={createdAt}
         artifactsCount={artifactsCount}
       />
