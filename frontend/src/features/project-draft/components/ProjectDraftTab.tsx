@@ -12,12 +12,14 @@ interface ProjectDraftTabProps {
   mobileView: "chat" | "draft";
   onMobileViewChange: (view: "chat" | "draft") => void;
   onAnswerFinish: () => void;
+  onIdeaUpdated?: () => void;
 }
 
 export function ProjectDraftTab({
   conversation,
   mobileView,
   onAnswerFinish,
+  onIdeaUpdated,
 }: ProjectDraftTabProps) {
   const [updatedProjectDraft, setUpdatedProjectDraft] = useState<IdeaType | null>(null);
 
@@ -29,14 +31,18 @@ export function ProjectDraftTab({
     setUpdatedProjectDraft(updatedDraft);
     // Clear the update after a brief moment to allow for future updates
     setTimeout(() => setUpdatedProjectDraft(null), 100);
+    // Notify parent that idea was updated (for mobile notification)
+    onIdeaUpdated?.();
   };
 
   return (
-    <div className="h-full min-h-0 flex flex-col overflow-hidden">
+    <div className="flex flex-col md:h-full md:min-h-0 md:overflow-hidden">
       {/* Columns container */}
-      <div className="flex-1 min-h-0 overflow-hidden flex flex-col md:flex-row">
-        {/* Left Panel - Chat */}
-        <div className="w-full md:w-1/2 h-full overflow-y-auto md:border-r md:border-slate-800 md:pr-4">
+      <div className="flex-1 flex flex-col md:min-h-0 md:overflow-hidden md:flex-row">
+        {/* Left Panel - Chat (hidden on mobile when viewing draft) */}
+        <div
+          className={`${mobileView === "chat" ? "flex" : "hidden"} md:flex w-full md:w-2/5 md:h-full md:overflow-y-auto md:border-r md:border-slate-800 md:pr-4 flex-col`}
+        >
           <ProjectDraftConversation
             conversationId={conversation.id}
             conversation={conversation}
@@ -52,8 +58,10 @@ export function ProjectDraftTab({
           />
         </div>
 
-        {/* Right Panel - Project */}
-        <div className={`w-full md:w-1/2 h-full overflow-y-auto`}>
+        {/* Right Panel - Project (hidden on mobile when viewing chat) */}
+        <div
+          className={`${mobileView === "draft" ? "flex" : "hidden"} md:flex w-full md:w-3/5 md:h-full md:overflow-y-auto md:pl-4 flex-col`}
+        >
           <ProjectDraft conversation={conversation} externalUpdate={updatedProjectDraft} />
         </div>
       </div>

@@ -81,10 +81,10 @@ export function ProjectDraftContent({
 
         {/* Edit Button */}
         {!isGenerating && activeVersion?.idea_markdown && (
-          <div className="flex justify-end px-4 py-2 border-t border-zinc-200 dark:border-zinc-800">
+          <div className="flex justify-center sm:justify-end px-2 sm:px-4 py-2 border-t border-zinc-200 dark:border-zinc-800">
             <button
               onClick={() => setIsEditModalOpen(true)}
-              className="inline-flex items-center gap-2 rounded-lg border border-blue-500/40 px-3 py-1.5 text-sm font-medium text-blue-200 transition-colors hover:bg-blue-500/10"
+              className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg border border-blue-500/40 px-3 py-2 sm:py-1.5 text-sm font-medium text-blue-200 transition-colors hover:bg-blue-500/10"
             >
               <Pencil className="h-4 w-4" />
               Manual edit

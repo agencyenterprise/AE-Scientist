@@ -38,18 +38,18 @@ export function ProjectDraftFooter({
   return (
     <>
       {/* Version Info and Diff Legend */}
-      <div className="flex-shrink-0 py-2 text-xs text-muted-foreground flex items-center justify-between">
+      <div className="flex-shrink-0 py-2 text-[10px] sm:text-xs text-muted-foreground flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
           {showDiffs && comparisonVersion && nextVersion && !isGenerating
-            ? `Changes from version ${comparisonVersion.version_number} to ${nextVersion.version_number}`
+            ? `Changes from v${comparisonVersion.version_number} to v${nextVersion.version_number}`
             : `Version ${projectDraft.active_version?.version_number || "?"}`}{" "}
-          • {projectDraft.active_version?.is_manual_edit ? "Manual edit" : "AI generated"} •{" "}
+          • {projectDraft.active_version?.is_manual_edit ? "Manual" : "AI"} •{" "}
           {projectDraft.active_version?.created_at
             ? new Date(projectDraft.active_version.created_at).toLocaleDateString()
             : "Unknown date"}
         </div>
         {showDiffs && comparisonVersion && nextVersion && !isGenerating && (
-          <div>
+          <div className="hidden sm:block">
             <span className="inline-flex items-center">
               <span className="w-3 h-3 bg-red-500/20 border border-red-500/30 rounded mr-2"></span>
               Removed

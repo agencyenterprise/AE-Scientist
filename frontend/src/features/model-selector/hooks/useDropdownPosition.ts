@@ -14,6 +14,8 @@ export interface DropdownCoords {
   right: number;
   /** Maximum height available for the dropdown */
   maxHeight: number;
+  /** Whether to use mobile-optimized full-width layout */
+  isMobileFullWidth: boolean;
 }
 
 /**
@@ -50,6 +52,8 @@ const VIEWPORT_MARGIN = 16;
 const MIN_DROPDOWN_HEIGHT = 200;
 /** Maximum height for dropdown */
 const MAX_DROPDOWN_HEIGHT = 400;
+/** Breakpoint for mobile full-width mode (matches Tailwind md breakpoint) */
+const MOBILE_BREAKPOINT = 768;
 
 /**
  * Hook for managing dropdown positioning with viewport-aware placement.
@@ -94,14 +98,14 @@ export function useDropdownPosition(): UseDropdownPositionReturn {
     const buttonRect = buttonRef.current.getBoundingClientRect();
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
-    const spaceOnRight = viewportWidth - buttonRect.right;
+    const isMobile = viewportWidth < MOBILE_BREAKPOINT;
 
     // Calculate space above and below
     const spaceBelow = viewportHeight - buttonRect.bottom - DROPDOWN_MARGIN - VIEWPORT_MARGIN;
     const spaceAbove = buttonRect.top - DROPDOWN_MARGIN - VIEWPORT_MARGIN;
 
-    // Prefer opening above if there's enough space (better UX for bottom-positioned buttons)
-    const openAbove = spaceAbove >= MIN_DROPDOWN_HEIGHT;
+    // On mobile, prefer opening below; on desktop, prefer above if there's enough space
+    const openAbove = !isMobile && spaceAbove >= MIN_DROPDOWN_HEIGHT;
 
     const availableHeight = openAbove ? spaceAbove : spaceBelow;
     const maxHeight = Math.min(availableHeight, MAX_DROPDOWN_HEIGHT);
@@ -110,24 +114,40 @@ export function useDropdownPosition(): UseDropdownPositionReturn {
 
     setVerticalPosition(openAbove ? "above" : "below");
 
-    if (spaceOnRight < DROPDOWN_WIDTH) {
-      setPosition("right");
-      setCoords({
-        top,
-        bottom,
-        left: 0,
-        right: viewportWidth - buttonRect.right,
-        maxHeight,
-      });
-    } else {
+    // On mobile, use full-width centered positioning
+    if (isMobile) {
       setPosition("left");
       setCoords({
         top,
         bottom,
-        left: buttonRect.left,
-        right: 0,
+        left: VIEWPORT_MARGIN,
+        right: VIEWPORT_MARGIN,
         maxHeight,
+        isMobileFullWidth: true,
       });
+    } else {
+      const spaceOnRight = viewportWidth - buttonRect.right;
+      if (spaceOnRight < DROPDOWN_WIDTH) {
+        setPosition("right");
+        setCoords({
+          top,
+          bottom,
+          left: 0,
+          right: viewportWidth - buttonRect.right,
+          maxHeight,
+          isMobileFullWidth: false,
+        });
+      } else {
+        setPosition("left");
+        setCoords({
+          top,
+          bottom,
+          left: buttonRect.left,
+          right: 0,
+          maxHeight,
+          isMobileFullWidth: false,
+        });
+      }
     }
   }, []);
 

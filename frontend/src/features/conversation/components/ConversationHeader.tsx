@@ -88,7 +88,7 @@ export function ConversationHeader({
   };
 
   return (
-    <div className="flex flex-col gap-3 mb-4 md:mb-6 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+    <div className="flex flex-col gap-2 mb-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:mb-4 md:mb-6">
       {/* Title Section - Takes priority on mobile */}
       <div className="flex flex-col gap-1 min-w-0 flex-1">
         <TitleEditor

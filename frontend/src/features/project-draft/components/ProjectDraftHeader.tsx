@@ -43,10 +43,10 @@ export function ProjectDraftHeader({
   const canRevert = comparisonVersion && nextVersion && !isGenerating;
 
   return (
-    <div className="flex-shrink-0 py-4">
-      <div className="flex items-center justify-between mb-2">
-        <label className="text-sm font-medium text-muted-foreground">Title</label>
-        <div className="flex items-center gap-2">
+    <div className="flex-shrink-0 py-3 sm:py-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-2">
+        <label className="text-xs sm:text-sm font-medium text-muted-foreground">Title</label>
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
           {/* Show diffs toggle */}
           {!isGenerating && comparisonVersion && nextVersion && (
             <button

@@ -5,6 +5,7 @@ import { useRef, useState, useEffect } from "react";
 import { useAuth } from "@/shared/hooks/useAuth";
 import { useRouter } from "next/navigation";
 import { MCPIntegrationModal } from "@/features/mcp-integration/components/MCPIntegrationModal";
+import { Plug } from "lucide-react";
 
 function getInitials(name: string): string {
   return name
@@ -19,6 +20,7 @@ export function UserProfileDropdown() {
   const { user, logout } = useAuth();
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
+  const [isMCPModalOpen, setIsMCPModalOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [coords, setCoords] = useState({ top: 0, right: 0 });
 
@@ -68,7 +70,16 @@ export function UserProfileDropdown() {
                 >
                   Billing
                 </button>
-                <MCPIntegrationModal />
+                <button
+                  onClick={() => {
+                    setIsOpen(false);
+                    setIsMCPModalOpen(true);
+                  }}
+                  className="w-full rounded px-3 py-2 text-left text-sm text-slate-300 transition-colors hover:bg-slate-700 hover:text-white flex items-center gap-2"
+                >
+                  <Plug className="h-4 w-4" />
+                  Integrate with Claude/Cursor
+                </button>
                 <button
                   onClick={() => {
                     logout();
@@ -83,6 +94,9 @@ export function UserProfileDropdown() {
           </>,
           document.body
         )}
+
+      {/* MCP Integration Modal - rendered outside dropdown so it persists when dropdown closes */}
+      <MCPIntegrationModal open={isMCPModalOpen} onOpenChange={setIsMCPModalOpen} />
     </>
   );
 }

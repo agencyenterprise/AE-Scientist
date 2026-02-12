@@ -60,11 +60,11 @@ function IdeationQueueCardComponent({
             onClick={handleRefineClick}
             variant="ghost"
             size="sm"
-            className="text-slate-400 hover:text-slate-300 shrink-0"
+            className="text-slate-400 hover:text-slate-300 shrink-0 px-2 sm:px-3"
             aria-label="Refine research idea"
           >
             <Pencil className="h-3 w-3" />
-            Refine further
+            <span className="hidden sm:inline">Refine further</span>
           </Button>
         </div>
 

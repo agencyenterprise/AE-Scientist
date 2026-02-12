@@ -38,13 +38,13 @@ export function TitleEditor({
 
   if (isEditing) {
     return (
-      <div className="flex items-center space-x-2">
+      <div className="flex items-center gap-1.5 sm:gap-2">
         <input
           type="text"
           value={editValue}
           onChange={e => onEditValueChange(e.target.value)}
           onKeyDown={handleKeyDown}
-          className="text-xl font-bold text-foreground bg-card border border-border rounded px-2 py-1 flex-1 min-w-0 focus:outline-none focus:ring-2 focus:ring-ring shadow-sm"
+          className="text-base sm:text-xl font-bold text-foreground bg-card border border-border rounded px-2 py-1 flex-1 min-w-0 focus:outline-none focus:ring-2 focus:ring-ring shadow-sm"
           disabled={isUpdating}
           autoFocus
         />
@@ -81,8 +81,8 @@ export function TitleEditor({
   }
 
   return (
-    <div className="flex items-center space-x-2">
-      <h1 className="text-xl font-bold text-foreground truncate">{title}</h1>
+    <div className="flex items-center gap-1.5 sm:gap-2">
+      <h1 className="text-base sm:text-xl font-bold text-foreground truncate">{title}</h1>
       <button
         onClick={onStartEdit}
         className="p-1 text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"

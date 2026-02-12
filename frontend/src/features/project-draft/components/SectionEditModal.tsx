@@ -99,7 +99,7 @@ export function SectionEditModal({
             disabled={isSaving}
             autoFocus
           />
-          <p className="mt-2 text-xs text-muted-foreground">
+          <p className="mt-2 text-xs text-muted-foreground hidden md:block">
             Press Ctrl+Enter to save, Escape to cancel
           </p>
         </div>

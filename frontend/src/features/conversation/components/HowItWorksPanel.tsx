@@ -148,117 +148,117 @@ export function HowItWorksPanel({ className }: HowItWorksPanelProps) {
   }, []);
 
   return (
-    <div className={cn("space-y-6 text-sm text-slate-100", className)}>
-      <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-slate-400">
-        <GitBranch className="h-4 w-4 text-sky-400" />
+    <div className={cn("space-y-4 sm:space-y-6 text-sm text-slate-100", className)}>
+      <div className="flex items-center gap-2 text-[10px] sm:text-xs uppercase tracking-[0.15em] sm:tracking-[0.2em] text-slate-400">
+        <GitBranch className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-sky-400" />
         <span>How AE Scientist Works</span>
       </div>
-      <h2 className="mt-2 text-2xl font-semibold text-white">From idea to paper</h2>
-      <p className="mt-2 text-slate-300">
+      <h2 className="text-xl sm:text-2xl font-semibold text-white">From idea to paper</h2>
+      <p className="text-sm sm:text-base text-slate-300">
         AE Scientist is a two-phase system: first you refine your research idea with AI assistance,
         then launch an automated pipeline that runs experiments and writes a paper.
       </p>
 
-      <section className="mt-6">
-        <h3 className="text-base font-semibold text-white">Your journey</h3>
-        <div className="mt-3 space-y-3">
+      <section className="mt-4 sm:mt-6">
+        <h3 className="text-sm sm:text-base font-semibold text-white">Your journey</h3>
+        <div className="mt-2 sm:mt-3 space-y-2 sm:space-y-3">
           {USER_JOURNEY.map(step => (
             <div
               key={step.title}
-              className="rounded-2xl border border-slate-800/60 bg-slate-900/40 p-4 shadow-sm"
+              className="rounded-xl sm:rounded-2xl border border-slate-800/60 bg-slate-900/40 p-3 sm:p-4 shadow-sm"
             >
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 sm:gap-3">
                 <span
                   className={cn(
-                    "flex h-8 w-8 items-center justify-center rounded-full",
+                    "flex h-7 w-7 sm:h-8 sm:w-8 flex-shrink-0 items-center justify-center rounded-full",
                     step.bgColor
                   )}
                 >
-                  <step.icon className={cn("h-4 w-4", step.iconColor)} />
+                  <step.icon className={cn("h-3.5 w-3.5 sm:h-4 sm:w-4", step.iconColor)} />
                 </span>
-                <p className="text-sm font-semibold text-white">{step.title}</p>
+                <p className="text-xs sm:text-sm font-semibold text-white">{step.title}</p>
               </div>
-              <p className="mt-2 text-slate-300">{step.detail}</p>
+              <p className="mt-2 text-xs sm:text-sm text-slate-300">{step.detail}</p>
             </div>
           ))}
         </div>
       </section>
 
-      <section className="mt-6">
-        <h3 className="text-base font-semibold text-white">What the pipeline does</h3>
-        <ol className="mt-3 space-y-3">
+      <section className="mt-4 sm:mt-6">
+        <h3 className="text-sm sm:text-base font-semibold text-white">What the pipeline does</h3>
+        <ol className="mt-2 sm:mt-3 space-y-2 sm:space-y-3">
           {PIPELINE_FLOW_STEPS.map((step, index) => (
             <li
               key={step.title}
-              className="rounded-2xl border border-slate-800/60 bg-slate-900/40 p-4 shadow-sm"
+              className="rounded-xl sm:rounded-2xl border border-slate-800/60 bg-slate-900/40 p-3 sm:p-4 shadow-sm"
             >
-              <div className="flex items-center gap-3">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-sky-500/20 text-xs font-semibold text-sky-300">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <span className="flex h-5 w-5 sm:h-6 sm:w-6 flex-shrink-0 items-center justify-center rounded-full bg-sky-500/20 text-[10px] sm:text-xs font-semibold text-sky-300">
                   {index + 1}
                 </span>
-                <p className="text-sm font-semibold text-white">{step.title}</p>
+                <p className="text-xs sm:text-sm font-semibold text-white">{step.title}</p>
               </div>
-              <p className="mt-2 text-slate-300">{step.detail}</p>
+              <p className="mt-2 text-xs sm:text-sm text-slate-300">{step.detail}</p>
             </li>
           ))}
         </ol>
       </section>
 
-      <section className="mt-6">
-        <h3 className="text-base font-semibold text-white">Pipeline stages</h3>
-        <p className="mt-2 text-slate-300">
+      <section className="mt-4 sm:mt-6">
+        <h3 className="text-sm sm:text-base font-semibold text-white">Pipeline stages</h3>
+        <p className="mt-1.5 sm:mt-2 text-xs sm:text-sm text-slate-300">
           The research pipeline progresses through five stages, each building on the previous:
         </p>
-        <ol className="mt-3 space-y-2">
+        <ol className="mt-2 sm:mt-3 space-y-1.5 sm:space-y-2">
           {PIPELINE_STAGES.map(stage => (
             <li
               key={stage.id}
-              className="flex items-start gap-3 rounded-xl border border-slate-800/40 bg-slate-900/30 p-3"
+              className="flex items-start gap-2 sm:gap-3 rounded-lg sm:rounded-xl border border-slate-800/40 bg-slate-900/30 p-2.5 sm:p-3"
             >
-              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-xs font-semibold text-emerald-300">
+              <span className="flex h-4 w-4 sm:h-5 sm:w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-[10px] sm:text-xs font-semibold text-emerald-300">
                 {stage.id}
               </span>
-              <div>
-                <p className="text-sm font-semibold text-white">{stage.title}</p>
-                <p className="text-xs text-slate-400">{stage.detail}</p>
+              <div className="min-w-0">
+                <p className="text-xs sm:text-sm font-semibold text-white">{stage.title}</p>
+                <p className="text-[10px] sm:text-xs text-slate-400">{stage.detail}</p>
               </div>
             </li>
           ))}
         </ol>
       </section>
 
-      <section className="mt-6">
-        <h3 className="text-base font-semibold text-white">
+      <section className="mt-4 sm:mt-6">
+        <h3 className="text-sm sm:text-base font-semibold text-white">
           Tree-based experimentation &amp; statistical validation
         </h3>
-        <p className="mt-2 text-slate-300">
+        <p className="mt-1.5 sm:mt-2 text-xs sm:text-sm text-slate-300">
           Within each stage, the agentic tree search explores experiment variations and ensures
           results are statistically robust:
         </p>
-        <div className="mt-3 space-y-3">
+        <div className="mt-2 sm:mt-3 space-y-2 sm:space-y-3">
           {TREE_SEARCH_CONCEPTS.map(concept => (
             <div
               key={concept.title}
-              className="rounded-2xl border border-slate-800/60 bg-slate-900/40 p-4"
+              className="rounded-xl sm:rounded-2xl border border-slate-800/60 bg-slate-900/40 p-3 sm:p-4"
             >
-              <div className="flex items-center gap-3">
-                <concept.icon className="h-5 w-5 text-violet-400" />
-                <p className="text-sm font-semibold text-white">{concept.title}</p>
+              <div className="flex items-center gap-2 sm:gap-3">
+                <concept.icon className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0 text-violet-400" />
+                <p className="text-xs sm:text-sm font-semibold text-white">{concept.title}</p>
               </div>
-              <p className="mt-2 text-slate-300">{concept.detail}</p>
+              <p className="mt-2 text-xs sm:text-sm text-slate-300">{concept.detail}</p>
             </div>
           ))}
         </div>
       </section>
 
-      <section className="mt-6 grid gap-4 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-800/60 bg-slate-900/40 p-4">
-          <div className="flex items-center gap-2 text-slate-400 text-xs uppercase tracking-widest">
-            <Clock4 className="h-4 w-4 text-amber-300" />
+      <section className="mt-4 sm:mt-6 grid gap-2 sm:gap-4 grid-cols-1 sm:grid-cols-3">
+        <div className="rounded-xl sm:rounded-2xl border border-slate-800/60 bg-slate-900/40 p-3 sm:p-4">
+          <div className="flex items-center gap-2 text-slate-400 text-[10px] sm:text-xs uppercase tracking-wider sm:tracking-widest">
+            <Clock4 className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-amber-300" />
             Runtime
           </div>
-          <p className="mt-2 text-lg font-semibold text-white">4-6 hours</p>
-          <p className="text-slate-400 text-sm">
+          <p className="mt-1.5 sm:mt-2 text-base sm:text-lg font-semibold text-white">4-6 hours</p>
+          <p className="text-slate-400 text-xs sm:text-sm">
             Typical runtime for a research run. Can vary significantly based on experiment
             complexity and the hardware you select.
             {maxRuntimeHours !== null && (
@@ -266,51 +266,53 @@ export function HowItWorksPanel({ className }: HowItWorksPanelProps) {
             )}
           </p>
         </div>
-        <div className="rounded-2xl border border-slate-800/60 bg-slate-900/40 p-4">
-          <div className="flex items-center gap-2 text-slate-400 text-xs uppercase tracking-widest">
-            <DollarSign className="h-4 w-4 text-emerald-300" />
+        <div className="rounded-xl sm:rounded-2xl border border-slate-800/60 bg-slate-900/40 p-3 sm:p-4">
+          <div className="flex items-center gap-2 text-slate-400 text-[10px] sm:text-xs uppercase tracking-wider sm:tracking-widest">
+            <DollarSign className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-emerald-300" />
             Cost
           </div>
-          <p className="mt-2 text-lg font-semibold text-white">~$25 USD</p>
-          <p className="text-slate-400 text-sm">
+          <p className="mt-1.5 sm:mt-2 text-base sm:text-lg font-semibold text-white">~$25 USD</p>
+          <p className="text-slate-400 text-xs sm:text-sm">
             Typical cost per research run. Actual cost varies based on runtime, experiment
             complexity, and the hardware tier you select.
           </p>
         </div>
-        <div className="rounded-2xl border border-slate-800/60 bg-slate-900/40 p-4">
-          <div className="flex items-center gap-2 text-slate-400 text-xs uppercase tracking-widest">
-            <FileText className="h-4 w-4 text-sky-300" />
+        <div className="rounded-xl sm:rounded-2xl border border-slate-800/60 bg-slate-900/40 p-3 sm:p-4">
+          <div className="flex items-center gap-2 text-slate-400 text-[10px] sm:text-xs uppercase tracking-wider sm:tracking-widest">
+            <FileText className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-sky-300" />
             Deliverables
           </div>
-          <p className="mt-2 text-lg font-semibold text-white">Final Paper + Code + Plots</p>
-          <p className="text-slate-400 text-sm">
+          <p className="mt-1.5 sm:mt-2 text-base sm:text-lg font-semibold text-white">
+            Final Paper + Code + Plots
+          </p>
+          <p className="text-slate-400 text-xs sm:text-sm">
             All relevant artifacts including the full log of the experiment will be available for
             download once complete.
           </p>
         </div>
       </section>
 
-      <section className="mt-6">
-        <h3 className="text-base font-semibold text-white">Best situations to run</h3>
-        <ul className="mt-3 space-y-2 text-slate-300">
+      <section className="mt-4 sm:mt-6">
+        <h3 className="text-sm sm:text-base font-semibold text-white">Best situations to run</h3>
+        <ul className="mt-2 sm:mt-3 space-y-1.5 sm:space-y-2 text-xs sm:text-sm text-slate-300">
           {BEST_USE_CASES.map(item => (
             <li key={item} className="flex items-start gap-2">
-              <BarChart3 className="mt-0.5 h-4 w-4 text-sky-300" />
+              <BarChart3 className="mt-0.5 h-3.5 w-3.5 sm:h-4 sm:w-4 flex-shrink-0 text-sky-300" />
               <span>{item}</span>
             </li>
           ))}
         </ul>
       </section>
 
-      <section className="mt-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4">
-        <div className="flex items-center gap-2 text-sm font-semibold text-amber-200">
-          <AlertTriangle className="h-5 w-5" />
+      <section className="mt-4 sm:mt-6 rounded-xl sm:rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 sm:p-4">
+        <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-amber-200">
+          <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
           Know the current limitations
         </div>
-        <ul className="mt-3 space-y-2 text-amber-100/90">
+        <ul className="mt-2 sm:mt-3 space-y-1.5 sm:space-y-2 text-xs sm:text-sm text-amber-100/90">
           {LIMITATIONS.map(item => (
             <li key={item} className="flex items-start gap-2">
-              <span className="mt-0.5 h-2 w-2 rounded-full bg-amber-300/80" />
+              <span className="mt-1.5 sm:mt-0.5 h-1.5 w-1.5 sm:h-2 sm:w-2 flex-shrink-0 rounded-full bg-amber-300/80" />
               <span>{item}</span>
             </li>
           ))}

@@ -19,7 +19,7 @@ export function Header() {
   const isHowItWorksActive = pathname.startsWith("/how-it-works");
 
   return (
-    <header className="border-b border-slate-800 bg-slate-900/70 backdrop-blur">
+    <header className="relative z-50 border-b border-slate-800 bg-slate-900/70 backdrop-blur">
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-4 md:px-8">
         <div className="flex items-center gap-4 md:gap-8">
           {user && <MobileNav />}

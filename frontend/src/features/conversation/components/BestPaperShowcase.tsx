@@ -175,7 +175,7 @@ export function BestPaperShowcase({ className }: BestPaperShowcaseProps) {
     {
       id: "summary",
       title: "Review Summary",
-      content: <p className="text-slate-300 whitespace-pre-wrap">{SUMMARY}</p>,
+      content: <p className="text-slate-300 whitespace-pre-wrap text-xs sm:text-sm">{SUMMARY}</p>,
       defaultExpanded: true,
       color: "sky",
     },
@@ -183,7 +183,12 @@ export function BestPaperShowcase({ className }: BestPaperShowcaseProps) {
       id: "strengths",
       title: "Strengths",
       content: (
-        <ul className={cn("list-disc list-inside space-y-2", bulletColor("emerald"))}>
+        <ul
+          className={cn(
+            "list-disc list-inside space-y-1.5 sm:space-y-2 text-xs sm:text-sm",
+            bulletColor("emerald")
+          )}
+        >
           {STRENGTHS.map((strength, idx) => (
             <li key={idx} className="text-slate-300">
               {strength}
@@ -198,7 +203,12 @@ export function BestPaperShowcase({ className }: BestPaperShowcaseProps) {
       id: "weaknesses",
       title: "Weaknesses",
       content: (
-        <ul className={cn("list-disc list-inside space-y-2", bulletColor("amber"))}>
+        <ul
+          className={cn(
+            "list-disc list-inside space-y-1.5 sm:space-y-2 text-xs sm:text-sm",
+            bulletColor("amber")
+          )}
+        >
           {WEAKNESSES.map((weakness, idx) => (
             <li key={idx} className="text-slate-300">
               {weakness}
@@ -212,52 +222,56 @@ export function BestPaperShowcase({ className }: BestPaperShowcaseProps) {
   ];
 
   return (
-    <div className={cn("space-y-6", className)}>
+    <div className={cn("space-y-4 sm:space-y-6", className)}>
       {/* Main Header */}
       <div>
-        <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-slate-400">
-          <Trophy className="h-4 w-4 text-amber-400" />
+        <div className="flex items-center gap-2 text-[10px] sm:text-xs uppercase tracking-[0.15em] sm:tracking-[0.2em] text-slate-400">
+          <Trophy className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-amber-400" />
           <span>Example Output</span>
         </div>
-        <h3 className="mt-2 text-lg font-semibold text-white">Best Paper Produced</h3>
-        <p className="mt-1 text-slate-300 text-sm">
+        <h3 className="mt-1.5 sm:mt-2 text-base sm:text-lg font-semibold text-white">
+          Best Paper Produced
+        </h3>
+        <p className="mt-1 text-slate-300 text-xs sm:text-sm">
           See what AE Scientist can produce. This paper received an &quot;Accept&quot; decision from
           our automated peer review system with an overall score of 6/10.
         </p>
       </div>
 
       {/* ===== INPUT SECTION ===== */}
-      <div className="rounded-2xl border border-violet-800/40 bg-violet-950/20 p-5">
-        <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-violet-400 mb-4">
-          <Lightbulb className="h-4 w-4" />
+      <div className="rounded-xl sm:rounded-2xl border border-violet-800/40 bg-violet-950/20 p-3 sm:p-5">
+        <div className="flex items-center gap-2 text-[10px] sm:text-xs uppercase tracking-[0.15em] sm:tracking-[0.2em] text-violet-400 mb-3 sm:mb-4">
+          <Lightbulb className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
           <span>User Input</span>
         </div>
 
         {/* Research Title */}
-        <div className="mb-4">
-          <div className="text-xs text-violet-400/80 uppercase tracking-wide mb-1">
+        <div className="mb-3 sm:mb-4">
+          <div className="text-[10px] sm:text-xs text-violet-400/80 uppercase tracking-wide mb-1">
             Research Title
           </div>
-          <p className="text-sm font-medium text-violet-100">{RESEARCH_TITLE}</p>
+          <p className="text-xs sm:text-sm font-medium text-violet-100">{RESEARCH_TITLE}</p>
         </div>
 
         {/* Full Research Idea (collapsible) */}
         <div className="border border-violet-800/40 rounded-lg overflow-hidden">
           <button
             onClick={() => toggleSection("researchIdea")}
-            className="flex items-center justify-between w-full py-3 px-4 text-left hover:bg-violet-800/20 transition"
+            className="flex items-center justify-between w-full py-2.5 sm:py-3 px-3 sm:px-4 text-left hover:bg-violet-800/20 transition"
           >
-            <span className="font-medium text-violet-200">Full Research Idea</span>
+            <span className="text-sm sm:text-base font-medium text-violet-200">
+              Full Research Idea
+            </span>
             <ChevronDown
               className={cn(
-                "h-4 w-4 text-violet-400 transition-transform",
+                "h-4 w-4 flex-shrink-0 text-violet-400 transition-transform",
                 expandedSections.researchIdea && "rotate-180"
               )}
             />
           </button>
           {expandedSections.researchIdea && (
-            <div className="px-4 pb-4 text-sm text-violet-100/90">
-              <Markdown className="prose-invert prose-violet prose-sm max-w-none">
+            <div className="px-3 sm:px-4 pb-3 sm:pb-4 text-xs sm:text-sm text-violet-100/90">
+              <Markdown className="prose-invert prose-violet prose-xs sm:prose-sm max-w-none">
                 {RESEARCH_IDEA}
               </Markdown>
             </div>
@@ -266,22 +280,24 @@ export function BestPaperShowcase({ className }: BestPaperShowcaseProps) {
       </div>
 
       {/* ===== OUTPUT SECTION ===== */}
-      <div className="rounded-2xl border border-emerald-800/40 bg-emerald-950/20 p-5">
-        <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-emerald-400 mb-4">
-          <FileText className="h-4 w-4" />
+      <div className="rounded-xl sm:rounded-2xl border border-emerald-800/40 bg-emerald-950/20 p-3 sm:p-5">
+        <div className="flex items-center gap-2 text-[10px] sm:text-xs uppercase tracking-[0.15em] sm:tracking-[0.2em] text-emerald-400 mb-3 sm:mb-4">
+          <FileText className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
           <span>Generated Output</span>
         </div>
 
         {/* Download Banner - at the top */}
-        <div className="rounded-lg border border-emerald-700/50 bg-emerald-950/40 p-4 mb-5">
+        <div className="rounded-lg border border-emerald-700/50 bg-emerald-950/40 p-3 sm:p-4 mb-4 sm:mb-5">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-emerald-500/20">
-                <FileText className="h-5 w-5 text-emerald-400" />
+            <div className="flex items-start gap-2 sm:gap-3">
+              <div className="flex h-8 w-8 sm:h-10 sm:w-10 flex-shrink-0 items-center justify-center rounded-full bg-emerald-500/20">
+                <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-400" />
               </div>
               <div>
-                <h4 className="text-sm font-semibold text-emerald-100">Download Full Paper</h4>
-                <p className="text-xs text-emerald-300/80 mt-0.5">
+                <h4 className="text-xs sm:text-sm font-semibold text-emerald-100">
+                  Download Full Paper
+                </h4>
+                <p className="text-[10px] sm:text-xs text-emerald-300/80 mt-0.5">
                   View the complete research paper with all figures and analysis
                 </p>
               </div>
@@ -289,7 +305,7 @@ export function BestPaperShowcase({ className }: BestPaperShowcaseProps) {
             <button
               onClick={handleDownload}
               disabled={isDownloading}
-              className="flex items-center justify-center gap-2 rounded border border-emerald-600 bg-emerald-500/20 px-4 py-2 text-sm font-medium text-emerald-100 transition-colors hover:bg-emerald-500/30 disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
+              className="flex items-center justify-center gap-2 rounded border border-emerald-600 bg-emerald-500/20 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-emerald-100 transition-colors hover:bg-emerald-500/30 disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
             >
               {isDownloading ? (
                 <>
@@ -298,7 +314,7 @@ export function BestPaperShowcase({ className }: BestPaperShowcaseProps) {
                 </>
               ) : (
                 <>
-                  <Download className="h-4 w-4" />
+                  <Download className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   <span>Download PDF</span>
                 </>
               )}
@@ -309,16 +325,18 @@ export function BestPaperShowcase({ className }: BestPaperShowcaseProps) {
 
         {/* Paper Analysis Section */}
         <div>
-          <h4 className="text-sm font-semibold text-emerald-100 mb-3">Paper Analysis</h4>
+          <h4 className="text-xs sm:text-sm font-semibold text-emerald-100 mb-2 sm:mb-3">
+            Paper Analysis
+          </h4>
 
           {/* Scores Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3 sm:mb-4">
             {SCORES.map(metric => (
               <div
                 key={metric.label}
                 className="rounded-lg border border-emerald-800/40 bg-emerald-950/30 p-2 sm:p-3"
               >
-                <div className="text-[10px] sm:text-xs text-emerald-400/80 uppercase tracking-wide mb-1">
+                <div className="text-[10px] sm:text-xs text-emerald-400/80 uppercase tracking-wide mb-0.5 sm:mb-1">
                   {metric.label}
                 </div>
                 <div className="text-base sm:text-lg font-bold text-amber-300">
@@ -349,19 +367,21 @@ export function BestPaperShowcase({ className }: BestPaperShowcaseProps) {
               >
                 <button
                   onClick={() => toggleSection(section.id)}
-                  className="flex items-center justify-between w-full py-3 px-4 text-left hover:bg-emerald-800/20 transition"
+                  className="flex items-center justify-between w-full py-2.5 sm:py-3 px-3 sm:px-4 text-left hover:bg-emerald-800/20 transition"
                 >
-                  <span className="font-medium text-emerald-100">{section.title}</span>
+                  <span className="text-sm sm:text-base font-medium text-emerald-100">
+                    {section.title}
+                  </span>
                   <ChevronDown
                     className={cn(
-                      "h-4 w-4 text-emerald-400 transition-transform",
+                      "h-4 w-4 flex-shrink-0 text-emerald-400 transition-transform",
                       expandedSections[section.id] && "rotate-180"
                     )}
                   />
                 </button>
 
                 {expandedSections[section.id] && (
-                  <div className="px-4 pb-3 text-sm">{section.content}</div>
+                  <div className="px-3 sm:px-4 pb-3 text-xs sm:text-sm">{section.content}</div>
                 )}
               </div>
             ))}

@@ -18,12 +18,22 @@ import { fetchMCPApiKey, generateMCPApiKey, revokeMCPApiKey } from "../api";
 
 interface MCPIntegrationModalProps {
   trigger?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
-export function MCPIntegrationModal({ trigger }: MCPIntegrationModalProps) {
+export function MCPIntegrationModal({
+  trigger,
+  open: controlledOpen,
+  onOpenChange,
+}: MCPIntegrationModalProps) {
   const queryClient = useQueryClient();
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Support both controlled and uncontrolled modes
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
 
   const apiKeyQuery = useQuery({
     queryKey: ["mcp-integration", "key"],
@@ -75,7 +85,11 @@ export function MCPIntegrationModal({ trigger }: MCPIntegrationModalProps) {
   );
 
   const handleOpenChange = (isOpen: boolean) => {
-    setOpen(isOpen);
+    if (isControlled) {
+      onOpenChange?.(isOpen);
+    } else {
+      setInternalOpen(isOpen);
+    }
     if (!isOpen) {
       setError(null);
     }
@@ -83,15 +97,17 @@ export function MCPIntegrationModal({ trigger }: MCPIntegrationModalProps) {
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        {trigger ?? (
-          <button className="w-full rounded px-3 py-2 text-left text-sm text-slate-300 transition-colors hover:bg-slate-700 hover:text-white flex items-center gap-2">
-            <Plug className="h-4 w-4" />
-            Integrate with Claude/Cursor
-          </button>
-        )}
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-2xl">
+      {!isControlled && (
+        <DialogTrigger asChild>
+          {trigger ?? (
+            <button className="w-full rounded px-3 py-2 text-left text-sm text-slate-300 transition-colors hover:bg-slate-700 hover:text-white flex items-center gap-2">
+              <Plug className="h-4 w-4" />
+              Integrate with Claude/Cursor
+            </button>
+          )}
+        </DialogTrigger>
+      )}
+      <DialogContent className="max-h-[90vh] overflow-hidden flex flex-col sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>MCP Integration</DialogTitle>
           <DialogDescription>
@@ -100,7 +116,7 @@ export function MCPIntegrationModal({ trigger }: MCPIntegrationModalProps) {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 pt-2">
+        <div className="flex-1 overflow-y-auto space-y-4 pt-2">
           {error && (
             <div className="rounded-md bg-destructive/10 border border-destructive/30 px-4 py-3 text-sm text-destructive">
               {error}
@@ -116,7 +132,7 @@ export function MCPIntegrationModal({ trigger }: MCPIntegrationModalProps) {
             ) : hasKey ? (
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
-                  <code className="flex-1 rounded-md bg-muted px-3 py-2 font-mono text-sm text-foreground overflow-x-auto">
+                  <code className="flex-1 rounded-md bg-muted px-2 py-2 font-mono text-[10px] md:text-sm text-foreground overflow-x-auto">
                     {apiKey}
                   </code>
                   <CopyToClipboardButton text={apiKey} label="Copy API key" />
@@ -166,7 +182,7 @@ export function MCPIntegrationModal({ trigger }: MCPIntegrationModalProps) {
                 </p>
 
                 <div className="relative">
-                  <pre className="whitespace-pre-wrap break-all rounded-md bg-slate-900 p-3 pr-10 font-mono text-xs text-slate-100">
+                  <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-md bg-slate-900 p-3 pr-10 font-mono text-[10px] md:text-xs text-slate-100">
                     {claudeCommand}
                   </pre>
                   <div className="absolute right-2 top-2">
@@ -187,7 +203,7 @@ export function MCPIntegrationModal({ trigger }: MCPIntegrationModalProps) {
                 </p>
 
                 <div className="relative">
-                  <pre className="whitespace-pre-wrap break-all rounded-md bg-slate-900 p-3 pr-10 font-mono text-xs text-slate-100">
+                  <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-md bg-slate-900 p-3 pr-10 font-mono text-[10px] md:text-xs text-slate-100">
                     {cursorConfig}
                   </pre>
                   <div className="absolute right-2 top-2">

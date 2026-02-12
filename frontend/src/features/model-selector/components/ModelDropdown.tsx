@@ -89,12 +89,18 @@ export function ModelDropdown({
 
       {/* Dropdown */}
       <div
-        className="fixed w-64 bg-card border border-border rounded-md shadow-lg z-[60] flex flex-col"
+        className={`fixed bg-card border border-border rounded-md shadow-lg z-[60] flex flex-col ${
+          coords.isMobileFullWidth ? "" : "w-64"
+        }`}
         style={{
           top: verticalPosition === "below" ? coords.top : "auto",
           bottom: verticalPosition === "above" ? coords.bottom : "auto",
-          left: position === "left" ? coords.left : "auto",
-          right: position === "right" ? coords.right : "auto",
+          left: coords.isMobileFullWidth ? coords.left : position === "left" ? coords.left : "auto",
+          right: coords.isMobileFullWidth
+            ? coords.right
+            : position === "right"
+              ? coords.right
+              : "auto",
           maxHeight: coords.maxHeight,
         }}
       >

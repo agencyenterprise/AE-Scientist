@@ -180,7 +180,6 @@ export function CreateHypothesisForm() {
           textareaRef={manualImportState.streamingRef}
           showHeader={true}
           title="Generating Research Idea"
-          onClose={handleCancelImport}
           className="rounded-2xl border border-slate-800/70 bg-slate-950/60"
         />
       </div>

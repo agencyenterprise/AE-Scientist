@@ -42,6 +42,7 @@ export function ResearchRunHeader({
 }: ResearchRunHeaderProps) {
   const router = useRouter();
   const [isSeedDialogOpen, setIsSeedDialogOpen] = useState(false);
+  const [isStopDialogOpen, setIsStopDialogOpen] = useState(false);
 
   const canSeedIdea = status === "completed" && conversationId !== null;
 
@@ -52,6 +53,15 @@ export function ResearchRunHeader({
   const handleConfirmSeed = () => {
     setIsSeedDialogOpen(false);
     onSeedNewIdea?.();
+  };
+
+  const handleStopClick = () => {
+    setIsStopDialogOpen(true);
+  };
+
+  const handleConfirmStop = () => {
+    setIsStopDialogOpen(false);
+    onStopRun();
   };
 
   return (
@@ -150,7 +160,7 @@ export function ResearchRunHeader({
             <Button
               variant="outline"
               size="sm"
-              onClick={onStopRun}
+              onClick={handleStopClick}
               disabled={stopPending}
               className="border-destructive/40 text-destructive hover:bg-destructive/10"
             >
@@ -224,6 +234,40 @@ export function ResearchRunHeader({
           </div>
         </Modal>
       )}
+
+      {/* Stop Run Confirmation Modal */}
+      <Modal
+        isOpen={isStopDialogOpen}
+        onClose={() => !stopPending && setIsStopDialogOpen(false)}
+        title="Stop Research Run"
+        maxWidth="max-w-lg"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-300">Are you sure you want to stop this research run?</p>
+          <p className="text-sm text-slate-400">
+            This action will terminate the run. Any progress made so far will be saved, but no
+            further processing will occur.
+          </p>
+        </div>
+        <div className="mt-6 flex justify-end gap-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsStopDialogOpen(false)}
+            disabled={stopPending}
+          >
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleConfirmStop}
+            disabled={stopPending}
+            className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+          >
+            {stopPending ? "Stopping..." : "Stop Run"}
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }

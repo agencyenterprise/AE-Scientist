@@ -42,45 +42,45 @@ export function MarkdownEditModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-50 flex md:items-center md:justify-center bg-black/50 md:p-4"
       onClick={onClose}
     >
       <div
-        className="flex h-[90vh] w-full max-w-6xl flex-col rounded-lg bg-zinc-900 border border-zinc-700 shadow-xl"
+        className="flex h-full w-full md:h-[90vh] md:max-w-6xl flex-col bg-zinc-900 md:rounded-lg border-0 md:border border-zinc-700 shadow-xl"
         onClick={e => e.stopPropagation()}
         onKeyDown={handleKeyDown}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-zinc-700 px-6 py-4">
-          <h2 className="text-xl font-semibold text-white">Edit Research Idea</h2>
+        {/* Header - compact on mobile */}
+        <div className="flex items-center justify-between border-b border-zinc-700 px-3 py-2 md:px-6 md:py-4">
+          <h2 className="text-base md:text-xl font-semibold text-white">Edit Idea</h2>
           <div className="flex items-center gap-2">
             {/* View Mode Toggle */}
-            <div className="flex rounded-lg border border-zinc-600 bg-zinc-800">
+            <div className="flex rounded-md border border-zinc-600 bg-zinc-800">
               <button
                 onClick={() => setViewMode("edit")}
-                className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium transition-colors ${
+                className={`flex items-center gap-1 px-2 py-1 text-xs font-medium transition-colors md:gap-2 md:px-3 md:py-1.5 md:text-sm ${
                   viewMode === "edit" ? "bg-blue-600 text-white" : "text-zinc-300 hover:text-white"
                 }`}
               >
-                <Code className="h-4 w-4" />
+                <Code className="h-3.5 w-3.5 md:h-4 md:w-4" />
                 Edit
               </button>
               <button
                 onClick={() => setViewMode("preview")}
-                className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium transition-colors ${
+                className={`flex items-center gap-1 px-2 py-1 text-xs font-medium transition-colors md:gap-2 md:px-3 md:py-1.5 md:text-sm ${
                   viewMode === "preview"
                     ? "bg-blue-600 text-white"
                     : "text-zinc-300 hover:text-white"
                 }`}
               >
-                <Eye className="h-4 w-4" />
+                <Eye className="h-3.5 w-3.5 md:h-4 md:w-4" />
                 Preview
               </button>
             </div>
 
             <button
               onClick={onClose}
-              className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
+              className="rounded-lg p-1.5 md:p-2 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white"
               aria-label="Close"
             >
               <X className="h-5 w-5" />
@@ -88,44 +88,46 @@ export function MarkdownEditModal({
           </div>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-hidden p-6">
+        {/* Content - minimal padding on mobile for maximum editing space */}
+        <div className="flex-1 min-h-0 p-2 md:p-6 overflow-hidden">
           {viewMode === "edit" ? (
             <textarea
               value={editedContent}
               onChange={e => setEditedContent(e.target.value)}
-              className="h-full w-full resize-none rounded-lg border border-zinc-700 bg-zinc-800 p-4 font-mono text-sm text-white placeholder-zinc-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              className="h-full w-full resize-none rounded-md border border-zinc-700 bg-zinc-800 p-2 md:p-4 font-mono text-base md:text-sm leading-relaxed text-white placeholder-zinc-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               placeholder="Write your research idea in markdown format..."
               autoFocus
             />
           ) : (
-            <div className="h-full overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-800 p-6">
-              <Markdown>{editedContent}</Markdown>
+            <div className="h-full overflow-y-auto overflow-x-hidden rounded-md border border-zinc-700 bg-zinc-800 p-3 md:p-6">
+              <div className="[overflow-wrap:anywhere]">
+                <Markdown>{editedContent}</Markdown>
+              </div>
             </div>
           )}
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between border-t border-zinc-700 px-6 py-4">
-          <p className="text-sm text-zinc-400">
+        {/* Footer - compact on mobile */}
+        <div className="flex items-center justify-between border-t border-zinc-700 px-3 py-2 md:px-6 md:py-4">
+          <p className="hidden text-sm text-zinc-400 md:block">
             Press <kbd className="rounded bg-zinc-800 px-1.5 py-0.5 text-xs">Esc</kbd> to cancel,{" "}
             <kbd className="rounded bg-zinc-800 px-1.5 py-0.5 text-xs">Cmd+S</kbd> to save
           </p>
-          <div className="flex gap-3">
+          <div className="flex w-full gap-2 md:w-auto md:gap-3">
             <button
               onClick={onClose}
               disabled={isSaving}
-              className="rounded-lg border border-zinc-600 px-4 py-2 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex-1 rounded-md border border-zinc-600 px-3 py-1.5 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 md:flex-none md:px-4 md:py-2"
             >
               Cancel
             </button>
             <button
               onClick={handleSave}
               disabled={isSaving || editedContent === content}
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 md:flex-none md:gap-2 md:px-4 md:py-2"
             >
               <Save className="h-4 w-4" />
-              {isSaving ? "Saving..." : "Save Changes"}
+              {isSaving ? "Saving..." : "Save"}
             </button>
           </div>
         </div>

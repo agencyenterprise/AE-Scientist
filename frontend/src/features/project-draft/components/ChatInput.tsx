@@ -65,8 +65,8 @@ export function ChatInput({
         : "Type your message...";
 
   return (
-    <div className="px-4 py-4">
-      <div className="flex space-x-2 items-end">
+    <div className="px-3 py-3 sm:px-4 sm:py-4">
+      <div className="flex gap-2 items-end">
         <textarea
           ref={inputRef as React.RefObject<HTMLTextAreaElement>}
           value={inputMessage}
