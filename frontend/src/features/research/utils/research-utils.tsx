@@ -469,19 +469,20 @@ export function getLogLevelColor(level: string): string {
 }
 
 /**
- * Replicates backend's progress calculation logic from research_pipeline_runs.py
- * Combines stage_progress and paper_generation_progress, then finds the latest event.
+ * Calculates overall progress for a research run.
+ * Combines stage_progress and paper_generation_progress to determine current stage and progress.
  *
- * This matches the SQL logic:
- * 1. UNION ALL of rp_run_stage_progress_events and rp_paper_generation_events
- * 2. ORDER BY created_at DESC to get latest event
- * 3. Calculate overall progress: (stage_number * 0.2) - (progress >= 1 ? 0 : 0.2)
+ * Progress is calculated as monotonically increasing:
+ * - Each stage (1-5) represents 20% of overall progress
+ * - Within a stage, we track the MAX progress seen to prevent backwards movement
+ *   (progress can temporarily drop when transitioning between phases like
+ *   goal iterations → seed evaluation → aggregation)
  */
 export function getCurrentStageAndProgress(
   stageProgress: StageProgress[],
   paperGenerationProgress: PaperGenerationEvent[]
 ): { currentStage: string | null; progress: number | null } {
-  // Combine both sources (replicating the SQL UNION ALL)
+  // Combine both sources
   const allProgress: Array<{ stage: string; progress: number; created_at: string }> = [
     ...stageProgress.map(sp => ({
       stage: sp.stage,
@@ -500,22 +501,32 @@ export function getCurrentStageAndProgress(
     return { currentStage: null, progress: null };
   }
 
-  // Find the latest event by created_at (replicating DISTINCT ON ... ORDER BY created_at DESC)
+  // Find the latest event by created_at to determine current stage
   const latestEvent = allProgress.reduce((latest, current) => {
     return new Date(current.created_at) > new Date(latest.created_at) ? current : latest;
   });
 
   const currentStage = latestEvent.stage;
-  const stageProgressValue = latestEvent.progress;
 
-  // Calculate overall progress (replicating the CASE statement)
+  // Track max progress per stage to ensure monotonic progress
+  const maxProgressByStage = new Map<string, number>();
+  for (const event of allProgress) {
+    const currentMax = maxProgressByStage.get(event.stage) ?? 0;
+    maxProgressByStage.set(event.stage, Math.max(currentMax, event.progress));
+  }
+
+  // Calculate overall progress using max progress for current stage
+  const stageProgressValue = maxProgressByStage.get(currentStage) ?? 0;
   const stageNumberMatch = currentStage.match(/^([1-5])_/);
   let overallProgress: number;
 
   if (stageNumberMatch && stageNumberMatch[1]) {
     const stageNumber = parseInt(stageNumberMatch[1], 10);
-    // Formula: (stage_number * 0.2) - (progress >= 1 ? 0 : 0.2)
-    overallProgress = stageNumber * 0.2 - (stageProgressValue >= 1 ? 0 : 0.2);
+    // Base progress from completed stages + current stage progress
+    // Each stage is 20% of overall progress
+    const completedStagesProgress = (stageNumber - 1) * 0.2;
+    const currentStageContribution = stageProgressValue * 0.2;
+    overallProgress = completedStagesProgress + currentStageContribution;
   } else {
     // Fallback: use raw progress
     overallProgress = stageProgressValue;

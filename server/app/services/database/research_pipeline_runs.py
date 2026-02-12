@@ -14,8 +14,9 @@ logger = logging.getLogger(__name__)
 PIPELINE_RUN_STATUSES = ("pending", "initializing", "running", "failed", "completed")
 
 # Shared SQL CTE for calculating progress across pipeline runs.
-# Combines stage progress and paper generation events, then calculates overall progress
-# as completed-stages-only buckets (0, 0.2, 0.4, 0.6, 0.8, 1.0).
+# Combines stage progress and paper generation events, then calculates overall progress.
+# Uses MAX(progress) per stage to ensure monotonic progress (prevents backwards movement
+# when transitioning between phases like goal iterations -> seed evaluation -> aggregation).
 _PROGRESS_CTE_SQL = SQL(
     """
     all_progress AS (
@@ -29,27 +30,32 @@ _PROGRESS_CTE_SQL = SQL(
         SELECT DISTINCT ON (run_id)
             run_id,
             stage,
-            progress,
             best_metric,
             created_at
         FROM all_progress
         ORDER BY run_id, created_at DESC
     ),
+    max_progress_per_stage AS (
+        SELECT run_id, stage, MAX(progress) as max_progress
+        FROM all_progress
+        GROUP BY run_id, stage
+    ),
     progress_with_calculations AS (
         SELECT
-            run_id,
-            stage,
-            best_metric,
-            -- Calculate overall progress as completed-stages-only buckets.
-            -- If the *current* stage is incomplete, the displayed progress reflects
-            -- only the number of fully-completed stages (0, 0.2, 0.4, 0.6, 0.8, 1.0).
+            lp.run_id,
+            lp.stage,
+            lp.best_metric,
+            -- Calculate overall progress using max progress seen for current stage.
+            -- Each stage contributes 0.2 (20 percent) to overall progress.
+            -- Formula: (stage_number - 1) * 0.2 + max_progress * 0.2
             CASE
-                WHEN stage ~ '^[1-5]_' THEN
-                    CAST(substring(stage FROM 1 FOR 1) AS numeric) * 0.2 -
-                    CASE WHEN progress >= 1 THEN 0 ELSE 0.2 END
-                ELSE progress
+                WHEN lp.stage ~ '^[1-5]_' THEN
+                    (CAST(substring(lp.stage FROM 1 FOR 1) AS numeric) - 1) * 0.2 +
+                    COALESCE(mp.max_progress, 0) * 0.2
+                ELSE COALESCE(mp.max_progress, 0)
             END AS overall_progress
-        FROM latest_progress
+        FROM latest_progress lp
+        LEFT JOIN max_progress_per_stage mp ON lp.run_id = mp.run_id AND lp.stage = mp.stage
     ),
     artifact_counts AS (
         SELECT run_id, COUNT(*) as count
