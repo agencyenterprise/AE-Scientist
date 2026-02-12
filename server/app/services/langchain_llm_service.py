@@ -245,7 +245,12 @@ class LangChainLLMService(BaseLLMService, ABC):
         return self._message_to_text(message=response)
 
     async def generate_idea(
-        self, llm_model: str, conversation_text: str, user_id: int, conversation_id: int
+        self,
+        llm_model: str,
+        conversation_text: str,
+        user_id: int,
+        conversation_id: int,
+        skip_billing: bool,
     ) -> AsyncGenerator[str, None]:
         db = get_database()
         system_prompt = await get_idea_generation_prompt(db=db)
@@ -262,6 +267,7 @@ class LangChainLLMService(BaseLLMService, ABC):
             messages=messages,
             conversation_id=conversation_id,
             user_id=user_id,
+            skip_billing=skip_billing,
         ):
             yield event_payload
 
@@ -275,7 +281,13 @@ class LangChainLLMService(BaseLLMService, ABC):
         )
 
     async def generate_manual_seed_idea(
-        self, *, llm_model: str, user_prompt: str, conversation_id: int, user_id: int
+        self,
+        *,
+        llm_model: str,
+        user_prompt: str,
+        conversation_id: int,
+        user_id: int,
+        skip_billing: bool,
     ) -> AsyncGenerator[str, None]:
         """
         Generate an idea from a manual title and hypothesis seed.
@@ -291,6 +303,7 @@ class LangChainLLMService(BaseLLMService, ABC):
             messages=messages,
             conversation_id=conversation_id,
             user_id=user_id,
+            skip_billing=skip_billing,
         ):
             yield event_payload
 
@@ -301,6 +314,7 @@ class LangChainLLMService(BaseLLMService, ABC):
         messages: List[BaseMessage],
         conversation_id: int,
         user_id: int,
+        skip_billing: bool,
     ) -> AsyncGenerator[str, None]:
         """Generate idea using structured output with real-time streaming via tool calling."""
 
@@ -341,17 +355,17 @@ class LangChainLLMService(BaseLLMService, ABC):
                         cached_input_tokens=cached_input_tokens,
                         output_tokens=output_tokens,
                     )
-                    # Charge user for LLM usage
-                    await charge_for_llm_usage(
-                        user_id=user_id,
-                        conversation_id=conversation_id,
-                        provider=self.provider_name,
-                        model=llm_model,
-                        input_tokens=input_tokens,
-                        cached_input_tokens=cached_input_tokens,
-                        output_tokens=output_tokens,
-                        description="Idea generation",
-                    )
+                    if not skip_billing:
+                        await charge_for_llm_usage(
+                            user_id=user_id,
+                            conversation_id=conversation_id,
+                            provider=self.provider_name,
+                            model=llm_model,
+                            input_tokens=input_tokens,
+                            cached_input_tokens=cached_input_tokens,
+                            output_tokens=output_tokens,
+                            description="Idea generation",
+                        )
 
             last_chunk_metadata = getattr(chunk, "response_metadata", None)
 

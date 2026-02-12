@@ -47,7 +47,12 @@ class BaseLLMService(ABC):
 
     @abstractmethod
     def generate_idea(
-        self, llm_model: str, conversation_text: str, user_id: int, conversation_id: int
+        self,
+        llm_model: str,
+        conversation_text: str,
+        user_id: int,
+        conversation_id: int,
+        skip_billing: bool,
     ) -> AsyncGenerator[str, None]:
         """
         Generate a research idea by streaming markdown content.
@@ -57,6 +62,7 @@ class BaseLLMService(ABC):
             conversation_text: the conversation text to analyze
             user_id: the user id
             conversation_id: the conversation id
+            skip_billing: if True, skip charging the user for LLM usage
 
         Yields:
             str: JSON-encoded events. Partial events describe markdown chunks,

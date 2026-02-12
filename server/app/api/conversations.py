@@ -402,6 +402,7 @@ async def _generate_idea(
         conversation_text=imported_conversation,
         user_id=user_id,
         conversation_id=conversation_id,
+        skip_billing=True,
     )
     async for chunk in _stream_structured_idea(
         db=db,
@@ -440,6 +441,7 @@ async def _generate_manual_seed_idea(
         user_prompt=user_prompt,
         conversation_id=conversation_id,
         user_id=user_id,
+        skip_billing=True,
     )
     async for chunk in _stream_structured_idea(
         db=db,
