@@ -1003,8 +1003,8 @@ async def ingest_hw_stats(
     run_id: str,
     payload: HardwareStatsPayload,
     _: None = Depends(verify_run_auth),
+    db: DatabaseManager = Depends(get_database),
 ) -> None:
-    db = cast(ResearchRunStore, get_database())
     run = await db.get_research_pipeline_run(run_id=run_id)
     if run is None:
         logger.warning(
@@ -1013,11 +1013,13 @@ async def ingest_hw_stats(
         )
         return
 
-    # Warn if receiving hw-stats from a terminated run - indicates orphaned pod
-    if run.status in ("failed", "completed", "cancelled"):
+    # Warn if receiving hw-stats after pod was terminated - indicates orphaned pod
+    termination = await db.get_research_pipeline_run_termination(run_id=run_id)
+    if termination is not None and termination.pod_terminated_at is not None:
         message = (
-            f"Received hw-stats from terminated run {run_id} "
-            f"(status={run.status}, pod_id={run.pod_id}). "
+            f"Received hw-stats from terminated pod {run_id} "
+            f"(status={run.status}, pod_id={run.pod_id}, "
+            f"pod_terminated_at={termination.pod_terminated_at.isoformat()}). "
             "Pod may still be running and incurring charges."
         )
         logger.warning(message)

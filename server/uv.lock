@@ -26,6 +26,7 @@ dependencies = [
     { name = "langchain-groq" },
     { name = "langchain-openai" },
     { name = "langchain-postgres" },
+    { name = "langchain-xai" },
     { name = "langgraph-checkpoint-postgres" },
     { name = "omegaconf" },
     { name = "openai" },
@@ -34,6 +35,7 @@ dependencies = [
     { name = "psutil" },
     { name = "psycopg", extra = ["binary", "pool"] },
     { name = "psycopg2-binary" },
+    { name = "pydantic", extra = ["email"] },
     { name = "pyjwt", extra = ["crypto"] },
     { name = "python-dotenv" },
     { name = "python-json-logger" },
@@ -75,6 +77,7 @@ requires-dist = [
     { name = "langchain-groq", specifier = ">=1.1.0" },
     { name = "langchain-openai", specifier = ">=1.1.0" },
     { name = "langchain-postgres", specifier = ">=0.0.16" },
+    { name = "langchain-xai", specifier = ">=0.2.0" },
     { name = "langgraph-checkpoint-postgres", specifier = ">=3.0.1" },
     { name = "omegaconf", specifier = ">=2.3.0" },
     { name = "openai", specifier = "==2.8.1" },
@@ -83,6 +86,7 @@ requires-dist = [
     { name = "psutil", specifier = ">=7.2.1" },
     { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.3.1" },
     { name = "psycopg2-binary", specifier = ">=2.9.11" },
+    { name = "pydantic", extras = ["email"], specifier = ">=2.0.0" },
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.10.1" },
     { name = "python-dotenv", specifier = "==1.0.1" },
     { name = "python-json-logger", specifier = ">=2.0.0" },
@@ -1460,6 +1464,21 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/6f/5e/00065782aa0ad7b5faa9ff6881bcf361f2a7741e39db8e2b3e86164f80c8/langchain_postgres-0.0.16.tar.gz", hash = "sha256:d09aa4ea77ee8600a9ff64de9c185fb558aa388c816c7be04dd4559c878530b7", size = 232526, upload-time = "2025-10-17T15:00:29.203Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/5a/a2/516934f8be231e50bb2afda8112641850154b057f5c45d82f42d216bed3d/langchain_postgres-0.0.16-py3-none-any.whl", hash = "sha256:a7375cf9fc9b6965efc207dbcc959424e96b8ffe75d5ced6055676d2613f8d37", size = 46028, upload-time = "2025-10-17T15:00:27.772Z" },
+]
+
+[[package]]
+name = "langchain-xai"
+version = "1.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "aiohttp" },
+    { name = "langchain-core" },
+    { name = "langchain-openai" },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/39/43/194dcb835740b1b5716f059643a6a7a66e3ce2ac19980f756f09b707b6fa/langchain_xai-1.1.0.tar.gz", hash = "sha256:e61b2912b0f373293fedbe07a198ceab411f397e89e36b4f2f173284802d270f", size = 169402, upload-time = "2025-11-24T15:05:57.579Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/17/30/4d88e6c0ed4d0bfb1242606d8cccf889d6add32a82e7302a9425ff11d1ac/langchain_xai-1.1.0-py3-none-any.whl", hash = "sha256:f61a8e0d7269f52cd85a013124c0ac57d57985be30b7e716495aa34fdb1c1677", size = 10707, upload-time = "2025-11-24T15:05:56.801Z" },
 ]
 
 [[package]]

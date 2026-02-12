@@ -20,6 +20,7 @@ Pattern:
 
 import asyncio
 import logging
+from datetime import datetime
 from typing import Any, Dict, Optional, Tuple
 
 from psycopg import AsyncConnection
@@ -313,10 +314,17 @@ async def _process_single_event(
                 if isinstance(value, BaseModel):
                     # Pydantic model instance - serialize it
                     serialized_changes[key] = value.model_dump(mode="json")
+                elif isinstance(value, datetime):
+                    # datetime objects need to be serialized to ISO format
+                    serialized_changes[key] = value.isoformat()
                 elif isinstance(value, list):
-                    # List - serialize each item if it's a Pydantic model instance
+                    # List - serialize each item appropriately
                     serialized_changes[key] = [
-                        item.model_dump(mode="json") if isinstance(item, BaseModel) else item
+                        (
+                            item.model_dump(mode="json")
+                            if isinstance(item, BaseModel)
+                            else (item.isoformat() if isinstance(item, datetime) else item)
+                        )
                         for item in value
                     ]
                 else:

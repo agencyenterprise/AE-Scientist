@@ -30,7 +30,7 @@ dependencies = [
     "omegaconf>=2.3.0",
     "openai>=2.7.1",
     "pandas>=2.3.3",
-    "pydantic>=2.12.4",
+    "pydantic[email]>=2.12.4",
     "pymongo>=4.15.3",
     # pymupdf, pymupdf4llm, pypdf provided by ae-paper-review
     "python-dotenv>=1.2.1",
