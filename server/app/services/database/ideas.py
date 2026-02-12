@@ -259,7 +259,7 @@ class IdeasMixin(ConnectionProvider):  # pylint: disable=abstract-method
             for row in results
         ]
 
-    async def get_idea_version_by_id(self, version_id: int) -> Optional[IdeaVersionData]:
+    async def get_idea_version_by_id(self, idea_version_id: int) -> Optional[IdeaVersionData]:
         """Get a single idea version by id."""
         async with self.aget_connection() as conn:
             async with conn.cursor(row_factory=dict_row) as cursor:
@@ -278,7 +278,7 @@ class IdeasMixin(ConnectionProvider):  # pylint: disable=abstract-method
                     JOIN ideas i ON iv.idea_id = i.id
                     WHERE iv.id = %s
                     """,
-                    (version_id,),
+                    (idea_version_id,),
                 )
                 row = await cursor.fetchone()
         if not row:
