@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { AutoEvaluationCard } from "../AutoEvaluationCard";
 import { PaperReviewHowItWorks } from "@/features/paper-review/components/PaperReviewHowItWorks";
+import { downloadEvaluationMarkdown } from "@/features/research/utils/evaluation-download";
 import type { LlmReviewResponse } from "@/types/research";
 import { cn } from "@/shared/lib/utils";
 import {
@@ -12,6 +13,7 @@ import {
   HelpCircle,
   AlertTriangle,
   ChevronDown,
+  Download,
 } from "lucide-react";
 
 // Label mappings for scores
@@ -196,7 +198,7 @@ function DetailedScoresSection({ review }: { review: LlmReviewResponse }) {
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900/50 w-full p-4 sm:p-6">
       {/* Overall Score - Always visible */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-4">
           <div className="relative">
             <svg className="w-16 h-16 sm:w-20 sm:h-20 -rotate-90" viewBox="0 0 36 36">
@@ -262,15 +264,35 @@ function DetailedScoresSection({ review }: { review: LlmReviewResponse }) {
           </div>
         </div>
 
-        {/* Mobile: Toggle button for category scores */}
+        {/* Download button - hidden on mobile, visible on desktop */}
         <button
-          type="button"
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="sm:hidden flex items-center justify-center gap-2 mt-2 px-3 py-2 rounded-lg bg-slate-800/50 text-sm text-slate-400 hover:text-slate-300 transition-colors"
+          onClick={() => downloadEvaluationMarkdown(review)}
+          className="hidden sm:flex items-center gap-2 px-3 py-2 text-sm text-slate-400 hover:text-white bg-slate-800/50 hover:bg-slate-800 rounded-lg transition-colors"
         >
-          <span>{isExpanded ? "Hide" : "Show"} category scores</span>
-          <ChevronDown className={cn("h-4 w-4 transition-transform", isExpanded && "rotate-180")} />
+          <Download className="h-4 w-4" />
+          Download
         </button>
+
+        {/* Mobile: Toggle and download buttons */}
+        <div className="sm:hidden flex items-center gap-2 mt-2">
+          <button
+            type="button"
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-slate-800/50 text-sm text-slate-400 hover:text-slate-300 transition-colors"
+          >
+            <span>{isExpanded ? "Hide" : "Show"} category scores</span>
+            <ChevronDown
+              className={cn("h-4 w-4 transition-transform", isExpanded && "rotate-180")}
+            />
+          </button>
+          <button
+            onClick={() => downloadEvaluationMarkdown(review)}
+            className="flex items-center justify-center px-3 py-2 rounded-lg bg-slate-800/50 text-slate-400 hover:text-slate-300 transition-colors"
+            title="Download evaluation"
+          >
+            <Download className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       {/* Category Scores - Collapsible on mobile, always visible on desktop */}
