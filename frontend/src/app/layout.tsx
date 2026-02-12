@@ -3,7 +3,6 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/shared/contexts/AuthContext";
 import { QueryProvider } from "@/shared/providers/QueryProvider";
-import { BetaBanner } from "@/shared/components/BetaBanner";
 import { ClerkProvider } from "@clerk/nextjs";
 
 const geistSans = Geist({
@@ -47,7 +46,6 @@ export default function RootLayout({
     <html lang="en" className="dark">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <ClerkProvider>
-          <BetaBanner />
           <QueryProvider>
             <AuthProvider>{children}</AuthProvider>
           </QueryProvider>
