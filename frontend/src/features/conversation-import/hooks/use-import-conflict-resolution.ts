@@ -71,7 +71,7 @@ export interface UseImportConflictResolutionReturn {
  *
  * // When user resolves conflict
  * const handleGoToExisting = () => {
- *   window.location.href = `/conversations/${conflict.selectedId}`;
+ *   window.location.href = `/ideation-queue/${conflict.selectedId}`;
  * };
  *
  * const handleCreateNew = () => {

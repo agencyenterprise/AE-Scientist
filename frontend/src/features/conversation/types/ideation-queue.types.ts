@@ -48,8 +48,6 @@ export type IdeationSortKey = "newest" | "oldest" | "title_asc" | "title_desc" |
 
 /**
  * Props for IdeationQueueCard component (ISP-compliant: focused interface)
- * MODIFIED: Added optional selection props for inline view support
- * MODIFIED: Added conversationStatus prop for status badge display (from database)
  */
 export interface IdeationQueueCardProps {
   id: number;
@@ -59,10 +57,6 @@ export interface IdeationQueueCardProps {
   conversationStatus?: ConversationStatus;
   createdAt: string;
   updatedAt: string;
-  /** Whether this card is currently selected for inline view */
-  isSelected?: boolean;
-  /** Callback when card is selected (if not provided, defaults to navigation) */
-  onSelect?: (id: number) => void;
 }
 
 /**
@@ -85,15 +79,10 @@ export interface IdeationQueueHeaderProps {
 
 /**
  * Props for IdeationQueueList component
- * MODIFIED: Added optional selection props for inline view support
  */
 export interface IdeationQueueListProps {
   conversations: Conversation[];
   emptyMessage?: string;
-  /** ID of currently selected conversation */
-  selectedId?: number | null;
-  /** Callback when a conversation is selected */
-  onSelect?: (id: number) => void;
 }
 
 /**

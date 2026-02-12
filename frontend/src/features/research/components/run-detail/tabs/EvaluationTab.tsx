@@ -116,9 +116,7 @@ export function EvaluationTab({
             <AlertTriangle className="h-5 w-5 text-red-400" />
             <h2 className="text-lg font-semibold text-red-400">Ethical Concerns</h2>
           </div>
-          <p className="text-sm text-red-300">
-            Ethical concerns were identified in this research.
-          </p>
+          <p className="text-sm text-red-300">Ethical concerns were identified in this research.</p>
           {review.ethical_concerns_explanation && (
             <p className="mt-3 text-sm text-slate-300 leading-relaxed">
               {review.ethical_concerns_explanation}

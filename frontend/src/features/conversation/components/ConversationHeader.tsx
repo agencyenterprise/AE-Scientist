@@ -4,7 +4,7 @@ import { ModelSelector } from "@/features/model-selector/components/ModelSelecto
 import { PromptTypes } from "@/shared/lib/prompt-types";
 import type { ConversationCostResponse, ConversationDetail } from "@/types";
 import { useState } from "react";
-import { DollarSign, ExternalLink, GitBranch, MessageSquare, Settings } from "lucide-react";
+import { DollarSign, ExternalLink, GitBranch, MessageSquare } from "lucide-react";
 import { detectPlatform } from "@/shared/utils/platform-detection";
 
 import { useConversationContext } from "../context/ConversationContext";
@@ -46,7 +46,6 @@ export function ConversationHeader({
     handleModelChange,
     handleModelDefaults,
     handleModelCapabilities,
-    onOpenPromptModal,
   } = useConversationContext();
 
   const handleDeleteConversation = async (): Promise<void> => {
@@ -137,19 +136,8 @@ export function ConversationHeader({
         })()}
       </div>
 
-      {/* Model Selector and AI Config - Wraps on mobile */}
+      {/* Model Selector - Wraps on mobile */}
       <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-        {onOpenPromptModal && !isReadOnly && (
-          <button
-            onClick={onOpenPromptModal}
-            className="flex items-center space-x-1 px-2 py-1.5 text-xs font-medium text-[var(--primary-700)] hover:bg-[var(--muted)] rounded border border-[var(--border)] transition-colors"
-            title="Configure AI prompts"
-            aria-label="Configure AI prompts"
-          >
-            <Settings className="w-4 h-4 flex-shrink-0" />
-            <span className="hidden xs:inline">AI Config</span>
-          </button>
-        )}
         {costDetails && (
           <button
             onClick={handleShowCost}

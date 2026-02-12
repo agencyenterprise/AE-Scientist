@@ -63,7 +63,7 @@ function getSourceLink(
     return { label: `Review #${paperReviewId}`, href: `/paper-review/${paperReviewId}` };
   }
   if (conversationId) {
-    return { label: `Conversation #${conversationId}`, href: `/conversations/${conversationId}` };
+    return { label: `Conversation #${conversationId}`, href: `/ideation-queue/${conversationId}` };
   }
   return null;
 }

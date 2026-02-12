@@ -87,7 +87,7 @@ export function ConversationsBoardTable({ conversations }: ConversationsBoardTab
               <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-400">{row.updated}</td>
               <td className="whitespace-nowrap px-6 py-4 text-right">
                 <Link
-                  href={`/conversations/${row.id}`}
+                  href={`/ideation-queue/${row.id}`}
                   className="inline-flex items-center gap-1.5 text-sm font-medium text-sky-400 transition-colors hover:text-sky-300"
                 >
                   <Eye className="h-4 w-4" />

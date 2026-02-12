@@ -13,7 +13,7 @@ export function MobileNav() {
   const pathname = usePathname();
   const { balanceDollars, isLoading } = useWalletBalance();
 
-  const isConversationsActive = pathname.startsWith("/conversations");
+  const isIdeationQueueActive = pathname.startsWith("/ideation-queue");
   const isResearchActive = pathname.startsWith("/research");
   const isPaperReviewActive = pathname.startsWith("/paper-review");
   const isHowItWorksActive = pathname.startsWith("/how-it-works");
@@ -27,10 +27,10 @@ export function MobileNav() {
       activeClass: "bg-violet-500/15 text-violet-300",
     },
     {
-      href: "/conversations",
+      href: "/ideation-queue",
       label: "Ideation Queue",
       icon: MessageSquare,
-      isActive: isConversationsActive,
+      isActive: isIdeationQueueActive,
       activeClass: "bg-sky-500/15 text-sky-400",
     },
     {

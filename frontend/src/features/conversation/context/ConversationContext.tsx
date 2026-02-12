@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, ReactNode, useState, useMemo, useCallback } from "react";
+import { createContext, useContext, ReactNode, useState, useMemo } from "react";
 import { useModelSelection } from "@/features/project-draft/hooks/useModelSelection";
 
 interface ModelCapabilities {
@@ -35,10 +35,6 @@ export interface ConversationContextValue {
   setIsPollingEmptyMessage: (polling: boolean) => void;
   isReadOnly: boolean;
   setIsReadOnly: (readOnly: boolean) => void;
-
-  // Prompt modal
-  onOpenPromptModal?: () => void;
-  setOnOpenPromptModal: (handler: (() => void) | undefined) => void;
 }
 
 const ConversationContext = createContext<ConversationContextValue | null>(null);
@@ -73,12 +69,6 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
   const [isStreaming, setIsStreaming] = useState(false);
   const [isPollingEmptyMessage, setIsPollingEmptyMessage] = useState(false);
   const [isReadOnly, setIsReadOnly] = useState(false);
-  const [onOpenPromptModal, setOnOpenPromptModal] = useState<(() => void) | undefined>(undefined);
-
-  // Wrap setOnOpenPromptModal to handle function values correctly
-  const setOnOpenPromptModalWrapper = useCallback((handler: (() => void) | undefined) => {
-    setOnOpenPromptModal(() => handler);
-  }, []);
 
   const value = useMemo<ConversationContextValue>(
     () => ({
@@ -98,8 +88,6 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
       setIsPollingEmptyMessage,
       isReadOnly,
       setIsReadOnly,
-      onOpenPromptModal,
-      setOnOpenPromptModal: setOnOpenPromptModalWrapper,
     }),
     [
       selectedModel,
@@ -114,8 +102,6 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
       isStreaming,
       isPollingEmptyMessage,
       isReadOnly,
-      onOpenPromptModal,
-      setOnOpenPromptModalWrapper,
     ]
   );
 

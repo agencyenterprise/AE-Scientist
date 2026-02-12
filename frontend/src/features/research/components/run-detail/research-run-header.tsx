@@ -103,7 +103,7 @@ export function ResearchRunHeader({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => window.open(`/conversations/${conversationId}`, "_blank")}
+              onClick={() => window.open(`/ideation-queue/${conversationId}`, "_blank")}
             >
               <ExternalLink className="h-4 w-4" />
               <span className="hidden sm:inline">View Idea</span>

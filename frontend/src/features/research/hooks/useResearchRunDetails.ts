@@ -599,7 +599,7 @@ export function useResearchRunDetails({
 
       if (seedError) throw new Error("Failed to seed new idea from this run");
 
-      router.push(`/conversations/${response.conversation_id}`);
+      router.push(`/ideation-queue/${response.conversation_id}`);
     } catch (err) {
       // Only update error state if still mounted and it's not an abort error
       if (isMountedRef.current) {

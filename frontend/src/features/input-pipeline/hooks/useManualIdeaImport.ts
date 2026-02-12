@@ -180,7 +180,7 @@ export function useManualIdeaImport(
                   onImportEnd?.();
                   onSuccess?.(conversation.id);
                   if (autoRedirect) {
-                    window.location.href = `/conversations/${conversation.id}`;
+                    window.location.href = `/ideation-queue/${conversation.id}`;
                   }
                   return;
                 }

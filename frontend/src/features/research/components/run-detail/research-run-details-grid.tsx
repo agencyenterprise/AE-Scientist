@@ -41,7 +41,7 @@ export function ResearchRunDetailsGrid({ run, conversationId }: ResearchRunDetai
             <dt className="text-xs text-slate-400">Idea</dt>
             <dd>
               <a
-                href={`/conversations/${conversationId}`}
+                href={`/ideation-queue/${conversationId}`}
                 className="text-sm text-emerald-400 hover:text-emerald-300"
               >
                 View Idea

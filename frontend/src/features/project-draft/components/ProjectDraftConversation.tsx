@@ -21,7 +21,6 @@ interface ProjectDraftConversationProps {
   isLocked: boolean;
   currentProjectDraft?: Idea | null;
   onProjectDraftUpdate?: (updatedDraft: Idea) => void;
-  onOpenPromptModal?: () => void;
   conversationCapabilities?: {
     hasImages?: boolean;
     hasPdfs?: boolean;
@@ -36,7 +35,6 @@ export function ProjectDraftConversation({
   isLocked,
   currentProjectDraft,
   onProjectDraftUpdate,
-  onOpenPromptModal,
   conversationCapabilities,
   isVisible,
   onAnswerFinish,
@@ -64,7 +62,6 @@ export function ProjectDraftConversation({
     setIsStreaming,
     setIsPollingEmptyMessage,
     setIsReadOnly,
-    setOnOpenPromptModal,
   } = useConversationContext();
 
   // Custom hooks for state management
@@ -91,10 +88,6 @@ export function ProjectDraftConversation({
   useEffect(() => {
     setIsReadOnly(isReadOnly);
   }, [isReadOnly, setIsReadOnly]);
-
-  useEffect(() => {
-    setOnOpenPromptModal(onOpenPromptModal);
-  }, [onOpenPromptModal, setOnOpenPromptModal]);
 
   // Restore pending files callback for error recovery
   const restorePendingFiles = useCallback(

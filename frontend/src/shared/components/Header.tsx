@@ -13,7 +13,7 @@ export function Header() {
   const pathname = usePathname();
   const { balanceDollars, isLoading } = useWalletBalance();
 
-  const isConversationsActive = pathname.startsWith("/conversations");
+  const isIdeationQueueActive = pathname.startsWith("/ideation-queue");
   const isResearchActive = pathname.startsWith("/research");
   const isPaperReviewActive = pathname.startsWith("/paper-review");
   const isHowItWorksActive = pathname.startsWith("/how-it-works");
@@ -42,9 +42,9 @@ export function Header() {
                 How it works
               </Link>
               <Link
-                href="/conversations"
+                href="/ideation-queue"
                 className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                  isConversationsActive
+                  isIdeationQueueActive
                     ? "bg-sky-500/15 text-sky-400"
                     : "text-slate-400 hover:bg-slate-800 hover:text-white"
                 }`}

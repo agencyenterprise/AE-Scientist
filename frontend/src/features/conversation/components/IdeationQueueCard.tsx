@@ -14,8 +14,7 @@ import { LaunchResearchButton } from "./LaunchResearchButton";
 
 /**
  * Card component for displaying a single idea in the Ideation Queue
- * Supports expand/collapse to show research runs
- * Supports selection for inline view (if onSelect provided)
+ * Supports expand/collapse for content and research runs
  * Memoized for performance in list rendering
  */
 function IdeationQueueCardComponent({
@@ -26,60 +25,59 @@ function IdeationQueueCardComponent({
   createdAt,
   updatedAt,
   conversationStatus = "draft",
-  isSelected,
-  onSelect,
 }: IdeationQueueCardProps) {
-  const [isExpanded, setIsExpanded] = useState(true);
+  const [isRunsExpanded, setIsRunsExpanded] = useState(true);
+  const [isContentExpanded, setIsContentExpanded] = useState(false);
   const router = useRouter();
   const canLaunchResearch = status !== "no_idea";
 
-  // Call onSelect if provided, otherwise navigate (backward compatible)
-  const handleCardClick = () => {
-    if (onSelect) {
-      onSelect(id);
-    } else {
-      router.push(`/conversations/${id}`);
-    }
+  const handleRunsToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsRunsExpanded(prev => !prev);
   };
 
-  const handleExpandToggle = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setIsExpanded(prev => !prev);
+  const handleContentToggle = () => {
+    setIsContentExpanded(prev => !prev);
   };
 
-  const handleEditClick = (e: React.MouseEvent) => {
+  const handleRefineClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    router.push(`/conversations/${id}`);
+    router.push(`/ideation-queue/${id}`);
   };
 
   return (
     <>
       <article
-        onClick={handleCardClick}
         className={cn(
-          "group cursor-pointer rounded-2xl border border-slate-800 bg-slate-900/50 p-3 sm:p-4",
-          "transition-all hover:border-slate-700 hover:bg-slate-900/80",
-          isSelected && "ring-2 ring-sky-500 border-sky-500/50 bg-slate-900/80"
+          "group rounded-2xl border border-slate-800 bg-slate-900/50 p-3 sm:p-4",
+          "transition-all hover:border-slate-700 hover:bg-slate-900/80"
         )}
       >
-        {/* Header: Title + Edit Button */}
+        {/* Header: Title + Refine Button */}
         <div className="mb-3 flex flex-row items-start justify-between gap-2">
           <h3 className="line-clamp-2 text-sm font-semibold text-slate-100 flex-1">{title}</h3>
           <Button
-            onClick={handleEditClick}
+            onClick={handleRefineClick}
             variant="ghost"
             size="sm"
             className="text-slate-400 hover:text-slate-300 shrink-0"
-            aria-label="Edit conversation"
+            aria-label="Refine research idea"
           >
             <Pencil className="h-3 w-3" />
-            Edit
+            Refine further
           </Button>
         </div>
 
-        {/* Body: Markdown preview */}
+        {/* Body: Markdown content - click to expand/collapse */}
         {markdown && (
-          <div className="mb-3 line-clamp-3 text-xs leading-relaxed text-slate-400 prose-sm prose-invert max-w-none [&_p]:my-0 [&_h1]:hidden [&_h2]:hidden [&_h3]:hidden [&_h4]:hidden [&_h5]:hidden [&_h6]:hidden [&_ul]:my-0 [&_ol]:my-0 [&_li]:my-0">
+          <div
+            onClick={handleContentToggle}
+            className={cn(
+              "mb-3 text-xs leading-relaxed text-slate-400 prose-sm prose-invert max-w-none cursor-pointer",
+              "[&_p]:my-0 [&_h1]:hidden [&_h2]:hidden [&_h3]:hidden [&_h4]:hidden [&_h5]:hidden [&_h6]:hidden [&_ul]:my-0 [&_ol]:my-0 [&_li]:my-0",
+              !isContentExpanded && "line-clamp-3"
+            )}
+          >
             <Markdown>{markdown}</Markdown>
           </div>
         )}
@@ -96,23 +94,27 @@ function IdeationQueueCardComponent({
           </div>
 
           <button
-            onClick={handleExpandToggle}
+            onClick={handleRunsToggle}
             type="button"
-            aria-label={isExpanded ? "Hide research runs" : "Show research runs"}
-            aria-expanded={isExpanded}
+            aria-label={isRunsExpanded ? "Hide research runs" : "Show research runs"}
+            aria-expanded={isRunsExpanded}
             className={cn(
               "inline-flex items-center gap-1 rounded px-2 py-1 shrink-0",
               "text-[10px] uppercase tracking-wide text-slate-400",
               "transition-colors hover:bg-slate-800 hover:text-slate-300"
             )}
           >
-            {isExpanded ? "Hide Runs" : "Show Runs"}
-            {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            {isRunsExpanded ? "Hide Runs" : "Show Runs"}
+            {isRunsExpanded ? (
+              <ChevronUp className="h-3 w-3" />
+            ) : (
+              <ChevronDown className="h-3 w-3" />
+            )}
           </button>
         </div>
 
         {/* Expandable Runs Section */}
-        {isExpanded && <IdeationQueueRunsList conversationId={id} />}
+        {isRunsExpanded && <IdeationQueueRunsList conversationId={id} />}
 
         {canLaunchResearch && (
           <div className="mt-3 sm:mt-4 flex items-center justify-center sm:justify-end">

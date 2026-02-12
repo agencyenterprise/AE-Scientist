@@ -1,13 +1,11 @@
 "use client";
 
 import { ProjectDraftConversation } from "@/features/project-draft";
-import { PromptTypes } from "@/shared/lib/prompt-types";
 import type { ConversationDetail, Idea as IdeaType } from "@/types";
 import { useState } from "react";
 import { useProjectDraftState } from "../hooks/useProjectDraftState";
 
 import { ProjectDraft } from "./ProjectDraft";
-import { PromptEditModal } from "./PromptEditModal";
 
 interface ProjectDraftTabProps {
   conversation: ConversationDetail;
@@ -21,7 +19,6 @@ export function ProjectDraftTab({
   mobileView,
   onAnswerFinish,
 }: ProjectDraftTabProps) {
-  const [isPromptModalOpen, setIsPromptModalOpen] = useState(false);
   const [updatedProjectDraft, setUpdatedProjectDraft] = useState<IdeaType | null>(null);
 
   // Get current idea state for read-only detection
@@ -32,14 +29,6 @@ export function ProjectDraftTab({
     setUpdatedProjectDraft(updatedDraft);
     // Clear the update after a brief moment to allow for future updates
     setTimeout(() => setUpdatedProjectDraft(null), 100);
-  };
-
-  const handleOpenPromptModal = (): void => {
-    setIsPromptModalOpen(true);
-  };
-
-  const handleClosePromptModal = (): void => {
-    setIsPromptModalOpen(false);
   };
 
   return (
@@ -54,7 +43,6 @@ export function ProjectDraftTab({
             isLocked={false}
             currentProjectDraft={projectDraftState.projectDraft}
             onProjectDraftUpdate={handleProjectDraftUpdate}
-            onOpenPromptModal={handleOpenPromptModal}
             onAnswerFinish={onAnswerFinish}
             conversationCapabilities={{
               hasImages: Boolean(conversation.has_images ?? false),
@@ -69,13 +57,6 @@ export function ProjectDraftTab({
           <ProjectDraft conversation={conversation} externalUpdate={updatedProjectDraft} />
         </div>
       </div>
-
-      {/* TODO Prompt Edit Modal, is used for?*/}
-      <PromptEditModal
-        isOpen={isPromptModalOpen}
-        onClose={handleClosePromptModal}
-        promptType={PromptTypes.IDEA_CHAT}
-      />
     </div>
   );
 }

@@ -36,7 +36,7 @@ export function ImportModal({
     onImportEnd,
     onSuccess: id => {
       onClose();
-      window.location.href = `/conversations/${id}`;
+      window.location.href = `/ideation-queue/${id}`;
     },
     autoRedirect: false, // We handle redirect in onSuccess
   });

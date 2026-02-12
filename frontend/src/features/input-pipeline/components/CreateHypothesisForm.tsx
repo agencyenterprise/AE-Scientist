@@ -33,7 +33,7 @@ export function CreateHypothesisForm() {
   const importState = useConversationImport({
     autoRedirect: false,
     onSuccess: id => {
-      router.push(`/conversations/${id}`);
+      router.push(`/ideation-queue/${id}`);
       router.refresh();
     },
   });
@@ -44,7 +44,7 @@ export function CreateHypothesisForm() {
     onSuccess: id => {
       setTitle("");
       setIdea("");
-      router.push(`/conversations/${id}`);
+      router.push(`/ideation-queue/${id}`);
       router.refresh();
     },
     onError: error => {

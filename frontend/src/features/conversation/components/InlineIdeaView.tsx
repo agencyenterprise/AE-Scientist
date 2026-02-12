@@ -22,9 +22,9 @@ export function InlineIdeaView({ conversationId }: InlineIdeaViewProps) {
   const { idea, isLoading, error, refetch } = useSelectedIdeaData(conversationId);
   const { runs } = useConversationResearchRuns(conversationId);
 
-  const handleEditClick = () => {
+  const handleRefineClick = () => {
     if (conversationId) {
-      router.push(`/conversations/${conversationId}`);
+      router.push(`/ideation-queue/${conversationId}`);
     }
   };
 
@@ -113,13 +113,13 @@ export function InlineIdeaView({ conversationId }: InlineIdeaViewProps) {
           <div className="flex items-center gap-2 sm:ml-auto">
             <LaunchResearchButton conversationId={conversationId} disabled={!canLaunchResearch} />
             <Button
-              onClick={handleEditClick}
+              onClick={handleRefineClick}
               variant="outline"
               size="sm"
-              aria-label="Edit research idea"
+              aria-label="Refine research idea"
             >
               <Pencil className="h-3 w-3 mr-1.5" />
-              Edit
+              Refine further
             </Button>
           </div>
         </div>

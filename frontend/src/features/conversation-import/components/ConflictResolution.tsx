@@ -70,7 +70,7 @@ export function ConflictResolution({
                 <td className="px-3 py-2">
                   <a
                     className="text-[var(--primary)] hover:underline"
-                    href={`/conversations/${item.id}`}
+                    href={`/ideation-queue/${item.id}`}
                     target="_blank"
                     rel="noopener noreferrer"
                   >

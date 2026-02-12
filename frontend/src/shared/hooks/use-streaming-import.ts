@@ -120,7 +120,7 @@ export interface StreamingImportReturn {
  * ```typescript
  * const { state, actions, streamingRef } = useStreamingImport({
  *   onSuccess: (conversationId) => {
- *     router.push(`/conversations/${conversationId}`);
+ *     router.push(`/ideation-queue/${conversationId}`);
  *   },
  *   onError: (error) => {
  *     console.error('Import failed:', error);
@@ -327,7 +327,7 @@ export function useStreamingImport(options: StreamingImportOptions = {}): Stream
                   onEnd?.();
                   onSuccess?.(conversation.id);
                   if (autoRedirect) {
-                    window.location.href = `/conversations/${conversation.id}`;
+                    window.location.href = `/ideation-queue/${conversation.id}`;
                   }
                   return {
                     success: true,

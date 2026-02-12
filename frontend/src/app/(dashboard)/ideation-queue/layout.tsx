@@ -30,7 +30,7 @@ export default function ConversationsLayout({ children }: ConversationsLayoutPro
     useState<ConversationStatusFilter>("all");
   const [runStatusFilter, setRunStatusFilter] = useState<RunStatusFilter>("all");
 
-  const selectedConversationId = pathname.startsWith("/conversations/")
+  const selectedConversationId = pathname.startsWith("/ideation-queue/")
     ? (() => {
         const idString = pathname.split("/")[2];
         return idString ? parseInt(idString, 10) || undefined : undefined;
@@ -70,7 +70,7 @@ export default function ConversationsLayout({ children }: ConversationsLayoutPro
     if (selectedConversationId === conversation.id) {
       return;
     }
-    router.push(`/conversations/${conversation.id}`);
+    router.push(`/ideation-queue/${conversation.id}`);
   };
 
   const dashboardContextValue = {

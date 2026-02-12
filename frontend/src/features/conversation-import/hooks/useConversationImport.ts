@@ -241,7 +241,7 @@ export function useConversationImport(
   // Conflict resolution actions
   const resolveConflictGoTo = useCallback(() => {
     if (conflictState.conflict.selectedId) {
-      window.location.href = `/conversations/${conflictState.conflict.selectedId}`;
+      window.location.href = `/ideation-queue/${conflictState.conflict.selectedId}`;
     }
   }, [conflictState.conflict.selectedId]);
 

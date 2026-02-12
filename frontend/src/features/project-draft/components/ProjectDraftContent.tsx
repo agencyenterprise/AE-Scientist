@@ -60,21 +60,8 @@ export function ProjectDraftContent({
   return (
     <>
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-        {/* Edit Button */}
-        {!isGenerating && activeVersion?.idea_markdown && (
-          <div className="flex justify-end px-4 py-2 border-b border-zinc-200 dark:border-zinc-800">
-            <button
-              onClick={() => setIsEditModalOpen(true)}
-              className="inline-flex items-center gap-2 rounded-lg border border-blue-500/40 px-3 py-1.5 text-sm font-medium text-blue-200 transition-colors hover:bg-blue-500/10"
-            >
-              <Pencil className="h-4 w-4" />
-              Edit Idea
-            </button>
-          </div>
-        )}
-
         {/* Markdown Content */}
-        <div className="flex-1 overflow-y-auto px-4 py-6">
+        <div className="flex-1 overflow-y-auto px-1">
           {isGenerating ? (
             <ProjectDraftSkeleton />
           ) : showDiffs && markdownDiffContent ? (
@@ -91,6 +78,19 @@ export function ProjectDraftContent({
             <p className="text-zinc-400 text-sm">No idea content available.</p>
           )}
         </div>
+
+        {/* Edit Button */}
+        {!isGenerating && activeVersion?.idea_markdown && (
+          <div className="flex justify-end px-4 py-2 border-t border-zinc-200 dark:border-zinc-800">
+            <button
+              onClick={() => setIsEditModalOpen(true)}
+              className="inline-flex items-center gap-2 rounded-lg border border-blue-500/40 px-3 py-1.5 text-sm font-medium text-blue-200 transition-colors hover:bg-blue-500/10"
+            >
+              <Pencil className="h-4 w-4" />
+              Manual edit
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Markdown Edit Modal */}
