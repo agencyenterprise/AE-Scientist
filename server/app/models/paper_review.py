@@ -62,7 +62,7 @@ class PaperReviewDetail(BaseModel):
     questions: Optional[List[str]] = None
     limitations: Optional[List[str]] = None
     ethical_concerns: Optional[bool] = None
-    ethical_concerns_explanation: Optional[str] = None
+    ethical_concerns_explanation: str = ""
     soundness: Optional[int] = None
     presentation: Optional[int] = None
     contribution: Optional[int] = None

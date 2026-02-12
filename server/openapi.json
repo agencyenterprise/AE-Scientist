@@ -7809,6 +7809,12 @@
             "title": "Ethical Concerns",
             "description": "Whether ethical concerns were raised"
           },
+          "ethical_concerns_explanation": {
+            "type": "string",
+            "title": "Ethical Concerns Explanation",
+            "description": "Explanation of ethical concerns if ethical_concerns is True",
+            "default": ""
+          },
           "soundness": {
             "type": "integer",
             "title": "Soundness",
@@ -9073,15 +9079,9 @@
             "title": "Ethical Concerns"
           },
           "ethical_concerns_explanation": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ethical Concerns Explanation"
+            "type": "string",
+            "title": "Ethical Concerns Explanation",
+            "default": ""
           },
           "soundness": {
             "anyOf": [
@@ -12142,6 +12142,11 @@
           "ethical_concerns": {
             "type": "boolean",
             "title": "Ethical Concerns"
+          },
+          "ethical_concerns_explanation": {
+            "type": "string",
+            "title": "Ethical Concerns Explanation",
+            "default": ""
           },
           "soundness": {
             "type": "integer",

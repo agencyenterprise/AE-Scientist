@@ -770,6 +770,13 @@ class LlmReviewResponse(BaseModel):
             description="Whether ethical concerns were raised", title="Ethical Concerns"
         ),
     ]
+    ethical_concerns_explanation: Annotated[
+        str | None,
+        Field(
+            description="Explanation of ethical concerns if ethical_concerns is True",
+            title="Ethical Concerns Explanation",
+        ),
+    ] = ""
     soundness: Annotated[
         int, Field(description="Soundness score (1-4)", title="Soundness")
     ]
@@ -1753,6 +1760,9 @@ class ReviewCompletedEvent(BaseModel):
     questions: Annotated[list[str], Field(title="Questions")]
     limitations: Annotated[list[str], Field(title="Limitations")]
     ethical_concerns: Annotated[bool, Field(title="Ethical Concerns")]
+    ethical_concerns_explanation: Annotated[
+        str | None, Field(title="Ethical Concerns Explanation")
+    ] = ""
     soundness: Annotated[int, Field(title="Soundness")]
     presentation: Annotated[int, Field(title="Presentation")]
     contribution: Annotated[int, Field(title="Contribution")]
@@ -2600,7 +2610,7 @@ class PaperReviewDetail(BaseModel):
     ethical_concerns: Annotated[bool | None, Field(title="Ethical Concerns")] = None
     ethical_concerns_explanation: Annotated[
         str | None, Field(title="Ethical Concerns Explanation")
-    ] = None
+    ] = ""
     soundness: Annotated[int | None, Field(title="Soundness")] = None
     presentation: Annotated[int | None, Field(title="Presentation")] = None
     contribution: Annotated[int | None, Field(title="Contribution")] = None

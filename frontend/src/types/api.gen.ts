@@ -3560,6 +3560,12 @@ export interface components {
              */
             ethical_concerns: boolean;
             /**
+             * Ethical Concerns Explanation
+             * @description Explanation of ethical concerns if ethical_concerns is True
+             * @default
+             */
+            ethical_concerns_explanation: string;
+            /**
              * Soundness
              * @description Soundness score (1-4)
              */
@@ -4259,8 +4265,11 @@ export interface components {
             limitations?: string[] | null;
             /** Ethical Concerns */
             ethical_concerns?: boolean | null;
-            /** Ethical Concerns Explanation */
-            ethical_concerns_explanation?: string | null;
+            /**
+             * Ethical Concerns Explanation
+             * @default
+             */
+            ethical_concerns_explanation: string;
             /** Soundness */
             soundness?: number | null;
             /** Presentation */
@@ -5736,6 +5745,11 @@ export interface components {
             limitations: string[];
             /** Ethical Concerns */
             ethical_concerns: boolean;
+            /**
+             * Ethical Concerns Explanation
+             * @default
+             */
+            ethical_concerns_explanation: string;
             /** Soundness */
             soundness: number;
             /** Presentation */

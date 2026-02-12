@@ -36,7 +36,7 @@ class PaperReview(NamedTuple):
     questions: Optional[list]
     limitations: Optional[list]
     ethical_concerns: Optional[bool]
-    ethical_concerns_explanation: Optional[str]
+    ethical_concerns_explanation: str
     soundness: Optional[int]
     presentation: Optional[int]
     contribution: Optional[int]
@@ -128,7 +128,7 @@ class PaperReviewsMixin(ConnectionProvider):
         questions: list,
         limitations: list,
         ethical_concerns: bool,
-        ethical_concerns_explanation: str | None,
+        ethical_concerns_explanation: str,
         soundness: int,
         presentation: int,
         contribution: int,
@@ -210,7 +210,7 @@ class PaperReviewsMixin(ConnectionProvider):
         questions: list,
         limitations: list,
         ethical_concerns: bool,
-        ethical_concerns_explanation: str | None,
+        ethical_concerns_explanation: str,
         soundness: int,
         presentation: int,
         contribution: int,

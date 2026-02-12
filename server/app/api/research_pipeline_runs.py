@@ -632,6 +632,7 @@ async def get_research_run_review(
         questions=review.questions or [],
         limitations=review.limitations or [],
         ethical_concerns=review.ethical_concerns,
+        ethical_concerns_explanation=review.ethical_concerns_explanation,
         soundness=review.soundness,
         presentation=review.presentation,
         contribution=review.contribution,

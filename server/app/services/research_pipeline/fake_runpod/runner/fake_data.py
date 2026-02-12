@@ -284,7 +284,8 @@ class FakeDataMixin:
         overall = 7
         confidence = 4
         decision = "Accept"
-        ethical_concerns = False
+        ethical_concerns = True
+        ethical_concerns_explanation = "The paper proposes techniques that could potentially be misused for generating misleading synthetic data or deepfakes. The authors should include a discussion of potential negative societal impacts and mitigation strategies."
         source_path = None
         created_at = datetime.now(timezone.utc)
 
@@ -300,6 +301,7 @@ class FakeDataMixin:
             questions=questions,
             limitations=limitations,
             ethical_concerns=ethical_concerns,
+            ethical_concerns_explanation=ethical_concerns_explanation,
             soundness=soundness,
             presentation=presentation,
             contribution=contribution,

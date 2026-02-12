@@ -28,7 +28,7 @@ export interface ReviewContent {
   questions: string[];
   limitations: string[];
   ethical_concerns: boolean;
-  ethical_concerns_explanation: string | null;
+  ethical_concerns_explanation: string;
   originality: number;
   quality: number;
   clarity: number;

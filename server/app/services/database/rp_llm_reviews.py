@@ -24,6 +24,7 @@ class LlmReview(NamedTuple):
     questions: list
     limitations: list
     ethical_concerns: bool
+    ethical_concerns_explanation: str
     soundness: int
     presentation: int
     contribution: int
@@ -51,6 +52,7 @@ class ResearchPipelineLlmReviewsMixin(ConnectionProvider):
         questions: list,
         limitations: list,
         ethical_concerns: bool,
+        ethical_concerns_explanation: str,
         soundness: int,
         presentation: int,
         contribution: int,
@@ -70,9 +72,10 @@ class ResearchPipelineLlmReviewsMixin(ConnectionProvider):
                     """
                     INSERT INTO rp_llm_reviews
                         (run_id, summary, strengths, weaknesses, originality, quality, clarity,
-                         significance, questions, limitations, ethical_concerns, soundness,
+                         significance, questions, limitations, ethical_concerns,
+                         ethical_concerns_explanation, soundness,
                          presentation, contribution, overall, confidence, decision, source_path, created_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
@@ -87,6 +90,7 @@ class ResearchPipelineLlmReviewsMixin(ConnectionProvider):
                         Jsonb(questions),
                         Jsonb(limitations),
                         ethical_concerns,
+                        ethical_concerns_explanation,
                         soundness,
                         presentation,
                         contribution,
@@ -114,8 +118,8 @@ class ResearchPipelineLlmReviewsMixin(ConnectionProvider):
         query = """
             SELECT id, run_id, summary, strengths, weaknesses, originality, quality,
                    clarity, significance, questions, limitations, ethical_concerns,
-                   soundness, presentation, contribution, overall, confidence, decision,
-                   source_path, created_at
+                   ethical_concerns_explanation, soundness, presentation, contribution,
+                   overall, confidence, decision, source_path, created_at
             FROM rp_llm_reviews
             WHERE run_id = %s
             LIMIT 1

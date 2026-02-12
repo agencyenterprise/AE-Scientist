@@ -54,6 +54,7 @@ class ReviewResponseRecorder:
                         questions=review.questions,
                         limitations=review.limitations,
                         ethical_concerns=review.ethical_concerns,
+                        ethical_concerns_explanation=review.ethical_concerns_explanation,
                         soundness=review.soundness,
                         presentation=review.presentation,
                         contribution=review.contribution,

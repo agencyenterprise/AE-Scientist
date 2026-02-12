@@ -8,6 +8,7 @@ from langchain.chat_models import init_chat_model
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from .token_tracking import TokenUsage, TrackCostCallbackHandler
 
@@ -199,12 +200,22 @@ def get_structured_response_from_llm(
     structured_chat = chat.with_structured_output(schema=schema_class)
 
     callbacks = [TrackCostCallbackHandler(model=model, usage=usage)]
-    parsed_model = structured_chat.invoke(
-        messages, config={"callbacks": callbacks}  # type: ignore[arg-type]
-    )
 
-    if not isinstance(parsed_model, BaseModel):
-        raise TypeError("Structured output must be a Pydantic model instance.")
+    @retry(
+        retry=retry_if_exception_type(TypeError),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        reraise=True,
+    )
+    def invoke_with_retry() -> BaseModel:
+        parsed_model = structured_chat.invoke(
+            messages, config={"callbacks": callbacks}  # type: ignore[arg-type]
+        )
+        if not isinstance(parsed_model, BaseModel):
+            raise TypeError("Structured output must be a Pydantic model instance.")
+        return parsed_model
+
+    parsed_model = invoke_with_retry()
 
     parsed = parsed_model.model_dump(by_alias=True)
     ai_message = AIMessage(content=json.dumps(parsed))

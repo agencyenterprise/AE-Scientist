@@ -144,7 +144,10 @@ export function ReviewAnalysis({ review }: ReviewAnalysisProps) {
       {/* Ethical concerns banner */}
       {review.ethical_concerns && (
         <div className="bg-red-500/15 border border-red-500/30 text-red-400 p-3 rounded mb-4">
-          ⚠️ Ethical concerns were identified in this research
+          <div>⚠️ Ethical concerns were identified in this research</div>
+          {review.ethical_concerns_explanation && (
+            <p className="mt-2 text-sm text-red-300">{review.ethical_concerns_explanation}</p>
+          )}
         </div>
       )}
 

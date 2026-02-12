@@ -553,6 +553,9 @@ class LlmReviewResponse(BaseModel):
     questions: List[str] = Field(..., description="List of reviewer questions")
     limitations: List[str] = Field(..., description="List of identified limitations")
     ethical_concerns: bool = Field(..., description="Whether ethical concerns were raised")
+    ethical_concerns_explanation: str = Field(
+        "", description="Explanation of ethical concerns if ethical_concerns is True"
+    )
     soundness: int = Field(..., description="Soundness score (1-4)")
     presentation: int = Field(..., description="Presentation score (1-4)")
     contribution: int = Field(..., description="Contribution score (1-4)")

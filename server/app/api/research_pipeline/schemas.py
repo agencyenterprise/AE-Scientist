@@ -115,6 +115,7 @@ class ReviewCompletedEvent(BaseModel):
     questions: List[str]
     limitations: List[str]
     ethical_concerns: bool
+    ethical_concerns_explanation: str = ""
     soundness: int
     presentation: int
     contribution: int
