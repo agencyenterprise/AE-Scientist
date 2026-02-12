@@ -38,9 +38,9 @@ from app.models.billing import InsufficientBalanceError
 from app.models.conversations import ModelCost, ResearchCost
 from app.services import (
     AnthropicService,
-    GrokService,
     OpenAIService,
     SummarizerService,
+    XAIService,
     get_database,
 )
 from app.services.billing_guard import enforce_minimum_balance
@@ -66,7 +66,7 @@ router = APIRouter(prefix="/conversations")
 parser_service = ParserRouterService()
 openai_service = OpenAIService()
 anthropic_service = AnthropicService()
-grok_service = GrokService()
+xai_service = XAIService()
 
 logger = logging.getLogger(__name__)
 
@@ -75,8 +75,8 @@ def _resolve_llm_service(llm_provider: str) -> LangChainLLMService:
     """Return the configured LangChain service for the requested provider."""
     if llm_provider == "openai":
         return openai_service
-    if llm_provider == "grok":
-        return grok_service
+    if llm_provider == "xai":
+        return xai_service
     if llm_provider == "anthropic":
         return anthropic_service
     raise ValueError(f"Unsupported LLM provider: {llm_provider}")

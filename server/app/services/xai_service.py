@@ -1,4 +1,4 @@
-"""Grok service implemented via the OpenAI LangChain service."""
+"""xAI service implemented via the OpenAI LangChain service."""
 
 import logging
 
@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 
 SUPPORTED_MODELS = [
     LLMModel(
-        id="grok-4-1-fast",
-        provider="grok",
+        id="grok-4-1-fast-reasoning",
+        provider="xai",
         label="Grok 4.1 Fast Reasoning",
         supports_images=True,
         supports_pdfs=True,
@@ -23,15 +23,15 @@ SUPPORTED_MODELS = [
     ),
     LLMModel(
         id="grok-4-1-fast-non-reasoning",
-        provider="grok",
+        provider="xai",
         label="Grok 4.1 Fast Non Reasoning",
         supports_images=True,
         supports_pdfs=True,
         context_window_tokens=2_000_000,
     ),
     LLMModel(
-        id="grok-4-fast",
-        provider="grok",
+        id="grok-4-fast-reasoning",
+        provider="xai",
         label="Grok 4 Fast Reasoning",
         supports_images=True,
         supports_pdfs=True,
@@ -39,15 +39,15 @@ SUPPORTED_MODELS = [
     ),
     LLMModel(
         id="grok-4-fast-non-reasoning",
-        provider="grok",
+        provider="xai",
         label="Grok 4 Fast Non Reasoning",
         supports_images=True,
         supports_pdfs=True,
         context_window_tokens=2_000_000,
     ),
     LLMModel(
-        id="grok-4",
-        provider="grok",
+        id="grok-4-0709",
+        provider="xai",
         label="Grok 4",
         supports_images=True,
         supports_pdfs=True,
@@ -56,7 +56,7 @@ SUPPORTED_MODELS = [
 ]
 
 
-class GrokService(OpenAIService):
+class XAIService(OpenAIService):
     """Service for interacting with xAI's Grok API using the OpenAI-compatible path."""
 
     def __init__(self) -> None:
@@ -65,12 +65,12 @@ class GrokService(OpenAIService):
             raise ValueError("XAI_API_KEY environment variable is required")
         LangChainLLMService.__init__(
             self,
-            provider_name="grok",
+            provider_name="xai",
             supported_models=SUPPORTED_MODELS,
         )
 
     def _build_chat_model(self, *, model_id: str) -> ChatOpenAI:
-        logger.debug("Initializing Grok model '%s'", model_id)
+        logger.debug("Initializing xAI model '%s'", model_id)
         return ChatOpenAI(
             model=model_id,
             api_key=SecretStr(self._xai_api_key),

@@ -12,7 +12,7 @@ from app.services.scraper.branchprompt_parser import BranchPromptParserService
 from app.services.parser_router import ParserRouterService
 from app.services.scraper.errors import ChatNotFound
 from app.services.database import DatabaseManager, get_database
-from app.services.grok_service import GrokService
+from app.services.xai_service import XAIService
 from app.services.openai_service import OpenAIService
 from app.services.summarizer_service import SummarizerService
 
@@ -25,6 +25,6 @@ __all__ = [
     "ChatNotFound",
     "DatabaseManager",
     "get_database",
-    "GrokService",
+    "XAIService",
     "OpenAIService",
 ]

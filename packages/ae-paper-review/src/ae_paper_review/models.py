@@ -61,7 +61,7 @@ class ReviewResponseModel(BaseModel):
     )
     ethical_concerns: bool = Field(
         ...,
-        alias="Ethical Concerns",
+        alias="Ethical_Concerns",
         description="True if ethical concerns exist, False otherwise.",
     )
     soundness: int = Field(

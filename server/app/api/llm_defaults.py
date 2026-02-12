@@ -21,8 +21,8 @@ from app.models import (
 from app.prompt_types import PromptTypes
 from app.services import get_database
 from app.services.anthropic_service import SUPPORTED_MODELS as ANTHROPIC_MODELS
-from app.services.grok_service import SUPPORTED_MODELS as GROK_MODELS
 from app.services.openai_service import SUPPORTED_MODELS as OPENAI_MODELS
+from app.services.xai_service import SUPPORTED_MODELS as XAI_MODELS
 
 router = APIRouter(prefix="/llm-defaults")
 logger = logging.getLogger(__name__)
@@ -30,8 +30,8 @@ logger = logging.getLogger(__name__)
 # Provider constants
 SUPPORTED_PROVIDERS = {
     "anthropic": ANTHROPIC_MODELS,
-    "grok": GROK_MODELS,
     "openai": OPENAI_MODELS,
+    "xai": XAI_MODELS,
 }
 
 
