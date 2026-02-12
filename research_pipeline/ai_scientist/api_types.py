@@ -2598,6 +2598,9 @@ class PaperReviewDetail(BaseModel):
     questions: Annotated[list[str] | None, Field(title="Questions")] = None
     limitations: Annotated[list[str] | None, Field(title="Limitations")] = None
     ethical_concerns: Annotated[bool | None, Field(title="Ethical Concerns")] = None
+    ethical_concerns_explanation: Annotated[
+        str | None, Field(title="Ethical Concerns Explanation")
+    ] = None
     soundness: Annotated[int | None, Field(title="Soundness")] = None
     presentation: Annotated[int | None, Field(title="Presentation")] = None
     contribution: Annotated[int | None, Field(title="Contribution")] = None

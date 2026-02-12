@@ -4259,6 +4259,8 @@ export interface components {
             limitations?: string[] | null;
             /** Ethical Concerns */
             ethical_concerns?: boolean | null;
+            /** Ethical Concerns Explanation */
+            ethical_concerns_explanation?: string | null;
             /** Soundness */
             soundness?: number | null;
             /** Presentation */

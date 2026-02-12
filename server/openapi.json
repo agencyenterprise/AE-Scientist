@@ -9072,6 +9072,17 @@
             ],
             "title": "Ethical Concerns"
           },
+          "ethical_concerns_explanation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ethical Concerns Explanation"
+          },
           "soundness": {
             "anyOf": [
               {

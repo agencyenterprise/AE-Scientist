@@ -81,7 +81,8 @@ export function CreateProjectModal({
           {/* Content */}
           <div className="mb-6 space-y-4">
             <p className="text-sm text-muted-foreground mb-4">
-              This will launch a new research run based on your current work.
+              Your complete research idea (as shown on this page) will be fed into the pipeline to
+              run experiments and generate a paper.
             </p>
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground" htmlFor="gpu-type-select">

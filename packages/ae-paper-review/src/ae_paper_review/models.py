@@ -64,6 +64,11 @@ class ReviewResponseModel(BaseModel):
         alias="Ethical_Concerns",
         description="True if ethical concerns exist, False otherwise.",
     )
+    ethical_concerns_explanation: str | None = Field(
+        default=None,
+        alias="Ethical_Concerns_Explanation",
+        description="Explanation of ethical concerns if ethical_concerns is True. Should be None if ethical_concerns is False.",
+    )
     soundness: int = Field(
         ...,
         alias="Soundness",

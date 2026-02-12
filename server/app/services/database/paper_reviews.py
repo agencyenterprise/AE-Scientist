@@ -36,6 +36,7 @@ class PaperReview(NamedTuple):
     questions: Optional[list]
     limitations: Optional[list]
     ethical_concerns: Optional[bool]
+    ethical_concerns_explanation: Optional[str]
     soundness: Optional[int]
     presentation: Optional[int]
     contribution: Optional[int]
@@ -127,6 +128,7 @@ class PaperReviewsMixin(ConnectionProvider):
         questions: list,
         limitations: list,
         ethical_concerns: bool,
+        ethical_concerns_explanation: str | None,
         soundness: int,
         presentation: int,
         contribution: int,
@@ -143,6 +145,7 @@ class PaperReviewsMixin(ConnectionProvider):
                     SET summary = %s, strengths = %s, weaknesses = %s,
                         originality = %s, quality = %s, clarity = %s, significance = %s,
                         questions = %s, limitations = %s, ethical_concerns = %s,
+                        ethical_concerns_explanation = %s,
                         soundness = %s, presentation = %s, contribution = %s,
                         overall = %s, confidence = %s, decision = %s,
                         status = %s
@@ -159,6 +162,7 @@ class PaperReviewsMixin(ConnectionProvider):
                         Jsonb(questions),
                         Jsonb(limitations),
                         ethical_concerns,
+                        ethical_concerns_explanation,
                         soundness,
                         presentation,
                         contribution,
@@ -175,6 +179,7 @@ class PaperReviewsMixin(ConnectionProvider):
         query = """
             SELECT id, user_id, summary, strengths, weaknesses, originality, quality,
                    clarity, significance, questions, limitations, ethical_concerns,
+                   ethical_concerns_explanation,
                    soundness, presentation, contribution, overall, confidence, decision,
                    original_filename, s3_key, model, status, error_message, created_at,
                    has_enough_credits, progress, progress_step
@@ -205,6 +210,7 @@ class PaperReviewsMixin(ConnectionProvider):
         questions: list,
         limitations: list,
         ethical_concerns: bool,
+        ethical_concerns_explanation: str | None,
         soundness: int,
         presentation: int,
         contribution: int,
@@ -223,10 +229,11 @@ class PaperReviewsMixin(ConnectionProvider):
                     INSERT INTO paper_reviews
                         (user_id, summary, strengths, weaknesses, originality, quality,
                          clarity, significance, questions, limitations, ethical_concerns,
+                         ethical_concerns_explanation,
                          soundness, presentation, contribution, overall, confidence,
                          decision, original_filename, s3_key, model, status,
                          progress, progress_step)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
@@ -241,6 +248,7 @@ class PaperReviewsMixin(ConnectionProvider):
                         Jsonb(questions),
                         Jsonb(limitations),
                         ethical_concerns,
+                        ethical_concerns_explanation,
                         soundness,
                         presentation,
                         contribution,
@@ -265,6 +273,7 @@ class PaperReviewsMixin(ConnectionProvider):
         query = """
             SELECT id, user_id, summary, strengths, weaknesses, originality, quality,
                    clarity, significance, questions, limitations, ethical_concerns,
+                   ethical_concerns_explanation,
                    soundness, presentation, contribution, overall, confidence, decision,
                    original_filename, s3_key, model, status, error_message, created_at,
                    has_enough_credits, progress, progress_step
@@ -286,6 +295,7 @@ class PaperReviewsMixin(ConnectionProvider):
         query = """
             SELECT id, user_id, summary, strengths, weaknesses, originality, quality,
                    clarity, significance, questions, limitations, ethical_concerns,
+                   ethical_concerns_explanation,
                    soundness, presentation, contribution, overall, confidence, decision,
                    original_filename, s3_key, model, status, error_message, created_at,
                    progress, progress_step, has_enough_credits

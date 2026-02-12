@@ -28,6 +28,7 @@ export interface ReviewContent {
   questions: string[];
   limitations: string[];
   ethical_concerns: boolean;
+  ethical_concerns_explanation: string | null;
   originality: number;
   quality: number;
   clarity: number;
@@ -334,9 +335,16 @@ export function PaperReviewResult({ review }: PaperReviewResultProps) {
 
       {/* Ethical Concerns */}
       {content.ethical_concerns && (
-        <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-red-400">
-          <AlertTriangle className="h-5 w-5" />
-          <span className="text-sm">Ethical concerns were identified in this paper</span>
+        <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-red-400">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5" />
+            <span className="text-sm font-medium">
+              Ethical concerns were identified in this paper
+            </span>
+          </div>
+          {content.ethical_concerns_explanation && (
+            <p className="mt-2 text-sm text-red-300">{content.ethical_concerns_explanation}</p>
+          )}
         </div>
       )}
 

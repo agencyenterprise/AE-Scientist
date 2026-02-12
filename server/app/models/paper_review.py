@@ -62,6 +62,7 @@ class PaperReviewDetail(BaseModel):
     questions: Optional[List[str]] = None
     limitations: Optional[List[str]] = None
     ethical_concerns: Optional[bool] = None
+    ethical_concerns_explanation: Optional[str] = None
     soundness: Optional[int] = None
     presentation: Optional[int] = None
     contribution: Optional[int] = None
@@ -149,6 +150,7 @@ class PaperReviewDetail(BaseModel):
             questions=review.questions,
             limitations=review.limitations,
             ethical_concerns=review.ethical_concerns,
+            ethical_concerns_explanation=review.ethical_concerns_explanation,
             soundness=review.soundness,
             presentation=review.presentation,
             contribution=review.contribution,

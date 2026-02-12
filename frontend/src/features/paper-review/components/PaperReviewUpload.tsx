@@ -136,6 +136,7 @@ export function PaperReviewUpload({ onStartNewReview }: PaperReviewUploadProps) 
               questions: data.questions || [],
               limitations: data.limitations || [],
               ethical_concerns: data.ethical_concerns || false,
+              ethical_concerns_explanation: data.ethical_concerns_explanation || null,
               originality: data.originality || 0,
               quality: data.quality || 0,
               clarity: data.clarity || 0,
