@@ -322,19 +322,19 @@ export function PaperReviewUpload({ onStartNewReview }: PaperReviewUploadProps) 
   if (uploadState === "complete" && reviewResult) {
     return (
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2 text-emerald-400">
-            <CheckCircle className="h-5 w-5" />
+            <CheckCircle className="h-5 w-5 shrink-0" />
             <span className="font-medium">Review Complete</span>
             {(selectedFile || currentReviewFilename) && (
-              <span className="text-slate-400">
+              <span className="truncate text-slate-400">
                 for {selectedFile?.name || currentReviewFilename}
               </span>
             )}
           </div>
           <button
             onClick={handleReset}
-            className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-800"
+            className="w-full rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-800 sm:w-auto"
           >
             Upload Another Paper
           </button>
@@ -358,10 +358,12 @@ export function PaperReviewUpload({ onStartNewReview }: PaperReviewUploadProps) 
     const progressPercent = currentProgress !== null ? Math.round(currentProgress * 100) : null;
 
     return (
-      <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-700 bg-slate-900/50 p-12">
-        <Loader2 className="mb-4 h-12 w-12 animate-spin text-amber-400" />
-        <p className="text-lg font-medium text-white">{statusText}</p>
-        <p className="mt-2 text-sm text-slate-400">{selectedFile?.name || currentReviewFilename}</p>
+      <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-700 bg-slate-900/50 p-6 sm:p-12">
+        <Loader2 className="mb-3 h-10 w-10 animate-spin text-amber-400 sm:mb-4 sm:h-12 sm:w-12" />
+        <p className="text-center text-base font-medium text-white sm:text-lg">{statusText}</p>
+        <p className="mt-2 truncate text-sm text-slate-400">
+          {selectedFile?.name || currentReviewFilename}
+        </p>
 
         {/* Progress bar */}
         {progressPercent !== null && (
@@ -376,13 +378,13 @@ export function PaperReviewUpload({ onStartNewReview }: PaperReviewUploadProps) 
           </div>
         )}
 
-        <div className="mt-4 flex items-center gap-2 text-xs text-slate-500">
-          <Clock className="h-3 w-3" />
+        <div className="mt-4 flex items-center gap-2 text-center text-xs text-slate-500">
+          <Clock className="h-3 w-3 shrink-0" />
           <span>This process runs in the background - you can refresh the page safely</span>
         </div>
         <button
           onClick={handleReset}
-          className="mt-4 rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-800"
+          className="mt-4 w-full rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-800 sm:w-auto"
         >
           Start New Review
         </button>
@@ -393,13 +395,13 @@ export function PaperReviewUpload({ onStartNewReview }: PaperReviewUploadProps) 
   // Show error state
   if (uploadState === "error") {
     return (
-      <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-red-500/50 bg-red-500/5 p-12">
-        <AlertCircle className="mb-4 h-12 w-12 text-red-400" />
-        <p className="text-lg font-medium text-white">Review Failed</p>
-        <p className="mt-2 text-sm text-red-400">{error}</p>
+      <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-red-500/50 bg-red-500/5 p-6 sm:p-12">
+        <AlertCircle className="mb-3 h-10 w-10 text-red-400 sm:mb-4 sm:h-12 sm:w-12" />
+        <p className="text-base font-medium text-white sm:text-lg">Review Failed</p>
+        <p className="mt-2 text-center text-sm text-red-400">{error}</p>
         <button
           onClick={handleReset}
-          className="mt-4 rounded-lg bg-slate-800 px-4 py-2 text-sm text-white transition-colors hover:bg-slate-700"
+          className="mt-4 w-full rounded-lg bg-slate-800 px-4 py-2 text-sm text-white transition-colors hover:bg-slate-700 sm:w-auto"
         >
           Try Again
         </button>
@@ -411,7 +413,7 @@ export function PaperReviewUpload({ onStartNewReview }: PaperReviewUploadProps) 
   return (
     <div>
       {/* Model selector */}
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <span className="text-sm text-slate-400">Select AI model for review:</span>
         <ModelSelector
           promptType={PromptTypes.PAPER_REVIEW}
@@ -426,13 +428,13 @@ export function PaperReviewUpload({ onStartNewReview }: PaperReviewUploadProps) 
 
       {error && (
         <div className="mb-4 flex items-center gap-2 rounded-lg bg-red-500/10 p-3 text-sm text-red-400">
-          <AlertCircle className="h-4 w-4" />
+          <AlertCircle className="h-4 w-4 shrink-0" />
           {error}
         </div>
       )}
 
       <label
-        className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-12 transition-colors ${
+        className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-6 transition-colors sm:p-12 ${
           isDragOver
             ? "border-amber-500 bg-amber-500/10"
             : "border-slate-700 bg-slate-900/50 hover:border-slate-600 hover:bg-slate-900"
@@ -447,11 +449,15 @@ export function PaperReviewUpload({ onStartNewReview }: PaperReviewUploadProps) 
           onChange={handleFileSelect}
           className="hidden"
         />
-        <FileUp className={`mb-4 h-12 w-12 ${isDragOver ? "text-amber-400" : "text-slate-500"}`} />
-        <p className="text-lg font-medium text-white">
+        <FileUp
+          className={`mb-3 h-10 w-10 sm:mb-4 sm:h-12 sm:w-12 ${isDragOver ? "text-amber-400" : "text-slate-500"}`}
+        />
+        <p className="text-center text-base font-medium text-white sm:text-lg">
           {isDragOver ? "Drop your PDF here" : "Upload a research paper"}
         </p>
-        <p className="mt-2 text-sm text-slate-400">Drag and drop a PDF file, or click to browse</p>
+        <p className="mt-2 text-center text-sm text-slate-400">
+          Drag and drop a PDF file, or click to browse
+        </p>
         <p className="mt-1 text-xs text-slate-500">Maximum file size: 50MB</p>
       </label>
     </div>

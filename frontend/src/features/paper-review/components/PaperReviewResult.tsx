@@ -167,19 +167,19 @@ function CollapsibleSection({
     <div className="rounded-lg border border-slate-700 bg-slate-800/50">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex w-full items-center justify-between p-4 text-left"
+        className="flex w-full items-center justify-between p-3 text-left sm:p-4"
       >
         <div className="flex items-center gap-2">
           {icon}
-          <span className="font-medium text-white">{title}</span>
+          <span className="text-sm font-medium text-white sm:text-base">{title}</span>
         </div>
         {isOpen ? (
-          <ChevronUp className="h-5 w-5 text-slate-400" />
+          <ChevronUp className="h-5 w-5 shrink-0 text-slate-400" />
         ) : (
-          <ChevronDown className="h-5 w-5 text-slate-400" />
+          <ChevronDown className="h-5 w-5 shrink-0 text-slate-400" />
         )}
       </button>
-      {isOpen && <div className="border-t border-slate-700 p-4">{children}</div>}
+      {isOpen && <div className="border-t border-slate-700 p-3 sm:p-4">{children}</div>}
     </div>
   );
 }
@@ -210,10 +210,10 @@ export function PaperReviewResult({ review }: PaperReviewResultProps) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Decision Banner */}
       <div
-        className={`flex items-center justify-between rounded-lg border p-4 ${getDecisionColor(content.decision)}`}
+        className={`flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4 ${getDecisionColor(content.decision)}`}
       >
         <div className="flex items-center gap-3">
           {getDecisionIcon(content.decision)}
@@ -225,7 +225,7 @@ export function PaperReviewResult({ review }: PaperReviewResultProps) {
         <button
           onClick={handleDownload}
           disabled={isDownloading}
-          className="flex items-center gap-2 rounded-lg border border-current px-3 py-1.5 text-sm transition-opacity hover:opacity-80 disabled:opacity-50"
+          className="flex w-full items-center justify-center gap-2 rounded-lg border border-current px-3 py-1.5 text-sm transition-opacity hover:opacity-80 disabled:opacity-50 sm:w-auto"
           title="Download original paper"
         >
           {isDownloading ? (
@@ -238,29 +238,33 @@ export function PaperReviewResult({ review }: PaperReviewResultProps) {
       </div>
 
       {/* Summary */}
-      <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-4">
-        <h3 className="mb-3 font-medium text-white">Summary</h3>
+      <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-3 sm:p-4">
+        <h3 className="mb-2 font-medium text-white sm:mb-3">Summary</h3>
         <p className="text-sm leading-relaxed text-slate-300">{content.summary}</p>
       </div>
 
       {/* Scores Grid */}
       <div>
-        <h3 className="mb-3 font-medium text-white">Quantitative Scores</h3>
-        <div className="grid grid-cols-3 gap-3 sm:grid-cols-5">
+        <h3 className="mb-2 font-medium text-white sm:mb-3">Quantitative Scores</h3>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-5">
           {SCORE_METRICS.map(metric => {
             const score = content[metric.key] as number;
             const label = getScoreLabel(metric.key, score);
             return (
               <div
                 key={metric.label}
-                className="rounded-lg border border-slate-700 bg-slate-800/50 p-3 text-center"
+                className="rounded-lg border border-slate-700 bg-slate-800/50 p-2 text-center sm:p-3"
               >
-                <div className="mb-1 text-xs text-slate-400">{metric.label}</div>
-                <div className={`text-xl font-bold ${getScoreColor(score, metric.max)}`}>
+                <div className="mb-1 text-[10px] text-slate-400 sm:text-xs">{metric.label}</div>
+                <div className={`text-lg font-bold sm:text-xl ${getScoreColor(score, metric.max)}`}>
                   {score}
-                  <span className="text-sm font-normal text-slate-500">/{metric.max}</span>
+                  <span className="text-xs font-normal text-slate-500 sm:text-sm">
+                    /{metric.max}
+                  </span>
                 </div>
-                {label && <div className="mt-1 text-xs text-slate-500">{label}</div>}
+                {label && (
+                  <div className="mt-1 hidden text-xs text-slate-500 sm:block">{label}</div>
+                )}
               </div>
             );
           })}
@@ -335,9 +339,9 @@ export function PaperReviewResult({ review }: PaperReviewResultProps) {
 
       {/* Ethical Concerns */}
       {content.ethical_concerns && (
-        <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-red-400">
+        <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-red-400 sm:p-4">
           <div className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5" />
+            <AlertTriangle className="h-5 w-5 shrink-0" />
             <span className="text-sm font-medium">
               Ethical concerns were identified in this paper
             </span>
@@ -347,16 +351,6 @@ export function PaperReviewResult({ review }: PaperReviewResultProps) {
           )}
         </div>
       )}
-
-      {/* Token Usage */}
-      <div className="rounded-lg border border-slate-700 bg-slate-800/30 p-4 text-xs text-slate-500">
-        <span className="font-medium">Token usage:</span>{" "}
-        {review.token_usage.input_tokens.toLocaleString()} input
-        {review.token_usage.cached_input_tokens > 0 && (
-          <span> ({review.token_usage.cached_input_tokens.toLocaleString()} cached)</span>
-        )}
-        , {review.token_usage.output_tokens.toLocaleString()} output
-      </div>
     </div>
   );
 }

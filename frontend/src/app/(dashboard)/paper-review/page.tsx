@@ -16,23 +16,25 @@ export default function PaperReviewPage() {
   }, []);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4 sm:gap-6">
       <PageCard>
-        <div className="p-6">
-          <h1 className="mb-2 text-2xl font-semibold text-white">Paper Review</h1>
-          <p className="mb-6 text-slate-400">
+        <div className="p-4 sm:p-6">
+          <h1 className="mb-2 text-xl font-semibold text-white sm:text-2xl">Paper Review</h1>
+          <p className="mb-4 text-sm text-slate-400 sm:mb-6 sm:text-base">
             Upload a research paper PDF to get an AI-powered review with scores, strengths,
             weaknesses, and recommendations.
           </p>
           <PaperReviewUpload onStartNewReview={handleStartNewReview} />
 
-          <PaperReviewHowItWorks className="mt-6" />
+          <PaperReviewHowItWorks className="mt-4 sm:mt-6" />
         </div>
       </PageCard>
 
       <PageCard>
-        <div className="p-6">
-          <h2 className="mb-4 text-lg font-semibold text-white">Review History</h2>
+        <div className="p-4 sm:p-6">
+          <h2 className="mb-3 text-base font-semibold text-white sm:mb-4 sm:text-lg">
+            Review History
+          </h2>
           <PaperReviewHistory refreshKey={historyRefreshKey} />
         </div>
       </PageCard>

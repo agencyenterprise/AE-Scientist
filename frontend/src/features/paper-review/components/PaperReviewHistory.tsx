@@ -240,8 +240,8 @@ export function PaperReviewHistory({ refreshKey }: PaperReviewHistoryProps) {
 
   if (reviews.length === 0) {
     return (
-      <div className="py-12 text-center">
-        <FileText className="mx-auto mb-4 h-12 w-12 text-slate-600" />
+      <div className="py-8 text-center sm:py-12">
+        <FileText className="mx-auto mb-3 h-10 w-10 text-slate-600 sm:mb-4 sm:h-12 sm:w-12" />
         <p className="text-slate-400">No paper reviews yet</p>
         <p className="mt-1 text-sm text-slate-500">
           Upload a paper above to get your first AI review
@@ -264,7 +264,7 @@ export function PaperReviewHistory({ refreshKey }: PaperReviewHistoryProps) {
           <div key={review.id}>
             <div
               onClick={() => handleReviewClick(review)}
-              className={`flex items-center gap-4 px-4 py-4 transition-colors ${
+              className={`flex items-start gap-3 px-2 py-3 transition-colors sm:items-center sm:gap-4 sm:px-4 sm:py-4 ${
                 isInProgress
                   ? "bg-amber-500/5"
                   : isRestricted
@@ -274,36 +274,42 @@ export function PaperReviewHistory({ refreshKey }: PaperReviewHistoryProps) {
                       : ""
               }`}
             >
-              <div className="flex-shrink-0">
+              <div className="mt-0.5 flex-shrink-0 sm:mt-0">
                 {getStatusIcon(review.status, review.decision, review.access_restricted)}
               </div>
 
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="truncate font-medium text-white">
+                <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-2">
+                  <span className="truncate text-sm font-medium text-white sm:text-base">
                     {review.original_filename}
                   </span>
                   {isRestricted ? (
-                    <span className="text-sm text-amber-400">Locked</span>
+                    <span className="text-xs text-amber-400 sm:text-sm">Locked</span>
                   ) : (
-                    <span className={`text-sm ${statusInfo.color}`}>{statusInfo.text}</span>
+                    <span className={`text-xs sm:text-sm ${statusInfo.color}`}>
+                      {statusInfo.text}
+                    </span>
                   )}
                 </div>
                 {isRestricted ? (
-                  <p className="mt-1 text-sm text-amber-400/70">Add credits to view this review.</p>
+                  <p className="mt-1 text-xs text-amber-400/70 sm:text-sm">
+                    Add credits to view this review.
+                  </p>
                 ) : review.status === "completed" && review.summary ? (
-                  <p className="mt-1 line-clamp-1 text-sm text-slate-400">{review.summary}</p>
+                  <p className="mt-1 line-clamp-1 text-xs text-slate-400 sm:text-sm">
+                    {review.summary}
+                  </p>
                 ) : review.status === "failed" ? (
-                  <p className="mt-1 text-sm text-red-400/70">Review failed</p>
+                  <p className="mt-1 text-xs text-red-400/70 sm:text-sm">Review failed</p>
                 ) : isInProgress ? (
                   <div className="mt-1">
-                    <p className="text-sm text-amber-400/70">
+                    <p className="text-xs text-amber-400/70 sm:text-sm">
                       {review.progress_step ||
                         (review.status === "pending" ? "Waiting to start..." : "Analyzing...")}
                     </p>
                     {review.progress > 0 && (
                       <div className="mt-1.5 flex items-center gap-2">
-                        <div className="h-1.5 w-24 overflow-hidden rounded-full bg-slate-700">
+                        <div className="h-1.5 w-20 overflow-hidden rounded-full bg-slate-700 sm:w-24">
                           <div
                             className="h-full rounded-full bg-amber-400 transition-all duration-500 ease-out"
                             style={{ width: `${Math.round(review.progress * 100)}%` }}
@@ -316,14 +322,14 @@ export function PaperReviewHistory({ refreshKey }: PaperReviewHistoryProps) {
                     )}
                   </div>
                 ) : null}
-                <div className="mt-1 flex items-center gap-3 text-xs text-slate-500">
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500 sm:gap-3">
                   {review.status === "completed" && review.overall !== null && !isRestricted && (
                     <span>
                       Score:{" "}
                       <span className={getScoreColor(review.overall)}>{review.overall}/10</span>
                     </span>
                   )}
-                  <span>{review.model.split("/").pop()}</span>
+                  <span className="hidden sm:inline">{review.model.split("/").pop()}</span>
                   <span>
                     {formatDistanceToNow(new Date(review.created_at), { addSuffix: true })}
                   </span>
@@ -340,13 +346,13 @@ export function PaperReviewHistory({ refreshKey }: PaperReviewHistoryProps) {
                 (isExpanded ? (
                   <ChevronDown className="h-5 w-5 flex-shrink-0 text-slate-400" />
                 ) : (
-                  <ChevronRight className="h-5 w-5 flex-shrink-0 text-slate-600" />
+                  <ChevronRight className="hidden h-5 w-5 flex-shrink-0 text-slate-600 sm:block" />
                 ))}
               {isRestricted && (
                 <Link
                   href="/billing"
                   onClick={e => e.stopPropagation()}
-                  className="shrink-0 rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-sky-500"
+                  className="shrink-0 rounded-lg bg-sky-600 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-sky-500 sm:px-3 sm:py-1.5"
                 >
                   Add Credits
                 </Link>
@@ -358,7 +364,7 @@ export function PaperReviewHistory({ refreshKey }: PaperReviewHistoryProps) {
 
             {/* Expanded review content */}
             {isExpanded && expandedReviewData && (
-              <div className="border-t border-slate-700/50 bg-slate-800/20 px-4 pb-4">
+              <div className="border-t border-slate-700/50 bg-slate-800/20 px-2 pb-3 sm:px-4 sm:pb-4">
                 <div className="flex justify-end py-2">
                   <button
                     onClick={e => {
