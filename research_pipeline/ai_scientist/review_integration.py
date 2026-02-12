@@ -101,6 +101,10 @@ def make_event_callback_adapter(
 ) -> Callable[[ReviewProgressEvent], None]:
     """Create an adapter that converts ReviewProgressEvent to PaperGenerationProgressEvent.
 
+    The review library emits granular steps (init, ensemble, meta_review, reflection)
+    which are all part of the paper_review stage. This adapter maps them to the
+    paper_review step and includes the original step name in the substep field.
+
     Args:
         run_id: The run ID for the event
         callback: The original callback that expects BaseEvent
@@ -110,11 +114,14 @@ def make_event_callback_adapter(
     """
 
     def wrapper(event: ReviewProgressEvent) -> None:
+        # All review steps (init, ensemble, meta_review, reflection) map to paper_review
+        # Include the original step in substep for more detail
+        substep = f"{event.step}: {event.substep}" if event.substep else event.step
         callback(
             PaperGenerationProgressEvent(
                 run_id=run_id,
-                step=PaperGenerationStep(event.step),
-                substep=event.substep,
+                step=PaperGenerationStep.paper_review,
+                substep=substep,
                 progress=event.progress,
                 step_progress=event.step_progress,
             )
