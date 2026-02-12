@@ -103,9 +103,9 @@ const TREE_SEARCH_CONCEPTS = [
 ];
 
 const BEST_USE_CASES = [
-  "Deep learning model evaluation and algorithmic experiments (e.g., regularization, generalization).",
-  "Applied ML systems such as pest detection or similar domain-specific perception problems.",
-  "Statistical analysis on data-centric questions like label-noise impact on calibration.",
+  "Deep learning algorithmic experiments (e.g., regularization, optimization, generalization).",
+  "Neural network architecture ablations and hyperparameter studies.",
+  "Statistical analysis on training dynamics like label-noise impact on calibration.",
 ];
 
 const LIMITATIONS = [
