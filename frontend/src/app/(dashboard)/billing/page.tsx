@@ -110,10 +110,6 @@ export default function BillingPage() {
 
   const requirements = useMemo(
     () => [
-      {
-        label: "Idea refinement",
-        value: configQuery.data?.min_balance_cents_for_conversation ?? 0,
-      },
       { label: "Paper review", value: configQuery.data?.min_balance_cents_for_paper_review ?? 0 },
       {
         label: "Research pipeline",

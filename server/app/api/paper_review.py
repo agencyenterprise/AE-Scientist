@@ -60,6 +60,10 @@ class PaperReviewSummary(BaseModel):
         False,
         description="True if user cannot view full review details due to insufficient credits",
     )
+    progress: float = Field(..., description="Review progress (0.0-1.0)")
+    progress_step: str = Field(
+        ..., description="Current step description (empty string when completed)"
+    )
 
 
 class PaperReviewListResponse(BaseModel):

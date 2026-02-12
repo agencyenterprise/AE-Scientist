@@ -86,7 +86,6 @@ Operations are billed based on actual costs in cents. Users must maintain a mini
 
 | Variable | Description | Default |
 | --- | --- | --- |
-| `MIN_BALANCE_CENTS_FOR_CONVERSATION` | Minimum balance (cents) before importing a conversation | 100 ($1.00) |
 | `MIN_BALANCE_CENTS_FOR_RESEARCH_PIPELINE` | Minimum balance (cents) before launching a research run | 5000 ($50.00) |
 | `MIN_BALANCE_CENTS_FOR_CHAT_MESSAGE` | Minimum balance (cents) before sending a chat message | 10 ($0.10) |
 | `MIN_BALANCE_CENTS_FOR_PAPER_REVIEW` | Minimum balance (cents) before paper review | 100 ($1.00) |

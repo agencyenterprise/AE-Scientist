@@ -1029,6 +1029,16 @@ class PaperReviewSummary(BaseModel):
             title="Access Restricted",
         ),
     ] = False
+    progress: Annotated[
+        float, Field(description="Review progress (0.0-1.0)", title="Progress")
+    ]
+    progress_step: Annotated[
+        str,
+        Field(
+            description="Current step description (empty string when completed)",
+            title="Progress Step",
+        ),
+    ]
 
 
 class ParentRunFileInfo(BaseModel):
@@ -1100,9 +1110,6 @@ class PresignedUploadUrlResponse(BaseModel):
 class PublicConfigResponse(BaseModel):
     pipeline_monitor_max_runtime_hours: Annotated[
         int, Field(title="Pipeline Monitor Max Runtime Hours")
-    ]
-    min_balance_cents_for_conversation: Annotated[
-        int, Field(title="Min Balance Cents For Conversation")
     ]
     min_balance_cents_for_research_pipeline: Annotated[
         int, Field(title="Min Balance Cents For Research Pipeline")
@@ -2607,6 +2614,16 @@ class PaperReviewDetail(BaseModel):
             description="Cost charged in cents (null if restricted)", title="Cost Cents"
         ),
     ] = None
+    progress: Annotated[
+        float, Field(description="Review progress (0.0-1.0)", title="Progress")
+    ]
+    progress_step: Annotated[
+        str,
+        Field(
+            description="Current step description (empty string when completed)",
+            title="Progress Step",
+        ),
+    ]
 
 
 class PaperReviewListResponse(BaseModel):

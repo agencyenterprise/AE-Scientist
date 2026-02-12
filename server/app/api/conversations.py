@@ -16,7 +16,6 @@ from fastapi import APIRouter, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from app.config import settings
 from app.middleware.auth import get_current_user
 from app.models import (
     ConversationImportStreamEvent,
@@ -34,7 +33,6 @@ from app.models import (
     ParseSuccessResult,
     ResearchRunSummary,
 )
-from app.models.billing import InsufficientBalanceError
 from app.models.conversations import ModelCost, ResearchCost
 from app.services import (
     AnthropicService,
@@ -43,7 +41,6 @@ from app.services import (
     XAIService,
     get_database,
 )
-from app.services.billing_guard import enforce_minimum_balance
 from app.services.cost_calculator import calculate_llm_token_usage_cost
 from app.services.database import DatabaseManager
 from app.services.database.conversations import CONVERSATION_STATUSES
@@ -1079,10 +1076,6 @@ async def _stream_manual_seed_pipeline(
                 }
             },
         },
-        402: {
-            "model": InsufficientBalanceError,
-            "description": "Insufficient balance to import conversation",
-        },
     },
 )
 async def import_conversation(
@@ -1097,11 +1090,6 @@ async def import_conversation(
 
     user = get_current_user(request)
     logger.debug("User authenticated for import: %s", user.email)
-    await enforce_minimum_balance(
-        user_id=user.id,
-        required_cents=settings.billing_limits.min_balance_cents_for_conversation,
-        action="conversation_import",
-    )
 
     async def generate_import_stream() -> AsyncGenerator[str, None]:
         async for chunk in _stream_import_pipeline(
@@ -1136,10 +1124,6 @@ async def import_conversation(
                 }
             },
         },
-        402: {
-            "model": InsufficientBalanceError,
-            "description": "Insufficient balance to generate idea",
-        },
     },
 )
 async def import_manual_seed(
@@ -1150,11 +1134,6 @@ async def import_manual_seed(
     """
     user = get_current_user(request)
     logger.debug("User authenticated for manual import: %s", user.email)
-    await enforce_minimum_balance(
-        user_id=user.id,
-        required_cents=settings.billing_limits.min_balance_cents_for_conversation,
-        action="manual_import",
-    )
 
     async def generate_manual_stream() -> AsyncGenerator[str, None]:
         async for chunk in _stream_manual_seed_pipeline(

@@ -685,16 +685,6 @@
               }
             }
           },
-          "402": {
-            "description": "Insufficient balance to import conversation",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InsufficientBalanceError"
-                }
-              }
-            }
-          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -735,16 +725,6 @@
               "text/event-stream": {
                 "schema": {
                   "$ref": "#/components/schemas/ConversationImportStreamEvent"
-                }
-              }
-            }
-          },
-          "402": {
-            "description": "Insufficient balance to generate idea",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InsufficientBalanceError"
                 }
               }
             }
@@ -9180,6 +9160,16 @@
             ],
             "title": "Cost Cents",
             "description": "Cost charged in cents (null if restricted)"
+          },
+          "progress": {
+            "type": "number",
+            "title": "Progress",
+            "description": "Review progress (0.0-1.0)"
+          },
+          "progress_step": {
+            "type": "string",
+            "title": "Progress Step",
+            "description": "Current step description (empty string when completed)"
           }
         },
         "type": "object",
@@ -9188,7 +9178,9 @@
           "status",
           "original_filename",
           "model",
-          "created_at"
+          "created_at",
+          "progress",
+          "progress_step"
         ],
         "title": "PaperReviewDetail",
         "description": "Paper review with computed fields for API responses.\n\nThis is used both as the service return type and the API response model."
@@ -9318,6 +9310,16 @@
             "title": "Access Restricted",
             "description": "True if user cannot view full review details due to insufficient credits",
             "default": false
+          },
+          "progress": {
+            "type": "number",
+            "title": "Progress",
+            "description": "Review progress (0.0-1.0)"
+          },
+          "progress_step": {
+            "type": "string",
+            "title": "Progress Step",
+            "description": "Current step description (empty string when completed)"
           }
         },
         "type": "object",
@@ -9326,7 +9328,9 @@
           "status",
           "original_filename",
           "model",
-          "created_at"
+          "created_at",
+          "progress",
+          "progress_step"
         ],
         "title": "PaperReviewSummary",
         "description": "Summary of a paper review for list views."
@@ -9719,10 +9723,6 @@
             "type": "integer",
             "title": "Pipeline Monitor Max Runtime Hours"
           },
-          "min_balance_cents_for_conversation": {
-            "type": "integer",
-            "title": "Min Balance Cents For Conversation"
-          },
           "min_balance_cents_for_research_pipeline": {
             "type": "integer",
             "title": "Min Balance Cents For Research Pipeline"
@@ -9735,7 +9735,6 @@
         "type": "object",
         "required": [
           "pipeline_monitor_max_runtime_hours",
-          "min_balance_cents_for_conversation",
           "min_balance_cents_for_research_pipeline",
           "min_balance_cents_for_paper_review"
         ],

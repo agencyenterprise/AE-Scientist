@@ -295,11 +295,25 @@ export function PaperReviewHistory({ refreshKey }: PaperReviewHistoryProps) {
                 ) : review.status === "failed" ? (
                   <p className="mt-1 text-sm text-red-400/70">Review failed</p>
                 ) : isInProgress ? (
-                  <p className="mt-1 text-sm text-amber-400/70">
-                    {review.status === "pending"
-                      ? "Waiting to start..."
-                      : "AI is analyzing your paper..."}
-                  </p>
+                  <div className="mt-1">
+                    <p className="text-sm text-amber-400/70">
+                      {review.progress_step ||
+                        (review.status === "pending" ? "Waiting to start..." : "Analyzing...")}
+                    </p>
+                    {review.progress > 0 && (
+                      <div className="mt-1.5 flex items-center gap-2">
+                        <div className="h-1.5 w-24 overflow-hidden rounded-full bg-slate-700">
+                          <div
+                            className="h-full rounded-full bg-amber-400 transition-all duration-500 ease-out"
+                            style={{ width: `${Math.round(review.progress * 100)}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-slate-500">
+                          {Math.round(review.progress * 100)}%
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 ) : null}
                 <div className="mt-1 flex items-center gap-3 text-xs text-slate-500">
                   {review.status === "completed" && review.overall !== null && !isRestricted && (

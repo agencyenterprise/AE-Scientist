@@ -48,6 +48,8 @@ class PaperReview(NamedTuple):
     status: str
     error_message: Optional[str]
     created_at: datetime
+    progress: float
+    progress_step: str
     has_enough_credits: Optional[bool] = None
 
 
@@ -72,8 +74,9 @@ class PaperReviewsMixin(ConnectionProvider):
                 await cursor.execute(
                     """
                     INSERT INTO paper_reviews
-                        (user_id, summary, original_filename, s3_key, model, status)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                        (user_id, summary, original_filename, s3_key, model, status,
+                         progress, progress_step)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
@@ -83,6 +86,8 @@ class PaperReviewsMixin(ConnectionProvider):
                         s3_key,
                         model,
                         PaperReviewStatus.PENDING.value,
+                        0.0,  # Initial progress
+                        "",  # Empty progress step
                     ),
                 )
                 result = await cursor.fetchone()
@@ -172,7 +177,7 @@ class PaperReviewsMixin(ConnectionProvider):
                    clarity, significance, questions, limitations, ethical_concerns,
                    soundness, presentation, contribution, overall, confidence, decision,
                    original_filename, s3_key, model, status, error_message, created_at,
-                   has_enough_credits
+                   has_enough_credits, progress, progress_step
             FROM paper_reviews
             WHERE user_id = %s AND status IN (%s, %s)
             ORDER BY created_at DESC
@@ -219,8 +224,9 @@ class PaperReviewsMixin(ConnectionProvider):
                         (user_id, summary, strengths, weaknesses, originality, quality,
                          clarity, significance, questions, limitations, ethical_concerns,
                          soundness, presentation, contribution, overall, confidence,
-                         decision, original_filename, s3_key, model, status)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                         decision, original_filename, s3_key, model, status,
+                         progress, progress_step)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
@@ -245,6 +251,8 @@ class PaperReviewsMixin(ConnectionProvider):
                         s3_key,
                         model,
                         PaperReviewStatus.COMPLETED.value,
+                        1.0,  # Completed review progress
+                        "",  # Empty progress step for completed review
                     ),
                 )
                 result = await cursor.fetchone()
@@ -259,7 +267,7 @@ class PaperReviewsMixin(ConnectionProvider):
                    clarity, significance, questions, limitations, ethical_concerns,
                    soundness, presentation, contribution, overall, confidence, decision,
                    original_filename, s3_key, model, status, error_message, created_at,
-                   has_enough_credits
+                   has_enough_credits, progress, progress_step
             FROM paper_reviews
             WHERE id = %s
         """
@@ -280,7 +288,7 @@ class PaperReviewsMixin(ConnectionProvider):
                    clarity, significance, questions, limitations, ethical_concerns,
                    soundness, presentation, contribution, overall, confidence, decision,
                    original_filename, s3_key, model, status, error_message, created_at,
-                   has_enough_credits
+                   progress, progress_step, has_enough_credits
             FROM paper_reviews
             WHERE user_id = %s
             ORDER BY created_at DESC
@@ -386,3 +394,46 @@ class PaperReviewsMixin(ConnectionProvider):
                     (user_id,),
                 )
                 return cursor.rowcount or 0
+
+    def update_paper_review_progress_sync(
+        self,
+        review_id: int,
+        progress: float,
+        progress_step: str,
+    ) -> None:
+        """Update the progress of a paper review (sync version for use from threads).
+
+        This is called from the sync thread running the LLM review to update
+        progress in the database.
+
+        Args:
+            review_id: The paper review ID
+            progress: Progress value (0.0 to 1.0)
+            progress_step: Description of current step
+        """
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE paper_reviews
+                    SET progress = %s, progress_step = %s
+                    WHERE id = %s
+                    """,
+                    (progress, progress_step, review_id),
+                )
+
+    async def clear_paper_review_progress(self, review_id: int) -> None:
+        """Clear progress for a completed/failed review.
+
+        Sets progress to 1.0 and clears progress_step.
+        """
+        async with self.aget_connection() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
+                    """
+                    UPDATE paper_reviews
+                    SET progress = 1.0, progress_step = ''
+                    WHERE id = %s
+                    """,
+                    (review_id,),
+                )

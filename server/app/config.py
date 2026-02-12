@@ -161,7 +161,6 @@ class LLMConfig(NamedTuple):
 class BillingLimitsConfig(NamedTuple):
     """Minimum balance requirements in cents."""
 
-    min_balance_cents_for_conversation: int
     min_balance_cents_for_research_pipeline: int
     min_balance_cents_for_chat_message: int
     min_balance_cents_for_paper_review: int
@@ -380,7 +379,6 @@ def _load_settings() -> Settings:
 
     # Billing limits (required)
     billing_limits = BillingLimitsConfig(
-        min_balance_cents_for_conversation=get_required_int("MIN_BALANCE_CENTS_FOR_CONVERSATION"),
         min_balance_cents_for_research_pipeline=get_required_int(
             "MIN_BALANCE_CENTS_FOR_RESEARCH_PIPELINE"
         ),

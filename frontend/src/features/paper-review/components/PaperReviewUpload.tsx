@@ -37,6 +37,8 @@ export function PaperReviewUpload({ onStartNewReview }: PaperReviewUploadProps) 
   const [currentReviewId, setCurrentReviewId] = useState<number | null>(null);
   const [currentReviewFilename, setCurrentReviewFilename] = useState<string | null>(null);
   const [currentReviewStatus, setCurrentReviewStatus] = useState<string | null>(null);
+  const [currentProgress, setCurrentProgress] = useState<number | null>(null);
+  const [currentProgressStep, setCurrentProgressStep] = useState<string | null>(null);
   const pollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Model selection state
@@ -111,6 +113,10 @@ export function PaperReviewUpload({ onStartNewReview }: PaperReviewUploadProps) 
 
         const data: ReviewDetailResponse = await response.json();
         setCurrentReviewStatus(data.status);
+
+        // Update progress from response
+        setCurrentProgress(data.progress);
+        setCurrentProgressStep(data.progress_step);
 
         if (data.status === "completed") {
           // Check if access is restricted due to insufficient credits
@@ -305,6 +311,8 @@ export function PaperReviewUpload({ onStartNewReview }: PaperReviewUploadProps) 
     setCurrentReviewId(null);
     setCurrentReviewFilename(null);
     setCurrentReviewStatus(null);
+    setCurrentProgress(null);
+    setCurrentProgressStep(null);
     // Notify parent to refresh the history list
     onStartNewReview?.();
   };
@@ -337,18 +345,36 @@ export function PaperReviewUpload({ onStartNewReview }: PaperReviewUploadProps) 
 
   // Show loading/polling state
   if (uploadState === "uploading" || uploadState === "polling") {
+    // Use progress step if available, otherwise fall back to status-based text
     const statusText =
-      currentReviewStatus === "processing"
+      currentProgressStep ||
+      (currentReviewStatus === "processing"
         ? "Analyzing paper with AI..."
         : currentReviewStatus === "pending"
           ? "Starting analysis..."
-          : "Uploading paper...";
+          : "Uploading paper...");
+
+    const progressPercent = currentProgress !== null ? Math.round(currentProgress * 100) : null;
 
     return (
       <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-700 bg-slate-900/50 p-12">
         <Loader2 className="mb-4 h-12 w-12 animate-spin text-amber-400" />
         <p className="text-lg font-medium text-white">{statusText}</p>
         <p className="mt-2 text-sm text-slate-400">{selectedFile?.name || currentReviewFilename}</p>
+
+        {/* Progress bar */}
+        {progressPercent !== null && (
+          <div className="mt-4 w-full max-w-xs">
+            <div className="h-2 overflow-hidden rounded-full bg-slate-700">
+              <div
+                className="h-full rounded-full bg-amber-400 transition-all duration-500 ease-out"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+            <p className="mt-2 text-center text-sm text-slate-400">{progressPercent}% complete</p>
+          </div>
+        )}
+
         <div className="mt-4 flex items-center gap-2 text-xs text-slate-500">
           <Clock className="h-3 w-3" />
           <span>This process runs in the background - you can refresh the page safely</span>

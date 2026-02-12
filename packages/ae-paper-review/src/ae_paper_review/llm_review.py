@@ -192,12 +192,13 @@ Here is the paper you are asked to review:
 ```"""
 
     # Emit event: paper review starting
+    # Progress scale: 0-10% init, 10-70% ensemble, 70-85% meta-review, 85-100% reflections
     if event_callback:
         event_callback(
             ReviewProgressEvent(
-                step="paper_review",
+                step="init",
                 substep="Starting paper review...",
-                progress=0.80,
+                progress=0.10,
                 step_progress=0.0,
             )
         )
@@ -231,14 +232,14 @@ Here is the paper you are asked to review:
         histories: List[list[BaseMessage]] = []
         for idx in range(num_reviews_ensemble):
             try:
-                # Emit event: review ensemble progress
+                # Emit event: review ensemble progress (10-70% of total progress)
                 if event_callback:
-                    step_progress = (idx + 1) / num_reviews_ensemble
+                    step_progress = idx / num_reviews_ensemble  # Progress before this review
                     event_callback(
                         ReviewProgressEvent(
-                            step="paper_review",
+                            step="ensemble",
                             substep=f"Review {idx + 1} of {num_reviews_ensemble}",
-                            progress=0.80 + 0.20 * step_progress,
+                            progress=0.10 + 0.60 * step_progress,
                             step_progress=step_progress,
                         )
                     )
@@ -265,6 +266,16 @@ Here is the paper you are asked to review:
                 len(parsed_reviews),
                 num_reviews_ensemble,
             )
+            # Emit event: meta-review starting (70-85% of total progress)
+            if event_callback:
+                event_callback(
+                    ReviewProgressEvent(
+                        step="meta_review",
+                        substep="Generating meta-review...",
+                        progress=0.70,
+                        step_progress=0.0,
+                    )
+                )
             review = _get_meta_review(model, temperature, parsed_reviews, usage=usage)
             if review is None:
                 logger.info("Meta-review failed, using first ensemble review as fallback")
@@ -317,7 +328,20 @@ Here is the paper you are asked to review:
 
     if num_reflections > 1 and review is not None:
         logger.info("Starting reflection rounds (%d total)", num_reflections)
-        for reflection_round in range(num_reflections - 1):
+        total_reflection_rounds = num_reflections - 1
+        for reflection_round in range(total_reflection_rounds):
+            # Emit event: reflection progress (85-100% of total progress)
+            if event_callback:
+                step_progress = reflection_round / total_reflection_rounds
+                event_callback(
+                    ReviewProgressEvent(
+                        step="reflection",
+                        substep=f"Reflection {reflection_round + 1} of {total_reflection_rounds}",
+                        progress=0.85 + 0.15 * step_progress,
+                        step_progress=step_progress,
+                    )
+                )
+
             logger.info("Running reflection round %d/%d", reflection_round + 2, num_reflections)
             reflection_prompt = _reviewer_reflection_prompt.format(
                 current_round=reflection_round + 2,

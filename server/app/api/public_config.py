@@ -19,7 +19,6 @@ class PublicConfigResponse(BaseModel):
     """Public configuration values exposed to the frontend."""
 
     pipeline_monitor_max_runtime_hours: int
-    min_balance_cents_for_conversation: int
     min_balance_cents_for_research_pipeline: int
     min_balance_cents_for_paper_review: int
 
@@ -34,7 +33,6 @@ BEST_PAPER_URL_EXPIRATION = 3600
 async def get_public_config() -> PublicConfigResponse:
     return PublicConfigResponse(
         pipeline_monitor_max_runtime_hours=settings.research_pipeline.monitor_max_runtime_hours,
-        min_balance_cents_for_conversation=settings.billing_limits.min_balance_cents_for_conversation,
         min_balance_cents_for_research_pipeline=settings.billing_limits.min_balance_cents_for_research_pipeline,
         min_balance_cents_for_paper_review=settings.billing_limits.min_balance_cents_for_paper_review,
     )

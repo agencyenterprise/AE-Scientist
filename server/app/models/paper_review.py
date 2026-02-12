@@ -75,16 +75,31 @@ class PaperReviewDetail(BaseModel):
         None, description="Cost charged in cents (null if restricted)"
     )
 
+    # Progress fields (0.0-1.0 for in-progress, 1.0 for completed/failed)
+    progress: float = Field(
+        ...,
+        description="Review progress (0.0-1.0)",
+    )
+    progress_step: str = Field(
+        ...,
+        description="Current step description (empty string when completed)",
+    )
+
     @classmethod
     def from_review(
         cls,
         review: PaperReview,
-        token_usage: Optional[TokenUsage],
+        token_usage: TokenUsage | None,
         cost_cents: int,
     ) -> "PaperReviewDetail":
         """Create a PaperReviewDetail from a PaperReview with computed fields.
 
         Automatically handles access restriction logic based on has_enough_credits.
+
+        Args:
+            review: The PaperReview database record
+            token_usage: Token usage summary (if available)
+            cost_cents: Cost charged in cents
         """
         access_restricted = review.has_enough_credits is False
         access_restricted_reason = (
@@ -110,6 +125,8 @@ class PaperReviewDetail(BaseModel):
                 weaknesses=None,
                 token_usage=None,
                 cost_cents=None,
+                progress=review.progress,
+                progress_step=review.progress_step,
             )
 
         return cls(
@@ -140,4 +157,6 @@ class PaperReviewDetail(BaseModel):
             decision=review.decision,
             token_usage=token_usage,
             cost_cents=cost_cents,
+            progress=review.progress,
+            progress_step=review.progress_step,
         )

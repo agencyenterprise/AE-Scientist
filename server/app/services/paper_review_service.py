@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, cast
 from urllib.parse import quote
 
-from ae_paper_review import ReviewResult, load_paper, perform_review
+from ae_paper_review import ReviewProgressEvent, ReviewResult, load_paper, perform_review
 from psycopg import AsyncConnection
 
 from app.config import settings
@@ -77,6 +77,7 @@ def _run_review_sync(
     model: str,
     num_reviews_ensemble: int,
     num_reflections: int,
+    review_id: int,
 ) -> ReviewResult:
     """Run the paper review synchronously (called in thread pool).
 
@@ -88,13 +89,24 @@ def _run_review_sync(
         model: Model in "provider:model" format (e.g., "anthropic:claude-sonnet-4-20250514")
         num_reviews_ensemble: Number of ensemble reviews
         num_reflections: Number of reflection rounds
+        review_id: The paper review ID for progress tracking
     """
+    db = get_database()
+
+    def on_progress(event: ReviewProgressEvent) -> None:
+        db.update_paper_review_progress_sync(
+            review_id=review_id,
+            progress=event.progress,
+            progress_step=event.substep,
+        )
+
     return perform_review(
         text=paper_text,
         model=model,
         temperature=1,
         num_reviews_ensemble=num_reviews_ensemble,
         num_reflections=num_reflections,
+        event_callback=on_progress,
     )
 
 
@@ -179,6 +191,7 @@ class PaperReviewService:
                 model,
                 num_reviews_ensemble,
                 num_reflections,
+                review_id,
             )
 
             # Get token usage from result
@@ -264,6 +277,9 @@ class PaperReviewService:
             await db.set_paper_review_has_enough_credits(review_id, True)
 
         finally:
+            # Clear progress (set to 1.0 for completed/failed)
+            await db.clear_paper_review_progress(review_id)
+
             # Clean up temporary file
             if tmp_path:
                 tmp_path.unlink(missing_ok=True)
@@ -380,7 +396,12 @@ class PaperReviewService:
                 output_tokens=output_tokens,
             )
 
-        return PaperReviewDetail.from_review(review, token_usage, cost_cents)
+        # Progress is now stored in the database, so it comes from review directly
+        return PaperReviewDetail.from_review(
+            review=review,
+            token_usage=token_usage,
+            cost_cents=cost_cents,
+        )
 
     async def get_pending_reviews(self, *, user_id: int) -> list[dict[str, Any]]:
         """Get all pending or processing reviews for a user.
@@ -444,6 +465,8 @@ class PaperReviewService:
                     "created_at": review.created_at.isoformat(),
                     "has_enough_credits": review.has_enough_credits,
                     "access_restricted": access_restricted,
+                    "progress": review.progress,
+                    "progress_step": review.progress_step,
                 }
             )
         return result

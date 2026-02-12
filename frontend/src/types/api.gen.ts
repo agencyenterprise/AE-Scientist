@@ -4278,6 +4278,16 @@ export interface components {
              * @description Cost charged in cents (null if restricted)
              */
             cost_cents?: number | null;
+            /**
+             * Progress
+             * @description Review progress (0.0-1.0)
+             */
+            progress: number;
+            /**
+             * Progress Step
+             * @description Current step description (empty string when completed)
+             */
+            progress_step: string;
         };
         /**
          * PaperReviewListResponse
@@ -4367,6 +4377,16 @@ export interface components {
              * @default false
              */
             access_restricted: boolean;
+            /**
+             * Progress
+             * @description Review progress (0.0-1.0)
+             */
+            progress: number;
+            /**
+             * Progress Step
+             * @description Current step description (empty string when completed)
+             */
+            progress_step: string;
         };
         /** ParentRunFileInfo */
         ParentRunFileInfo: {
@@ -4570,8 +4590,6 @@ export interface components {
         PublicConfigResponse: {
             /** Pipeline Monitor Max Runtime Hours */
             pipeline_monitor_max_runtime_hours: number;
-            /** Min Balance Cents For Conversation */
-            min_balance_cents_for_conversation: number;
             /** Min Balance Cents For Research Pipeline */
             min_balance_cents_for_research_pipeline: number;
             /** Min Balance Cents For Paper Review */
@@ -6945,15 +6963,6 @@ export interface operations {
                     "text/event-stream": components["schemas"]["ConversationImportStreamEvent"];
                 };
             };
-            /** @description Insufficient balance to import conversation */
-            402: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["InsufficientBalanceError"];
-                };
-            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -6986,15 +6995,6 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ConversationImportStreamEvent"];
                     "text/event-stream": components["schemas"]["ConversationImportStreamEvent"];
-                };
-            };
-            /** @description Insufficient balance to generate idea */
-            402: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["InsufficientBalanceError"];
                 };
             };
             /** @description Validation Error */
