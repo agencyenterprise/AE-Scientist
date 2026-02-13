@@ -62,7 +62,12 @@ from ai_scientist.treesearch.config import (
     prep_cfg,
     save_run,
 )
-from ai_scientist.treesearch.events import BaseEvent, GpuShortageEvent
+from ai_scientist.treesearch.events import (
+    BaseEvent,
+    GpuShortageEvent,
+    PaperGenerationProgressEvent,
+    PaperGenerationStep,
+)
 from ai_scientist.treesearch.journal import Journal
 from ai_scientist.treesearch.perform_experiments_bfts_with_agentmanager import (
     perform_experiments_bfts,
@@ -884,6 +889,17 @@ def run_review_stage(
             )
         except Exception:
             logger.exception("Failed to publish review data via webhook.")
+
+    if event_callback and run_id:
+        event_callback(
+            PaperGenerationProgressEvent(
+                run_id=run_id,
+                step=PaperGenerationStep.paper_review,
+                substep="Paper review complete.",
+                progress=1.0,
+                step_progress=1.0,
+            )
+        )
     logger.info("Paper review completed.")
 
 
