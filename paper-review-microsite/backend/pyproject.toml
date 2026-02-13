@@ -1,0 +1,119 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "paper-review-microsite-backend"
+version = "0.1.0"
+description = "AE Paper Review Backend"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi==0.116.1",
+    "uvicorn[standard]==0.35.0",
+    "psycopg[binary,pool]>=3.3.1",
+    "psycopg2-binary>=2.9.11",
+    "alembic==1.16.5",
+    "pydantic[email]>=2.0.0",
+    "python-dotenv==1.0.1",
+    "boto3==1.40.19",
+    "python-magic==0.4.27",
+    "pyjwt[crypto]>=2.10.1",
+    "clerk-backend-api>=1.4.1",
+    "python-multipart==0.0.20",
+    "sentry-sdk[fastapi]>=2.19.0",
+    "openai==2.8.1",
+    "langchain>=1.1.0",
+    "langchain-anthropic>=1.2.0",
+    "langchain-openai>=1.1.0",
+    "langchain-xai>=0.2.0",
+    "ae-paper-review",
+]
+
+[dependency-groups]
+dev = [
+    "black>=25.0.0",
+    "isort>=5.13.0",
+    "mypy>=1.11.0",
+    "pyright>=1.1.400",
+    "ruff>=0.14.0",
+    "types-boto3>=1.41.0",
+    "types-requests>=2.31.0",
+    "vulture>=2.14",
+]
+
+[tool.uv.sources]
+ae-paper-review = { path = "../../packages/ae-paper-review", editable = true }
+
+[tool.setuptools.packages.find]
+include = ["app*", "database_migrations*"]
+
+[tool.black]
+line-length = 100
+target-version = ['py312']
+exclude = '''
+/(
+    \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 100
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+skip = [".venv", "venv"]
+skip_glob = ["**/.venv/**", "**/venv/**"]
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+disallow_any_generics = true
+plugins = ["pydantic.mypy"]
+
+[tool.pydantic-plugin]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
+[tool.pyright]
+pythonVersion = "3.12"
+typeCheckingMode = "standard"
+exclude = [".venv"]
+
+[tool.ruff]
+target-version = "py312"
+extend-exclude = [".venv"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle
+    "F",   # pyflakes (includes unused imports/vars)
+    "ARG", # flake8-unused-arguments (unused function/method args)
+]
+extend-select = ["ANN401"]
+ignore = ["E501", "G004"]  # Line too long, allow f-strings in logging statements
+
+[tool.pylint.messages_control]
+disable = ["logging-fstring-interpolation", "broad-except"]

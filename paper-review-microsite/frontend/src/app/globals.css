@@ -1,0 +1,205 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+  --color-background: #0f172a;
+  --color-foreground: #f1f5f9;
+  --color-card: #1e293b;
+  --color-card-foreground: #f1f5f9;
+  --color-primary: #38bdf8;
+  --color-primary-foreground: #0c4a6e;
+  --color-secondary: #334155;
+  --color-secondary-foreground: #f1f5f9;
+  --color-muted: #1e293b;
+  --color-muted-foreground: #94a3b8;
+  --color-accent: #0ea5e9;
+  --color-accent-foreground: #f1f5f9;
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #fef2f2;
+  --color-border: #334155;
+  --color-input: #334155;
+  --color-ring: #0ea5e9;
+  --radius: 0.5rem;
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Button gradient */
+.btn-primary-gradient {
+  @apply relative overflow-hidden bg-gradient-to-r from-sky-500 to-sky-600 text-white font-medium;
+  @apply hover:from-sky-400 hover:to-sky-500 transition-all duration-300;
+  @apply shadow-[0_0_20px_rgba(14,165,233,0.3)] hover:shadow-[0_0_30px_rgba(14,165,233,0.5)];
+}
+
+.btn-primary-gradient:disabled {
+  @apply opacity-50 cursor-not-allowed hover:from-sky-500 hover:to-sky-600;
+  @apply shadow-none;
+}
+
+/* Input field */
+.input-field {
+  @apply w-full px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg border border-slate-700 bg-slate-900/50;
+  @apply text-slate-100 placeholder:text-slate-500 text-sm sm:text-base;
+  @apply focus:outline-none focus:ring-2 focus:ring-sky-500/50 focus:border-sky-500;
+  @apply transition-all duration-200;
+
+  /* Prevent iOS zoom on focus */
+  font-size: 16px;
+}
+
+@media (width >= 640px) {
+  .input-field {
+    font-size: inherit;
+  }
+}
+
+/* Card container */
+.card-container {
+  @apply relative overflow-hidden rounded-xl sm:rounded-2xl border border-slate-800/80;
+  @apply bg-slate-950/70 shadow-[0_30px_80px_-40px_rgba(14,165,233,0.3)];
+}
+
+/* Glass effect */
+.glass-effect {
+  @apply bg-slate-900/80 backdrop-blur-lg border border-slate-800/50;
+}
+
+/* Sheet/Dialog animations */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fade-out {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes slide-in-from-bottom {
+  from {
+    transform: translateY(100%);
+  }
+
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-out-to-bottom {
+  from {
+    transform: translateY(0);
+  }
+
+  to {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes zoom-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.95);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes zoom-out {
+  from {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.95);
+  }
+}
+
+.animate-in {
+  animation-duration: 200ms;
+  animation-fill-mode: both;
+}
+
+.animate-out {
+  animation-duration: 150ms;
+  animation-fill-mode: both;
+}
+
+.fade-in-0 {
+  animation-name: fade-in;
+}
+
+.fade-out-0 {
+  animation-name: fade-out;
+}
+
+.slide-in-from-bottom {
+  animation-name: slide-in-from-bottom;
+}
+
+.slide-out-to-bottom {
+  animation-name: slide-out-to-bottom;
+}
+
+.zoom-in-95 {
+  animation-name: zoom-in;
+}
+
+.zoom-out-95 {
+  animation-name: zoom-out;
+}
+
+/* Reset zoom animations for desktop when combined with slide */
+@media (width >= 640px) {
+  .slide-in-from-bottom-0 {
+    animation-name: zoom-in;
+  }
+
+  .slide-out-to-bottom-0 {
+    animation-name: zoom-out;
+  }
+}
