@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import selectors
+import shutil
 import subprocess
 import time
 from datetime import datetime, timezone
@@ -53,13 +54,10 @@ def _run_uv(
         raise
 
 
-def ensure_codex_venv(*, workspace_dir: Path, research_pipeline_root: Path) -> Path:
+def _setup_codex_venv(*, workspace_dir: Path, research_pipeline_root: Path, venv_dir: Path) -> Path:
     """
-    Ensure a per-workspace venv exists (under the worker's workspace dir) and has project deps.
-
-    This venv is used by Codex so `python` / `pip` resolve consistently during the run.
+    Create venv and sync dependencies. Internal helper for ensure_codex_venv.
     """
-    venv_dir = _managed_venv_dir(workspace_dir=workspace_dir)
     if not venv_dir.exists():
         _run_uv(
             args=["venv", "--system-site-packages", str(venv_dir)],
@@ -89,6 +87,40 @@ def ensure_codex_venv(*, workspace_dir: Path, research_pipeline_root: Path) -> P
         cwd=workspace_dir,
     )
     return venv_dir
+
+
+def ensure_codex_venv(*, workspace_dir: Path, research_pipeline_root: Path) -> Path:
+    """
+    Ensure a per-workspace venv exists (under the worker's workspace dir) and has project deps.
+
+    This venv is used by Codex so `python` / `pip` resolve consistently during the run.
+
+    Includes retry logic to handle transient file system errors (e.g., stale NFS handles).
+    """
+    venv_dir = _managed_venv_dir(workspace_dir=workspace_dir)
+    max_retries = 2
+
+    for attempt in range(max_retries + 1):
+        try:
+            return _setup_codex_venv(
+                workspace_dir=workspace_dir,
+                research_pipeline_root=research_pipeline_root,
+                venv_dir=venv_dir,
+            )
+        except subprocess.CalledProcessError:
+            if attempt < max_retries:
+                logger.warning(
+                    "Venv setup failed (attempt %d/%d), removing venv and retrying: %s",
+                    attempt + 1,
+                    max_retries + 1,
+                    venv_dir,
+                )
+                if venv_dir.exists():
+                    shutil.rmtree(venv_dir, ignore_errors=True)
+            else:
+                raise
+
+    raise RuntimeError("ensure_codex_venv: unreachable")
 
 
 def build_codex_exec_env(*, base_env: dict[str, str]) -> dict[str, str]:
