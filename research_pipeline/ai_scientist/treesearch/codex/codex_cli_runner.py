@@ -32,15 +32,25 @@ def _run_uv(
     env = os.environ.copy()
     for key, value in extra_env.items():
         env[key] = value
-    return subprocess.run(
-        args=["uv", *args],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=float(timeout_seconds),
-        env=env,
-        cwd=str(cwd),
-    )
+    try:
+        return subprocess.run(
+            args=["uv", *args],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=float(timeout_seconds),
+            env=env,
+            cwd=str(cwd),
+        )
+    except subprocess.CalledProcessError as e:
+        logger.error(
+            "uv command failed: %s (exit code %s)\nstdout: %s\nstderr: %s",
+            e.cmd,
+            e.returncode,
+            e.stdout,
+            e.stderr,
+        )
+        raise
 
 
 def ensure_codex_venv(*, workspace_dir: Path, research_pipeline_root: Path) -> Path:
