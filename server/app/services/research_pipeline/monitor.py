@@ -5,6 +5,7 @@ from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Literal, Optional, Protocol, cast
 
+import sentry_sdk
 from psycopg import AsyncConnection
 
 from app.api.research_pipeline.utils import generate_run_webhook_token
@@ -342,26 +343,17 @@ class ResearchPipelineMonitor:
                 self._max_missed_heartbeats,
             )
             if failures >= self._max_missed_heartbeats:
-                # Try restart instead of immediate failure
-                actual_db = get_database()
-                webhook_token, webhook_token_hash = generate_run_webhook_token()
-                gpu_types = [run.gpu_type]
-                restarted = await attempt_pod_restart(
-                    db=actual_db,
-                    run=run,
-                    reason="heartbeat_timeout",
-                    gpu_types=gpu_types,
-                    webhook_token=webhook_token,
-                    webhook_token_hash=webhook_token_hash,
+                # Send Sentry alert but don't terminate - the monitoring system itself
+                # may be having issues (e.g., Railway downtime) and we don't want to
+                # kill healthy pods just because we can't receive heartbeats.
+                sentry_sdk.capture_message(
+                    f"Run {run.run_id} has missed {failures} heartbeats "
+                    f"(last heartbeat {delta.total_seconds():.0f}s ago). "
+                    f"Pod {run.pod_id} may be unresponsive or monitoring may be degraded.",
+                    level="error",
                 )
-                if not restarted:
-                    # Max restarts exceeded, fail permanently
-                    await self._fail_run(
-                        db,
-                        run,
-                        f"Pipeline heartbeats exceeded failure threshold after {run.restart_count} restart attempt(s).",
-                        "heartbeat_timeout",
-                    )
+                # Reset failure count to avoid repeated alerts every poll interval
+                await db.update_research_pipeline_run(run_id=run.run_id, heartbeat_failures=0)
             return
 
         if run.heartbeat_failures > 0:
