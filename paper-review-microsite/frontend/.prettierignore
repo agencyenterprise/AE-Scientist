@@ -1,0 +1,12 @@
+# Dependencies
+node_modules/
+
+# Build output
+.next/
+out/
+
+# Generated files
+src/types/api.gen.ts
+
+# Tailwind v4 globals.css (preserve import syntax)
+src/app/globals.css

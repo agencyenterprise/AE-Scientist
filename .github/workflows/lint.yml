@@ -2,8 +2,12 @@ name: Lint
 
 on:
   pull_request:
+    paths-ignore:
+      - 'paper-review-microsite/**'
   push:
     branches: [ main ]
+    paths-ignore:
+      - 'paper-review-microsite/**'
 
 jobs:
   lint-ae-paper-review:

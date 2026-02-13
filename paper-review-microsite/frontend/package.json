@@ -1,0 +1,69 @@
+{
+  "name": "paper-review-microsite-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=20.9.0",
+    "npm": ">=10.0.0"
+  },
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "style": "stylelint \"src/**/*.css\" --fix",
+    "style:check": "stylelint \"src/**/*.css\" --max-warnings=0 --allow-empty-input",
+    "typecheck": "tsc --noEmit",
+    "gen:api-types": "npx openapi-typescript http://localhost:8000/openapi.json --output src/types/api.gen.ts",
+    "gen:api-types:from-file": "npx openapi-typescript ../backend/openapi.json --output src/types/api.gen.ts",
+    "prebuild": "sh -c 'if [ -f ../backend/openapi.json ]; then npx openapi-typescript ../backend/openapi.json --output src/types/api.gen.ts; fi'"
+  },
+  "dependencies": {
+    "@clerk/nextjs": "^6.36.4",
+    "@radix-ui/react-avatar": "^1.1.10",
+    "@radix-ui/react-dialog": "^1.1.14",
+    "@radix-ui/react-scroll-area": "^1.2.9",
+    "@radix-ui/react-separator": "^1.1.7",
+    "@radix-ui/react-tabs": "^1.1.12",
+    "@radix-ui/react-tooltip": "^1.1.8",
+    "@tanstack/react-query": "^5.90.10",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "geist": "^1.7.0",
+    "js-cookie": "^3.0.5",
+    "lucide-react": "^0.554.0",
+    "next": "^16.1.6",
+    "openapi-fetch": "^0.15.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-markdown": "^9.0.1",
+    "tailwind-merge": "^3.4.0",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/js-cookie": "^3.0.6",
+    "@types/node": "^22",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^9",
+    "eslint-config-next": "^16.1.6",
+    "eslint-config-prettier": "^10.1.0",
+    "eslint-plugin-unused-imports": "^4.0.0",
+    "openapi-typescript": "^7.10.1",
+    "prettier": "^3.0.0",
+    "stylelint": "^16.26.1",
+    "stylelint-config-standard": "^36.0.0",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  },
+  "overrides": {
+    "@types/react": "^19"
+  }
+}
