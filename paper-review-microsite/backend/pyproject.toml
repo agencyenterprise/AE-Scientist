@@ -26,7 +26,7 @@ dependencies = [
     "langchain-anthropic>=1.2.0",
     "langchain-openai>=1.1.0",
     "langchain-xai>=0.2.0",
-    "ae-paper-review",
+    # ae-paper-review is installed separately (see Dockerfile and Makefile)
 ]
 
 [dependency-groups]
@@ -41,8 +41,8 @@ dev = [
     "vulture>=2.14",
 ]
 
-[tool.uv.sources]
-ae-paper-review = { path = "../../packages/ae-paper-review", editable = true }
+# ae-paper-review is installed separately in Docker (see Dockerfile)
+# For local development, install with: uv pip install -e ../../packages/ae-paper-review
 
 [tool.setuptools.packages.find]
 include = ["app*", "database_migrations*"]
