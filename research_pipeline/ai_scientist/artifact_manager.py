@@ -515,6 +515,31 @@ class ArtifactPublisher:
             Callers should wait on this Future before exiting to ensure the
             artifact is recorded in the database.
         """
+        # For zip packaging, check if artifact already exists BEFORE creating the archive.
+        # Creating a zip of a large workspace can take 10-30+ minutes, so we want to skip
+        # that expensive operation if the artifact was already uploaded.
+        if spec.packaging == "zip":
+            filename = spec.archive_name or f"{spec.path.name}.zip"
+            try:
+                exists_response = self._uploader.check_artifact_exists(
+                    artifact_type=spec.artifact_type,
+                    filename=filename,
+                )
+                if exists_response.exists:
+                    logger.info(
+                        "Skipping %s artifact - already exists in S3 (size=%s bytes). "
+                        "Avoiding expensive zip creation.",
+                        spec.artifact_type,
+                        exists_response.file_size,
+                    )
+                    return None
+            except Exception:
+                logger.warning(
+                    "Failed to check if %s artifact exists; proceeding with zip creation",
+                    spec.artifact_type,
+                    exc_info=True,
+                )
+
         request = self._build_request(spec=spec)
         if request is None:
             logger.info(
