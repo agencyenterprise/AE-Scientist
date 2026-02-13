@@ -331,7 +331,7 @@ async def ingest_artifact_uploaded(
     event = payload.event
 
     # Reconstruct s3_key (same pattern as in artifact_manager.py)
-    s3_key = f"research-pipeline/{run_id}/{event.artifact_type}/{event.filename}"
+    s3_key = f"research-pipeline/{run_id}/{event.artifact_type.value}/{event.filename}"
 
     # Persist to database (upsert based on s3_key)
     created_at_dt = datetime.fromisoformat(event.created_at.replace("Z", "+00:00"))

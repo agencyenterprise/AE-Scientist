@@ -49,11 +49,11 @@ async def get_presigned_upload_url(
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
 
-    s3_key = f"research-pipeline/{run_id}/{payload.artifact_type}/{payload.filename}"
+    s3_key = f"research-pipeline/{run_id}/{payload.artifact_type.value}/{payload.filename}"
 
     metadata = {
         "run_id": run_id,
-        "artifact_type": payload.artifact_type,
+        "artifact_type": payload.artifact_type.value,
     }
     if payload.metadata:
         metadata.update(payload.metadata)
@@ -92,7 +92,7 @@ async def check_artifact_exists(
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
 
-    s3_key = f"research-pipeline/{run_id}/{payload.artifact_type}/{payload.filename}"
+    s3_key = f"research-pipeline/{run_id}/{payload.artifact_type.value}/{payload.filename}"
 
     s3_service = get_s3_service()
     if s3_service.file_exists(s3_key):
@@ -131,11 +131,11 @@ async def init_multipart_upload(
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
 
-    s3_key = f"research-pipeline/{run_id}/{payload.artifact_type}/{payload.filename}"
+    s3_key = f"research-pipeline/{run_id}/{payload.artifact_type.value}/{payload.filename}"
 
     metadata = {
         "run_id": run_id,
-        "artifact_type": payload.artifact_type,
+        "artifact_type": payload.artifact_type.value,
     }
     if payload.metadata:
         metadata.update(payload.metadata)
