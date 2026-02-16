@@ -37,9 +37,12 @@ paper_text = load_paper("paper.pdf")
 
 # Perform review
 result = perform_review(
-    text=paper_text,
-    model="anthropic/claude-sonnet-4-20250514",
+    paper_text,
+    model="anthropic:claude-sonnet-4-20250514",
     temperature=0.1,
+    event_callback=lambda e: print(f"Progress: {e.progress:.0%}"),
+    num_reflections=2,
+    num_fs_examples=1,
     num_reviews_ensemble=3,
 )
 

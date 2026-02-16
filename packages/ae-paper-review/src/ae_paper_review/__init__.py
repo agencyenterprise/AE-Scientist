@@ -11,11 +11,13 @@ Example usage:
 
     # Perform review using "provider:model" format (LangChain native format)
     result = perform_review(
-        text=paper_text,
+        paper_text,
         model="anthropic:claude-sonnet-4-20250514",
         temperature=0.1,
-        num_reviews_ensemble=3,
+        event_callback=lambda e: print(f"Progress: {e.progress:.0%}"),
         num_reflections=2,
+        num_fs_examples=1,
+        num_reviews_ensemble=3,
     )
 
     # Access review results
@@ -29,8 +31,6 @@ from .llm_review import (
     ReviewProgressEvent,
     ReviewResult,
     get_review_fewshot_examples,
-    load_paper,
-    load_review,
     perform_review,
 )
 from .models import (
@@ -40,6 +40,7 @@ from .models import (
     ImageSelectionReview,
     ReviewResponseModel,
 )
+from .pdf_loader import load_paper
 from .vlm_review import (
     detect_duplicate_figures,
     extract_abstract,
@@ -65,7 +66,6 @@ __all__ = [
     "perform_review",
     "ReviewResult",
     "load_paper",
-    "load_review",
     "get_review_fewshot_examples",
     "ReviewProgressEvent",
     # Token Usage

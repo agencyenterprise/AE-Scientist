@@ -101,12 +101,13 @@ def _run_review_sync(
         )
 
     return perform_review(
-        text=paper_text,
+        paper_text,
         model=model,
         temperature=1,
-        num_reviews_ensemble=num_reviews_ensemble,
-        num_reflections=num_reflections,
         event_callback=on_progress,
+        num_reflections=num_reflections,
+        num_fs_examples=1,
+        num_reviews_ensemble=num_reviews_ensemble,
     )
 
 

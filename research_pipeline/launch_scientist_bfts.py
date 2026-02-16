@@ -23,6 +23,7 @@ import sys
 import threading
 import time
 import traceback
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, NamedTuple, Optional, Protocol, cast
@@ -805,8 +806,8 @@ def run_review_stage(
     run_dir_path: Path,
     artifact_callback: ArtifactCallback,
     telemetry_cfg: TelemetryConfig | None,
-    event_callback: Callable[[BaseEvent], None] | None = None,
-    run_id: str | None = None,
+    event_callback: Callable[[BaseEvent], None],
+    run_id: str,
     webhook_client: WebhookClient | None = None,
 ) -> None:
     pdf_path = find_pdf_path_for_review(
@@ -822,14 +823,14 @@ def run_review_stage(
     review_model = review_cfg.model
     review_context = build_auto_review_context(reports_base, None, paper_content or "")
     review_result = perform_review(
-        text=paper_content,
+        paper_content,
         model=review_model,
         temperature=review_cfg.temperature,
-        context=review_context,
-        num_reviews_ensemble=3,
-        num_reflections=2,
         event_callback=event_callback,
         run_id=run_id,
+        num_reflections=2,
+        num_reviews_ensemble=3,
+        context=review_context,
     )
     if not isinstance(review_result, ReviewResult):
         raise TypeError("perform_review must return ReviewResult")
@@ -890,16 +891,15 @@ def run_review_stage(
         except Exception:
             logger.exception("Failed to publish review data via webhook.")
 
-    if event_callback and run_id:
-        event_callback(
-            PaperGenerationProgressEvent(
-                run_id=run_id,
-                step=PaperGenerationStep.paper_review,
-                substep="Paper review complete.",
-                progress=1.0,
-                step_progress=1.0,
-            )
+    event_callback(
+        PaperGenerationProgressEvent(
+            run_id=run_id,
+            step=PaperGenerationStep.paper_review,
+            substep="Paper review complete.",
+            progress=1.0,
+            step_progress=1.0,
         )
+    )
     logger.info("Paper review completed.")
 
 
@@ -1040,7 +1040,7 @@ def execute_launcher(args: argparse.Namespace) -> None:
                     "Failed to write research_title.txt to run directory; continuing without it."
                 )
 
-        run_id = base_cfg.telemetry.run_id if base_cfg.telemetry else None
+        run_id = base_cfg.telemetry.run_id if base_cfg.telemetry else str(uuid.uuid4())
         if writeup_cfg is not None and run_dir_path is not None:
             agg_ok = True
             if has_aggregated_plots(reports_base=reports_base, run_dir_path=run_dir_path):

@@ -10,13 +10,13 @@ import pymupdf
 
 from .llm.token_tracking import TokenUsage
 from .llm.vlm import get_response_from_vlm, get_structured_response_from_vlm
-from .llm_review import load_paper
 from .models import (
     FigureImageCaptionRefReview,
     ImageCaptionRefReview,
     ImageReview,
     ImageSelectionReview,
 )
+from .pdf_loader import load_paper
 from .prompts import render_text
 
 logger = logging.getLogger(__name__)

@@ -26,7 +26,6 @@ from ae_paper_review import (
 from ae_paper_review import perform_review as _perform_review
 from ae_paper_review.llm.token_tracking import TokenUsage
 from ae_paper_review.models import FigureImageCaptionRefReview
-from langchain_core.messages import BaseMessage
 
 from ai_scientist.api_types import TokenUsageEvent
 from ai_scientist.telemetry.event_persistence import WebhookClient
@@ -132,16 +131,14 @@ def make_event_callback_adapter(
 
 def perform_review(
     text: str,
+    *,
     model: str,
     temperature: float,
-    *,
-    context: dict[str, str] | None = None,
-    num_reflections: int = 2,
-    num_fs_examples: int = 1,
-    num_reviews_ensemble: int = 3,
-    msg_history: list[BaseMessage] | None = None,
-    event_callback: Optional[Callable[[BaseEvent], None]] = None,
-    run_id: Optional[str] = None,
+    event_callback: Callable[[BaseEvent], None],
+    run_id: str,
+    num_reflections: int,
+    num_reviews_ensemble: int,
+    context: str | None = None,
 ) -> ReviewResult:
     """Perform paper review with research_pipeline integration.
 
@@ -153,33 +150,28 @@ def perform_review(
         text: Paper text to review
         model: LLM model identifier in "provider:model" format (e.g., "anthropic:claude-sonnet-4-20250514")
         temperature: Sampling temperature
-        context: Optional review context
+        event_callback: Callback for progress events (expects BaseEvent)
+        run_id: Run ID for events
         num_reflections: Number of reflection rounds
-        num_fs_examples: Number of few-shot examples
         num_reviews_ensemble: Number of ensemble reviews
-        msg_history: Optional message history
-        event_callback: Optional callback for progress events (expects BaseEvent)
-        run_id: Optional run ID for events
+        context: Optional pre-formatted context string
 
     Returns:
         ReviewResult containing review and token usage
     """
-    # Adapt event callback if provided
-    adapted_callback = None
-    if event_callback and run_id:
-        adapted_callback = make_event_callback_adapter(run_id, event_callback)
+    # Adapt event callback for the package's ReviewProgressEvent type
+    adapted_callback = make_event_callback_adapter(run_id, event_callback)
 
     # Perform the review (returns ReviewResult with token usage)
     result = _perform_review(
         text=text,
         model=model,
         temperature=temperature,
-        context=context,
-        num_reflections=num_reflections,
-        num_fs_examples=num_fs_examples,
-        num_reviews_ensemble=num_reviews_ensemble,
-        msg_history=msg_history,
         event_callback=adapted_callback,
+        num_reflections=num_reflections,
+        num_fs_examples=1,
+        num_reviews_ensemble=num_reviews_ensemble,
+        context=context,
     )
 
     # Publish token usage to webhook if configured
@@ -397,11 +389,26 @@ def _semantic_scholar_scan(
     return "\n".join(formatted[:max_results])
 
 
+def _format_mapping_block(title: str, data: Dict[str, Any]) -> str:
+    """Format a dictionary as a markdown block."""
+    if not data:
+        return ""
+    lines = [title + ":"]
+    for key, value in data.items():
+        if value is None:
+            continue
+        text = str(value).strip()
+        if not text:
+            continue
+        lines.append(f"- {key}: {text}")
+    return "\n".join(lines)
+
+
 def build_auto_review_context(
     idea_dir: str,
     idea_json: dict[str, Any] | None,
     paper_content: str,
-) -> dict[str, Any]:
+) -> str:
     """Build review context from paper content and optional idea information.
 
     Args:
@@ -410,23 +417,28 @@ def build_auto_review_context(
         paper_content: Full paper text in markdown format
 
     Returns:
-        Context dict with idea_overview, paper_signals, section_highlights, novelty_review
+        Formatted context string for the review prompt
     """
     # Load idea.json from disk if not already provided
     idea_payload = _load_idea_json(idea_dir, idea_json)
 
-    context: dict[str, Any] = {}
+    blocks: list[str] = []
 
+    # Idea overview
     if isinstance(idea_payload, dict):
-        context["idea_overview"] = {
+        idea_overview = {
             "Title": idea_payload.get("Title"),
             "Short Hypothesis": _shorten_text(idea_payload.get("Short Hypothesis"), 220),
             "Abstract": _shorten_text(idea_payload.get("Abstract"), 260),
             "Planned Experiments": _shorten_text(idea_payload.get("Experiments"), 260),
         }
+        block = _format_mapping_block("Idea Overview", idea_overview)
+        if block:
+            blocks.append(block)
+
         limitations = _shorten_text(idea_payload.get("Risk Factors and Limitations"), 240)
         if limitations:
-            context["additional_notes"] = f"Idea limitations: {limitations}"
+            blocks.append(f"Additional Notes:\nIdea limitations: {limitations}")
 
     # Analyze paper signals
     word_count = len(paper_content.split())
@@ -449,7 +461,7 @@ def build_auto_review_context(
     mentions_code = "github" in paper_content.lower() or "code" in paper_content.lower()
     mentions_figures = bool(re.search(r"\b(fig(ure)?|table)\b", paper_content, re.IGNORECASE))
 
-    context["paper_signals"] = {
+    paper_signals = {
         "Word Count": word_count,
         "Has Results Section": _bool_label(has_results),
         "Mentions Limitations": _bool_label(has_limitations_section),
@@ -457,6 +469,9 @@ def build_auto_review_context(
         "Mentions Code/Data": _bool_label(mentions_code),
         "Figures Or Tables": _bool_label(mentions_figures),
     }
+    block = _format_mapping_block("Automatic Checks", paper_signals)
+    if block:
+        blocks.append(block)
 
     # Extract section highlights
     section_highlights: dict[str, str] = {}
@@ -471,17 +486,21 @@ def build_auto_review_context(
         summary = _extract_section(paper_content, header)
         if summary:
             section_highlights[header] = summary
-    if section_highlights:
-        context["section_highlights"] = section_highlights
+
+    for section, text in section_highlights.items():
+        if text:
+            blocks.append(f"{section} Highlights:\n{text}")
 
     # Novelty scan via Semantic Scholar
     paper_title_match = re.search(r"^#\s+(.+)$", paper_content, re.MULTILINE)
     paper_title = paper_title_match.group(1).strip() if paper_title_match else None
     abstract_section = section_highlights.get("Abstract")
 
-    context["novelty_review"] = _semantic_scholar_scan(
+    novelty_review = _semantic_scholar_scan(
         paper_title or (idea_payload.get("Title") if isinstance(idea_payload, dict) else None),
         abstract_section,
     )
+    if novelty_review:
+        blocks.append(f"Novelty Scan:\n{novelty_review}")
 
-    return context
+    return "\n\n".join(blocks)

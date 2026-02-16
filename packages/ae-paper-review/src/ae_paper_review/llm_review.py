@@ -4,15 +4,14 @@ import importlib.resources
 import json
 import logging
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Iterable, List, Optional
+from typing import Any, Callable, List
 
-import pymupdf
 from langchain_core.messages import AIMessage, BaseMessage
-from pypdf import PdfReader
 
 from .llm.llm import get_structured_response_from_llm
 from .llm.token_tracking import TokenUsage, TokenUsageDetail, TokenUsageSummary
 from .models import ReviewResponseModel
+from .pdf_loader import load_paper
 from .prompts import render_text
 
 logger = logging.getLogger(__name__)
@@ -27,14 +26,234 @@ class ReviewResult:
     token_usage_detailed: list[TokenUsageDetail]
 
 
-# Pre-render static templates
+# Pre-render static system prompt
 _reviewer_system_prompt_balanced = render_text(
     template_name="llm_review/reviewer_system_prompt_balanced.txt.j2",
     context={},
 )
 
-_neurips_form = render_text(template_name="llm_review/neurips_form.md.j2", context={})
-_calibration_guide = render_text(template_name="llm_review/calibration_guide.txt.j2", context={})
+
+def _invoke_review_prompt(
+    prompt_text: str,
+    model: str,
+    temperature: float,
+    usage: TokenUsage,
+    history: list[BaseMessage] | None,
+    system_msg: str,
+) -> tuple[ReviewResponseModel, list[BaseMessage]]:
+    """Invoke LLM to generate a review response."""
+    response_dict, updated_history = get_structured_response_from_llm(
+        prompt=prompt_text,
+        model=model,
+        system_message=system_msg,
+        temperature=temperature,
+        schema_class=ReviewResponseModel,
+        msg_history=history,
+        usage=usage,
+    )
+    review_model = ReviewResponseModel.model_validate(response_dict)
+    return review_model, updated_history
+
+
+@dataclass
+class _EnsembleResult:
+    """Result of ensemble review step."""
+
+    review: ReviewResponseModel
+    msg_history: list[BaseMessage]
+
+
+def _run_ensemble_reviews(
+    base_prompt: str,
+    model: str,
+    temperature: float,
+    usage: TokenUsage,
+    num_reviews_ensemble: int,
+    event_callback: Callable[["ReviewProgressEvent"], None],
+) -> _EnsembleResult | None:
+    """Run ensemble reviews and generate meta-review.
+
+    Args:
+        base_prompt: The base review prompt
+        model: Model in "provider:model" format
+        temperature: Sampling temperature
+        usage: Token usage accumulator
+        num_reviews_ensemble: Number of ensemble reviews to generate
+        event_callback: Callback for progress events
+
+    Returns:
+        EnsembleResult with aggregated review and history, or None if all reviews failed
+    """
+    logger.info("Running ensemble reviews (%d reviews)", num_reviews_ensemble)
+    parsed_reviews: List[ReviewResponseModel] = []
+    histories: List[list[BaseMessage]] = []
+
+    for idx in range(num_reviews_ensemble):
+        try:
+            step_progress = idx / num_reviews_ensemble
+            event_callback(
+                ReviewProgressEvent(
+                    step="ensemble",
+                    substep=f"Review {idx + 1} of {num_reviews_ensemble}",
+                    progress=0.10 + 0.60 * step_progress,
+                    step_progress=step_progress,
+                )
+            )
+
+            logger.info("Generating ensemble review %d/%d", idx + 1, num_reviews_ensemble)
+            parsed, history = _invoke_review_prompt(
+                prompt_text=base_prompt,
+                model=model,
+                temperature=temperature,
+                usage=usage,
+                history=None,
+                system_msg=_reviewer_system_prompt_balanced,
+            )
+            logger.info(
+                "Ensemble review %d/%d complete (overall=%s, decision=%s)",
+                idx + 1,
+                num_reviews_ensemble,
+                parsed.overall,
+                parsed.decision,
+            )
+            parsed_reviews.append(parsed)
+            histories.append(history)
+        except Exception as exc:
+            logger.warning("Ensemble review %d/%d failed: %s", idx + 1, num_reviews_ensemble, exc)
+
+    if not parsed_reviews:
+        logger.warning(
+            "Warning: Failed to parse ensemble reviews; falling back to single review run."
+        )
+        return None
+
+    logger.info(
+        "Ensemble complete: %d/%d reviews succeeded, generating meta-review",
+        len(parsed_reviews),
+        num_reviews_ensemble,
+    )
+    event_callback(
+        ReviewProgressEvent(
+            step="meta_review",
+            substep="Generating meta-review...",
+            progress=0.70,
+            step_progress=0.0,
+        )
+    )
+
+    review = _get_meta_review(
+        model=model,
+        temperature=temperature,
+        reviews=parsed_reviews,
+        usage=usage,
+    )
+    if review is None:
+        logger.info("Meta-review failed, using first ensemble review as fallback")
+        review = parsed_reviews[0]
+    else:
+        logger.info(
+            "Meta-review complete (overall=%s, decision=%s)",
+            review.overall,
+            review.decision,
+        )
+
+    # Average scores from ensemble reviews
+    parsed_dicts = [parsed.model_dump() for parsed in parsed_reviews]
+    for score, limits in [
+        ("Originality", (1, 4)),
+        ("Quality", (1, 4)),
+        ("Clarity", (1, 4)),
+        ("Significance", (1, 4)),
+        ("Soundness", (1, 4)),
+        ("Presentation", (1, 4)),
+        ("Contribution", (1, 4)),
+        ("Overall", (1, 10)),
+        ("Confidence", (1, 5)),
+    ]:
+        collected: List[float] = []
+        for parsed_dict in parsed_dicts:
+            value = parsed_dict.get(score)
+            if isinstance(value, (int, float)) and limits[0] <= value <= limits[1]:
+                collected.append(float(value))
+        if collected:
+            mean_value = round(sum(collected) / len(collected), 2)
+            setattr(review, score, float(mean_value))
+
+    # Build message history for reflections
+    base_history = histories[0][:-1] if histories and histories[0] else []
+    assistant_message = AIMessage(content=json.dumps(review.model_dump(by_alias=True)))
+    msg_history = base_history + [assistant_message]
+
+    return _EnsembleResult(review=review, msg_history=msg_history)
+
+
+def _run_reflections(
+    review: ReviewResponseModel,
+    msg_history: list[BaseMessage],
+    model: str,
+    temperature: float,
+    usage: TokenUsage,
+    num_reflections: int,
+    event_callback: Callable[["ReviewProgressEvent"], None],
+) -> tuple[ReviewResponseModel, list[BaseMessage]]:
+    """Run reflection rounds to refine the review.
+
+    Args:
+        review: Initial review to refine
+        msg_history: Message history from initial review
+        model: Model in "provider:model" format
+        temperature: Sampling temperature
+        usage: Token usage accumulator
+        num_reflections: Total number of reflection rounds (including initial)
+        event_callback: Callback for progress events
+
+    Returns:
+        Tuple of (refined review, updated message history)
+    """
+    logger.info("Starting reflection rounds (%d total)", num_reflections)
+    total_reflection_rounds = num_reflections - 1
+
+    for reflection_round in range(total_reflection_rounds):
+        step_progress = reflection_round / total_reflection_rounds
+        event_callback(
+            ReviewProgressEvent(
+                step="reflection",
+                substep=f"Reflection {reflection_round + 1} of {total_reflection_rounds}",
+                progress=0.85 + 0.15 * step_progress,
+                step_progress=step_progress,
+            )
+        )
+
+        logger.info("Running reflection round %d/%d", reflection_round + 2, num_reflections)
+        reflection_prompt = render_text(
+            template_name="llm_review/reflection_prompt.txt.j2",
+            context={
+                "current_round": reflection_round + 2,
+                "num_reflections": num_reflections,
+            },
+        )
+        reflection_response, msg_history = _invoke_review_prompt(
+            prompt_text=reflection_prompt,
+            model=model,
+            temperature=temperature,
+            usage=usage,
+            history=msg_history,
+            system_msg=_reviewer_system_prompt_balanced,
+        )
+        review = reflection_response
+        logger.info(
+            "Reflection round %d/%d complete (overall=%s, decision=%s, continue=%s)",
+            reflection_round + 2,
+            num_reflections,
+            review.overall,
+            review.decision,
+            reflection_response.should_continue,
+        )
+        if not reflection_response.should_continue:
+            logger.info("Model indicated no further reflections needed, stopping early")
+            break
+
+    return review, msg_history
 
 
 # Progress event type for callbacks
@@ -63,78 +282,16 @@ class ReviewProgressEvent:
         }
 
 
-def _format_mapping_block(title: str, data: Dict[str, Any]) -> str:
-    """Format a dictionary as a markdown block."""
-    if not data:
-        return ""
-    lines = [title + ":"]
-    for key, value in data.items():
-        if value is None:
-            continue
-        text = str(value).strip()
-        if not text:
-            continue
-        lines.append(f"- {key}: {text}")
-    return "\n".join(lines)
-
-
-def _render_context_block(context: Optional[Dict[str, Any]]) -> str:
-    """Render review context as a formatted text block."""
-    if not context:
-        return ""
-
-    blocks: list[str] = []
-
-    overview = context.get("idea_overview")
-    if isinstance(overview, dict):
-        block = _format_mapping_block("Idea Overview", overview)
-        if block:
-            blocks.append(block)
-
-    signals = context.get("paper_signals")
-    if isinstance(signals, dict):
-        block = _format_mapping_block("Automatic Checks", signals)
-        if block:
-            blocks.append(block)
-
-    section_highlights = context.get("section_highlights")
-    if isinstance(section_highlights, dict):
-        for section, text in section_highlights.items():
-            if not text:
-                continue
-            blocks.append(f"{section} Highlights:\n{text}")
-
-    novelty = context.get("novelty_review")
-    if novelty:
-        if isinstance(novelty, str):
-            blocks.append(f"Novelty Scan:\n{novelty}")
-        elif isinstance(novelty, Iterable):
-            formatted = "\n".join(f"- {item}" for item in novelty if item)
-            if formatted:
-                blocks.append(f"Novelty Scan:\n{formatted}")
-
-    additional = context.get("additional_notes")
-    if additional:
-        blocks.append(f"Additional Notes:\n{additional}")
-
-    blocks = [b for b in blocks if b]
-    return "\n\n".join(blocks)
-
-
 def perform_review(
     text: str,
+    *,
     model: str,
     temperature: float,
-    *,
-    context: dict[str, str] | None = None,
-    num_reflections: int = 2,
-    num_fs_examples: int = 1,
-    num_reviews_ensemble: int = 3,
-    msg_history: list[BaseMessage] | None = None,
-    reviewer_system_prompt: str | None = None,
-    review_instruction_form: str | None = None,
-    calibration_notes: str | None = None,
-    event_callback: Optional[Callable[[ReviewProgressEvent], None]] = None,
+    event_callback: Callable[[ReviewProgressEvent], None],
+    num_reflections: int,
+    num_fs_examples: int,
+    num_reviews_ensemble: int,
+    context: str | None = None,
 ) -> ReviewResult:
     """Perform a paper review using LLM.
 
@@ -142,15 +299,11 @@ def perform_review(
         text: The paper text to review
         model: Model in "provider:model" format (e.g., "anthropic:claude-sonnet-4-20250514")
         temperature: Sampling temperature
-        context: Optional context dict with idea_overview, paper_signals, etc.
-        num_reflections: Number of reflection rounds (default 2)
-        num_fs_examples: Number of few-shot examples to include (default 1)
-        num_reviews_ensemble: Number of ensemble reviews (default 3)
-        msg_history: Optional message history for continuation
-        reviewer_system_prompt: Custom system prompt (uses default if None)
-        review_instruction_form: Custom review form (uses NeurIPS form if None)
-        calibration_notes: Custom calibration notes (uses default if None)
-        event_callback: Optional callback for progress events
+        event_callback: Callback for progress events
+        num_reflections: Number of reflection rounds
+        num_fs_examples: Number of few-shot examples to include
+        num_reviews_ensemble: Number of ensemble reviews
+        context: Optional pre-formatted context string to include in the prompt
 
     Returns:
         ReviewResult containing the review and token usage
@@ -166,203 +319,71 @@ def perform_review(
     # Create internal token usage tracker
     usage = TokenUsage()
 
-    # Use defaults if not provided
-    if reviewer_system_prompt is None:
-        reviewer_system_prompt = _reviewer_system_prompt_balanced
-    if review_instruction_form is None:
-        review_instruction_form = _neurips_form
-    if calibration_notes is None:
-        calibration_notes = _calibration_guide
-
-    context_block = _render_context_block(context)
-    base_prompt = review_instruction_form
-    if calibration_notes:
-        base_prompt += f"\n\nCalibration notes:\n{calibration_notes.strip()}\n"
-    if context_block:
-        base_prompt += f"\n\nContext for your evaluation:\n{context_block}\n"
-
-    if num_fs_examples > 0:
-        fs_prompt = get_review_fewshot_examples(num_fs_examples)
-        base_prompt += fs_prompt
-
-    base_prompt += f"""
-Here is the paper you are asked to review:
-```
-{text}
-```"""
+    fewshot_examples = get_review_fewshot_examples(num_fs_examples) if num_fs_examples > 0 else ""
+    base_prompt = render_text(
+        template_name="llm_review/review_prompt.txt.j2",
+        context={
+            "context": context,
+            "fewshot_examples": fewshot_examples,
+            "paper_text": text,
+        },
+    )
 
     # Emit event: paper review starting
     # Progress scale: 0-10% init, 10-70% ensemble, 70-85% meta-review, 85-100% reflections
-    if event_callback:
-        event_callback(
-            ReviewProgressEvent(
-                step="init",
-                substep="Starting paper review...",
-                progress=0.10,
-                step_progress=0.0,
-            )
+    event_callback(
+        ReviewProgressEvent(
+            step="init",
+            substep="Starting paper review...",
+            progress=0.10,
+            step_progress=0.0,
         )
+    )
 
-    # reviewer_system_prompt is guaranteed to be a str by this point (defaulted above)
-    assert reviewer_system_prompt is not None
-    _default_system_prompt: str = reviewer_system_prompt
+    # Run ensemble reviews if requested
+    review: ReviewResponseModel | None = None
+    msg_history: list[BaseMessage] | None = None
 
-    def _invoke_review_prompt(
-        prompt_text: str,
-        history: list[BaseMessage] | None = None,
-        *,
-        system_msg: str = _default_system_prompt,
-    ) -> tuple[ReviewResponseModel, list[BaseMessage]]:
-        response_dict, updated_history = get_structured_response_from_llm(
-            prompt=prompt_text,
-            model=model,
-            system_message=system_msg,
-            temperature=temperature,
-            schema_class=ReviewResponseModel,
-            msg_history=history,
-            usage=usage,
-        )
-        review_model = ReviewResponseModel.model_validate(response_dict)
-        return review_model, updated_history
-
-    review: Optional[ReviewResponseModel] = None
     if num_reviews_ensemble > 1:
-        logger.info("Running ensemble reviews (%d reviews)", num_reviews_ensemble)
-        parsed_reviews: List[ReviewResponseModel] = []
-        histories: List[list[BaseMessage]] = []
-        for idx in range(num_reviews_ensemble):
-            try:
-                # Emit event: review ensemble progress (10-70% of total progress)
-                if event_callback:
-                    step_progress = idx / num_reviews_ensemble  # Progress before this review
-                    event_callback(
-                        ReviewProgressEvent(
-                            step="ensemble",
-                            substep=f"Review {idx + 1} of {num_reviews_ensemble}",
-                            progress=0.10 + 0.60 * step_progress,
-                            step_progress=step_progress,
-                        )
-                    )
+        ensemble_result = _run_ensemble_reviews(
+            base_prompt=base_prompt,
+            model=model,
+            temperature=temperature,
+            usage=usage,
+            num_reviews_ensemble=num_reviews_ensemble,
+            event_callback=event_callback,
+        )
+        if ensemble_result is not None:
+            review = ensemble_result.review
+            msg_history = ensemble_result.msg_history
 
-                logger.info("Generating ensemble review %d/%d", idx + 1, num_reviews_ensemble)
-                parsed, history = _invoke_review_prompt(base_prompt, msg_history)
-                logger.info(
-                    "Ensemble review %d/%d complete (overall=%s, decision=%s)",
-                    idx + 1,
-                    num_reviews_ensemble,
-                    parsed.overall,
-                    parsed.decision,
-                )
-                parsed_reviews.append(parsed)
-                histories.append(history)
-            except Exception as exc:
-                logger.warning(
-                    "Ensemble review %d/%d failed: %s", idx + 1, num_reviews_ensemble, exc
-                )
-
-        if parsed_reviews:
-            logger.info(
-                "Ensemble complete: %d/%d reviews succeeded, generating meta-review",
-                len(parsed_reviews),
-                num_reviews_ensemble,
-            )
-            # Emit event: meta-review starting (70-85% of total progress)
-            if event_callback:
-                event_callback(
-                    ReviewProgressEvent(
-                        step="meta_review",
-                        substep="Generating meta-review...",
-                        progress=0.70,
-                        step_progress=0.0,
-                    )
-                )
-            review = _get_meta_review(model, temperature, parsed_reviews, usage=usage)
-            if review is None:
-                logger.info("Meta-review failed, using first ensemble review as fallback")
-                review = parsed_reviews[0]
-            else:
-                logger.info(
-                    "Meta-review complete (overall=%s, decision=%s)",
-                    review.overall,
-                    review.decision,
-                )
-            parsed_dicts = [parsed.model_dump() for parsed in parsed_reviews]
-            for score, limits in [
-                ("Originality", (1, 4)),
-                ("Quality", (1, 4)),
-                ("Clarity", (1, 4)),
-                ("Significance", (1, 4)),
-                ("Soundness", (1, 4)),
-                ("Presentation", (1, 4)),
-                ("Contribution", (1, 4)),
-                ("Overall", (1, 10)),
-                ("Confidence", (1, 5)),
-            ]:
-                collected: List[float] = []
-                for parsed_dict in parsed_dicts:
-                    value = parsed_dict.get(score)
-                    if isinstance(value, (int, float)) and limits[0] <= value <= limits[1]:
-                        collected.append(float(value))
-                if collected and review is not None:
-                    # Replace numpy with pure Python
-                    mean_value = round(sum(collected) / len(collected), 2)
-                    setattr(review, score, float(mean_value))
-            if review is not None:
-                base_history = (
-                    histories[0][:-1] if histories and histories[0] else (msg_history or [])
-                )
-                assistant_message = AIMessage(content=json.dumps(review.model_dump(by_alias=True)))
-                msg_history = base_history + [assistant_message]
-        else:
-            logger.warning(
-                "Warning: Failed to parse ensemble reviews; falling back to single review run."
-            )
-
+    # Fall back to single review if ensemble failed or wasn't requested
     if review is None:
         logger.info("Running single review (no ensemble)")
-        review, msg_history = _invoke_review_prompt(base_prompt, msg_history)
+        review, msg_history = _invoke_review_prompt(
+            prompt_text=base_prompt,
+            model=model,
+            temperature=temperature,
+            usage=usage,
+            history=None,
+            system_msg=_reviewer_system_prompt_balanced,
+        )
         logger.info(
             "Single review complete (overall=%s, decision=%s)", review.overall, review.decision
         )
-    assert review is not None
 
-    if num_reflections > 1 and review is not None:
-        logger.info("Starting reflection rounds (%d total)", num_reflections)
-        total_reflection_rounds = num_reflections - 1
-        for reflection_round in range(total_reflection_rounds):
-            # Emit event: reflection progress (85-100% of total progress)
-            if event_callback:
-                step_progress = reflection_round / total_reflection_rounds
-                event_callback(
-                    ReviewProgressEvent(
-                        step="reflection",
-                        substep=f"Reflection {reflection_round + 1} of {total_reflection_rounds}",
-                        progress=0.85 + 0.15 * step_progress,
-                        step_progress=step_progress,
-                    )
-                )
-
-            logger.info("Running reflection round %d/%d", reflection_round + 2, num_reflections)
-            reflection_prompt = _reviewer_reflection_prompt.format(
-                current_round=reflection_round + 2,
-                num_reflections=num_reflections,
-            )
-            reflection_response, msg_history = _invoke_review_prompt(
-                reflection_prompt,
-                msg_history,
-            )
-            review = reflection_response
-            logger.info(
-                "Reflection round %d/%d complete (overall=%s, decision=%s, continue=%s)",
-                reflection_round + 2,
-                num_reflections,
-                review.overall,
-                review.decision,
-                reflection_response.should_continue,
-            )
-            if not reflection_response.should_continue:
-                logger.info("Model indicated no further reflections needed, stopping early")
-                break
+    # Run reflection rounds if requested
+    if num_reflections > 1:
+        assert msg_history is not None
+        review, msg_history = _run_reflections(
+            review=review,
+            msg_history=msg_history,
+            model=model,
+            temperature=temperature,
+            usage=usage,
+            num_reflections=num_reflections,
+            event_callback=event_callback,
+        )
 
     total_usage = usage.get_total()
     logger.info(
@@ -380,89 +401,7 @@ Here is the paper you are asked to review:
     )
 
 
-_reviewer_reflection_prompt = """Round {current_round}/{num_reflections}.
-Carefully consider the accuracy and soundness of the review you just created.
-Include any factors that you think are important in evaluating the paper.
-Ensure the review is clear and concise, and keep the JSON schema identical.
-Do not make things overly complicated.
-In the next attempt, try and refine and improve your review.
-Stick to the spirit of the original review unless there are glaring issues.
-
-Return an updated JSON object following the required schema.
-Add a boolean field "should_continue" and set it to false only if no further changes are needed."""
-
-
-def load_paper(pdf_path: str, num_pages: int | None = None, min_size: int = 100) -> str:
-    """Load paper text from a PDF file.
-
-    Args:
-        pdf_path: Path to the PDF file
-        num_pages: Optional limit on number of pages to extract
-        min_size: Minimum text size to consider valid
-
-    Returns:
-        Extracted text from the PDF
-    """
-    try:
-        # Lazy import with stdout suppression to avoid polluting output
-        import io
-        import sys
-
-        _original_stdout = sys.stdout
-        sys.stdout = io.StringIO()
-        import pymupdf4llm  # type: ignore[import-untyped]
-
-        sys.stdout = _original_stdout
-
-        text: str
-        if num_pages is None:
-            text = str(pymupdf4llm.to_markdown(pdf_path))
-        else:
-            reader = PdfReader(pdf_path)
-            min_pages = min(len(reader.pages), num_pages)
-            text = str(pymupdf4llm.to_markdown(pdf_path, pages=list(range(min_pages))))
-        if len(text) < min_size:
-            raise Exception("Text too short")
-    except Exception as e:
-        logger.warning(f"Error with pymupdf4llm, falling back to pymupdf: {e}")
-        try:
-            doc = pymupdf.open(pdf_path)
-            page_limit = num_pages if num_pages else len(doc)
-            text = ""
-            for i in range(min(page_limit, len(doc))):
-                page = doc[i]
-                text += str(page.get_text())  # type: ignore[attr-defined]
-            if len(text) < min_size:
-                raise Exception("Text too short")
-        except Exception as e:
-            logger.warning(f"Error with pymupdf, falling back to pypdf: {e}")
-            reader = PdfReader(pdf_path)
-            if num_pages is None:
-                pages = reader.pages
-            else:
-                pages = reader.pages[:num_pages]
-            text = "".join(page.extract_text() for page in pages)
-            if len(text) < min_size:
-                raise Exception("Text too short")
-    return text
-
-
-def load_review(json_path: str) -> str:
-    """Load a review from a JSON file."""
-    with open(json_path, "r") as json_file:
-        loaded = json.load(json_file)
-    return str(loaded["review"])
-
-
-def _get_fewshot_path(filename: str) -> str:
-    """Get path to a fewshot example file using importlib.resources."""
-    files = importlib.resources.files("ae_paper_review.fewshot_examples")
-    # Return a path that can be used with open()
-    # For installed packages, we need to use as_file context manager
-    return str(files.joinpath(filename))
-
-
-def get_review_fewshot_examples(num_fs_examples: int = 1) -> str:
+def get_review_fewshot_examples(num_fs_examples: int) -> str:
     """Get few-shot examples for review prompts.
 
     Args:
@@ -477,11 +416,10 @@ def get_review_fewshot_examples(num_fs_examples: int = 1) -> str:
         ("2_carpe_diem", "2_carpe_diem"),
     ]
 
-    fewshot_prompt = """
-Below are some sample reviews, copied from previous machine learning conferences.
-Note that while each review is formatted differently according to each reviewer's style,
-the reviews are well-structured and therefore easy to navigate.
-"""
+    fewshot_prompt = render_text(
+        template_name="llm_review/fewshot_intro.txt.j2",
+        context={},
+    )
 
     files = importlib.resources.files("ae_paper_review.fewshot_examples")
 
@@ -501,26 +439,12 @@ the reviews are well-structured and therefore easy to navigate.
         review_data = json.loads(json_file.read_text())
         review_text = str(review_data["review"])
 
-        fewshot_prompt += f"""
-Paper:
+        fewshot_prompt += "\n\n" + render_text(
+            template_name="llm_review/fewshot_example.txt.j2",
+            context={"paper_text": paper_text, "review_text": review_text},
+        )
 
-```
-{paper_text}
-```
-
-Review:
-
-```
-{review_text}
-```
-"""
     return fewshot_prompt
-
-
-_meta_reviewer_system_prompt = """You are an Area Chair at a machine learning conference.
-You are in charge of meta-reviewing a paper that was reviewed by {reviewer_count} reviewers.
-Your job is to aggregate the reviews into a single meta-review in the same format.
-Be critical and cautious in your decision, find consensus, and respect all reviewers' opinions."""
 
 
 def _get_meta_review(
@@ -540,20 +464,20 @@ def _get_meta_review(
     Returns:
         Aggregated ReviewResponseModel or None if failed
     """
-    review_text = ""
-    for i, r in enumerate(reviews):
-        review_text += f"""
-Review {i + 1}/{len(reviews)}:
-```
-{json.dumps(r.model_dump(by_alias=True))}
-```
-"""
-    base_prompt = _neurips_form + review_text
+    review_json_strings = [json.dumps(r.model_dump(by_alias=True)) for r in reviews]
+    base_prompt = render_text(
+        template_name="llm_review/meta_review_prompt.txt.j2",
+        context={"reviews": review_json_strings},
+    )
+    system_message = render_text(
+        template_name="llm_review/meta_reviewer_system_prompt.txt.j2",
+        context={"reviewer_count": len(reviews)},
+    )
     try:
         response_dict, _ = get_structured_response_from_llm(
             prompt=base_prompt,
             model=model,
-            system_message=_meta_reviewer_system_prompt.format(reviewer_count=len(reviews)),
+            system_message=system_message,
             temperature=temperature,
             schema_class=ReviewResponseModel,
             msg_history=None,
