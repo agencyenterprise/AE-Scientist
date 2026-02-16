@@ -1,0 +1,12 @@
+{% include "llm_review/neurips_form.md.j2" %}
+
+Calibration notes:
+{% include "llm_review/calibration_guide.txt.j2" %}
+
+{% if context %}
+Context for your evaluation:
+{{ context }}
+
+{% endif %}
+{{ fewshot_examples }}
+Review the paper provided in the PDF document above.

@@ -15,22 +15,6 @@ logger = logging.getLogger(__name__)
 
 SUPPORTED_MODELS = [
     LLMModel(
-        id="gpt-4o",
-        provider="openai",
-        label="GPT-4o",
-        supports_images=True,
-        supports_pdfs=True,
-        context_window_tokens=128_000,
-    ),
-    LLMModel(
-        id="gpt-4o-mini",
-        provider="openai",
-        label="GPT-4o Mini",
-        supports_images=True,
-        supports_pdfs=True,
-        context_window_tokens=128_000,
-    ),
-    LLMModel(
         id="gpt-4.1",
         provider="openai",
         label="GPT-4.1",
@@ -93,30 +77,6 @@ SUPPORTED_MODELS = [
         supports_images=True,
         supports_pdfs=True,
         context_window_tokens=400_000,
-    ),
-    LLMModel(
-        id="o1",
-        provider="openai",
-        label="o1",
-        supports_images=True,
-        supports_pdfs=True,
-        context_window_tokens=200_000,
-    ),
-    LLMModel(
-        id="o3",
-        provider="openai",
-        label="o3",
-        supports_images=True,
-        supports_pdfs=True,
-        context_window_tokens=200_000,
-    ),
-    LLMModel(
-        id="o3-mini",
-        provider="openai",
-        label="o3 Mini",
-        supports_images=False,
-        supports_pdfs=True,
-        context_window_tokens=200_000,
     ),
 ]
 

@@ -11,14 +11,17 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable, Dict, List, NamedTuple, Optional, cast
 
-from ai_scientist.perform_citations import gather_citations
-from ai_scientist.prompts.render import render_text
-from ai_scientist.review_integration import (
+from ae_paper_review import (
     detect_duplicate_figures,
+    extract_abstract_from_pdf,
     generate_vlm_img_review,
     perform_imgs_cap_ref_review,
     perform_imgs_cap_ref_review_selection,
 )
+
+from ai_scientist.perform_citations import gather_citations
+from ai_scientist.prompts.render import render_text
+from ai_scientist.review_integration import publish_token_usage
 from ai_scientist.treesearch.codex.codex_cli_runner import CodexCliRunner
 from ai_scientist.treesearch.events import (
     BaseEvent,
@@ -305,7 +308,7 @@ class VLMReviewResult(NamedTuple):
 
 def _run_vlm_review(
     *,
-    pdf_path: str,
+    pdf_path: Path,
     latex_folder: Path,
     plot_names: list[str],
     model: str,
@@ -344,22 +347,41 @@ def _run_vlm_review(
     chktex_output = os.popen(f"chktex {writeup_file} -q -n2 -n24 -n13 -n1").read()
 
     # VLM reviews
-    caption_review = perform_imgs_cap_ref_review(
+    # Extract abstract first (has its own token usage)
+    abstract_result = extract_abstract_from_pdf(
+        pdf_path=pdf_path,
+        model=model,
+    )
+    abstract = abstract_result.abstract
+    publish_token_usage(usage=abstract_result.token_usage)
+
+    # Run VLM reviews - each returns its own token usage
+    caption_result = perform_imgs_cap_ref_review(
+        model=model,
+        abstract=abstract,
+        pdf_path=pdf_path,
+        temperature=temperature,
+    )
+    caption_review = caption_result.reviews
+    publish_token_usage(usage=caption_result.token_usage)
+
+    dup_result = detect_duplicate_figures(
         model=model,
         pdf_path=pdf_path,
         temperature=temperature,
     )
-    duplicate_analysis = detect_duplicate_figures(
-        model=model,
-        pdf_path=pdf_path,
-        temperature=temperature,
-    )
-    selection_review = perform_imgs_cap_ref_review_selection(
+    duplicate_analysis = dup_result.analysis
+    publish_token_usage(usage=dup_result.token_usage)
+
+    selection_result = perform_imgs_cap_ref_review_selection(
         model=model,
         pdf_path=pdf_path,
         reflection_page_info=page_info,
         temperature=temperature,
+        abstract=abstract,
     )
+    selection_review = selection_result.reviews
+    publish_token_usage(usage=selection_result.token_usage)
 
     # Determine if paper is acceptable (heuristic: no major issues)
     is_acceptable = (
@@ -535,12 +557,13 @@ def perform_writeup(
                 if not plot_path.exists():
                     continue
                 img_dict = {"images": [str(plot_path)], "caption": "No direct caption"}
-                review_data = generate_vlm_img_review(
+                review_result = generate_vlm_img_review(
                     img=img_dict, model=model, temperature=temperature
                 )
+                publish_token_usage(usage=review_result.token_usage)
                 desc_map[plot_name] = (
-                    review_data.get("Img_description", "No description found")
-                    if review_data
+                    review_result.review.get("Img_description", "No description found")
+                    if review_result.review
                     else "No description found"
                 )
             plot_descriptions_list = [
@@ -636,7 +659,7 @@ def perform_writeup(
             # Run VLM review
             logger.info("Running VLM review round %d...", version)
             review = _run_vlm_review(
-                pdf_path=current_pdf,
+                pdf_path=Path(current_pdf),
                 latex_folder=latex_folder,
                 plot_names=plot_names,
                 model=model,

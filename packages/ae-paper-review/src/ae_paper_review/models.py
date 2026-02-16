@@ -189,3 +189,21 @@ class FigureImageCaptionRefReview(BaseModel):
 
     figure_name: str = Field(..., description="Normalized identifier for the figure.")
     review: ImageCaptionRefReview
+
+
+class PaperContextExtraction(BaseModel):
+    """LLM-extracted paper title and abstract for Semantic Scholar lookup."""
+
+    title: str | None = Field(
+        default=None,
+        alias="Title",
+        description="The paper title. Set to null if not clearly present.",
+    )
+    abstract: str | None = Field(
+        default=None,
+        alias="Abstract",
+        description="The paper abstract. Set to null if not present.",
+    )
+
+    class Config:
+        populate_by_name = True

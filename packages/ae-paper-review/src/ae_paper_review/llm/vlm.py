@@ -5,11 +5,11 @@ import io
 import logging
 from typing import Any, Tuple
 
+from langchain.chat_models import init_chat_model
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from PIL import Image
 from pydantic import BaseModel
 
-from .llm import _create_chat_model
 from .token_tracking import TokenUsage, TrackCostCallbackHandler
 
 logger = logging.getLogger(__name__)
@@ -97,7 +97,10 @@ def make_vlm_call(
             message.type,
         )
 
-    chat = _create_chat_model(model=model, temperature=temperature)
+    chat = init_chat_model(
+        model=model,
+        temperature=temperature,
+    )
     retrying_chat = chat.with_retry(
         retry_if_exception_type=(Exception,),
         stop_after_attempt=3,
@@ -220,7 +223,10 @@ def get_structured_response_from_vlm(
     )
 
     new_msg_history = msg_history + [messages[-1]]
-    chat = _create_chat_model(model=model, temperature=temperature)
+    chat = init_chat_model(
+        model=model,
+        temperature=temperature,
+    )
     structured_chat = chat.with_structured_output(schema=schema_class)
 
     callbacks = [TrackCostCallbackHandler(model=model, usage=usage)]
