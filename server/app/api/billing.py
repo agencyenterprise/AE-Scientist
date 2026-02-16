@@ -113,7 +113,7 @@ async def list_funding_options(request: Request) -> FundingOptionListResponse:
             unit_amount=int(opt["unit_amount"]),
             nickname=str(opt["nickname"]),
         )
-        for opt in await service.list_funding_options(list(settings.stripe.price_ids))
+        for opt in await service.list_funding_options(list(settings.stripe_price_ids))
     ]
     return FundingOptionListResponse(options=options)
 
@@ -219,7 +219,7 @@ async def stripe_webhook(request: Request) -> JSONResponse:
     payload = await request.body()
     signature = request.headers.get("stripe-signature")
     service = _get_service()
-    webhook_secret = settings.stripe.webhook_secret
+    webhook_secret = settings.stripe_webhook_secret
     if not webhook_secret:
         logger.error("Stripe webhook secret is not configured.")
         raise HTTPException(

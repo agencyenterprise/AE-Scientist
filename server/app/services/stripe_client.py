@@ -13,9 +13,9 @@ class StripeClient:
     """Provides typed helpers for the Stripe SDK."""
 
     def __init__(self) -> None:
-        if not settings.stripe.secret_key:
+        if not settings.stripe_secret_key:
             raise RuntimeError("STRIPE_SECRET_KEY is not configured.")
-        stripe.api_key = settings.stripe.secret_key
+        stripe.api_key = settings.stripe_secret_key
 
     def retrieve_price(self, price_id: str) -> stripe.Price:
         return stripe.Price.retrieve(price_id)

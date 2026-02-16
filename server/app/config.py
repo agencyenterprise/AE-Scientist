@@ -1,19 +1,16 @@
 """
 Configuration module that loads and validates all environment variables at startup.
 
-Uses NamedTuples for type-safe, immutable configuration storage.
+Uses Pydantic Settings for type-safe, validated configuration.
 Fails fast at import time if required variables are missing.
 """
 
 import json
-import os
 import sys
-from typing import Dict, List, NamedTuple, Tuple
+from typing import Tuple
 
-from dotenv import load_dotenv
-
-# Load environment variables from .env file
-load_dotenv()
+from pydantic import Field, field_validator, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class ConfigError(Exception):
@@ -28,7 +25,7 @@ class LLMPricing:
     Prices are looked up using the "provider:model" format (e.g., "openai:gpt-5.2").
     """
 
-    _pricing_data: Dict[str, Dict[str, int]]
+    _pricing_data: dict[str, dict[str, int]]
 
     def __init__(self, raw_value: str):
         if not raw_value:
@@ -50,13 +47,12 @@ class LLMPricing:
             for model_name, prices in models.items():
                 if not isinstance(prices, dict):
                     continue
-                sanitized: Dict[str, int] = {}
+                sanitized: dict[str, int] = {}
                 for price_key, price_value in prices.items():
                     try:
                         sanitized[str(price_key)] = int(price_value)
                     except (TypeError, ValueError):
                         continue
-                # Store with "provider:model" key
                 key = f"{provider}:{model_name}"
                 self._pricing_data[key] = sanitized
 
@@ -85,350 +81,194 @@ class LLMPricing:
             raise ValueError(f"Output price not found for model '{model}'.")
 
 
-class DatabaseConfig(NamedTuple):
-    """Database connection configuration."""
-
-    url: str
-    pool_min_conn: int
-    pool_max_conn: int
-    pool_usage_warn_threshold: float
-    skip_connection: bool
+def _parse_comma_list(value: str) -> Tuple[str, ...]:
+    """Parse a comma-separated string into a tuple of stripped values."""
+    if not value:
+        return ()
+    return tuple(item.strip() for item in value.split(",") if item.strip())
 
 
-class RunPodConfig(NamedTuple):
-    """RunPod API and SSH configuration."""
+class Settings(BaseSettings):
+    """All application settings loaded from environment variables."""
 
-    api_key: str
-    ssh_access_key: str
-    supported_gpus: Tuple[str, ...]
-    fake_base_url: str = ""
-    fake_graphql_url: str = ""
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    # Server config
+    project_name: str = Field(default="AE Scientist", alias="PROJECT_NAME")
+    version: str = Field(default="1.0.0", alias="VERSION")
+    api_title: str = Field(default="", alias="API_TITLE")
+    host: str = Field(default="0.0.0.0", alias="HOST")
+    port: int = Field(default=8000, alias="PORT")
+    server_auto_reload: bool = Field(alias="SERVER_AUTO_RELOAD")
+    log_level: str = Field(alias="LOG_LEVEL")
+    railway_environment_name: str = Field(default="development", alias="RAILWAY_ENVIRONMENT_NAME")
+    frontend_url: str = Field(alias="FRONTEND_URL")
+    cors_origins_raw: str = Field(alias="CORS_ORIGINS")
+    cors_credentials: bool = Field(alias="CORS_CREDENTIALS")
+
+    # Database config
+    database_url: str = Field(alias="DATABASE_URL")
+    db_pool_min_conn: int = Field(alias="DB_POOL_MIN_CONN")
+    db_pool_max_conn: int = Field(alias="DB_POOL_MAX_CONN")
+    db_pool_usage_warn_threshold: float = Field(alias="DB_POOL_USAGE_WARN_THRESHOLD")
+    skip_db_connection: bool = Field(default=False, alias="SKIP_DB_CONNECTION")
+
+    # Redis config
+    redis_url: str = Field(alias="REDIS_URL")
+    redis_stream_maxlen: int = Field(default=1000, alias="REDIS_STREAM_MAXLEN")
+    redis_stream_ttl_seconds: int = Field(default=86400, alias="REDIS_STREAM_TTL_SECONDS")
+
+    # RunPod config
+    runpod_api_key: str = Field(alias="RUNPOD_API_KEY")
+    runpod_ssh_access_key: str = Field(alias="RUNPOD_SSH_ACCESS_KEY")
+    runpod_supported_gpus_raw: str = Field(alias="RUNPOD_SUPPORTED_GPUS")
+    fake_runpod_base_url: str = Field(default="", alias="FAKE_RUNPOD_BASE_URL")
+    fake_runpod_graphql_url: str = Field(default="", alias="FAKE_RUNPOD_GRAPHQL_URL")
+
+    # Research pipeline config
+    pipeline_monitor_poll_interval_seconds: int = Field(
+        alias="PIPELINE_MONITOR_POLL_INTERVAL_SECONDS"
+    )
+    pipeline_monitor_heartbeat_timeout_seconds: int = Field(
+        alias="PIPELINE_MONITOR_HEARTBEAT_TIMEOUT_SECONDS"
+    )
+    pipeline_monitor_max_missed_heartbeats: int = Field(
+        alias="PIPELINE_MONITOR_MAX_MISSED_HEARTBEATS"
+    )
+    pipeline_monitor_startup_grace_seconds: int = Field(
+        alias="PIPELINE_MONITOR_STARTUP_GRACE_SECONDS"
+    )
+    pipeline_monitor_max_runtime_hours: int = Field(alias="PIPELINE_MONITOR_MAX_RUNTIME_HOURS")
+    pipeline_max_restart_attempts: int = Field(alias="PIPELINE_MAX_RESTART_ATTEMPTS")
+    research_pipeline_path: str = Field(default="", alias="RESEARCH_PIPELINE_PATH")
+    telemetry_webhook_url: str = Field(alias="TELEMETRY_WEBHOOK_URL")
+    hf_token: str = Field(alias="HF_TOKEN")
+    collect_disk_stats_paths: str = Field(default="", alias="COLLECT_DISK_STATS_PATHS")
+
+    # AWS config
+    aws_access_key_id: str = Field(alias="AWS_ACCESS_KEY_ID")
+    aws_secret_access_key: str = Field(alias="AWS_SECRET_ACCESS_KEY")
+    aws_region: str = Field(alias="AWS_REGION")
+    aws_s3_bucket_name: str = Field(alias="AWS_S3_BUCKET_NAME")
+
+    # Stripe config
+    stripe_secret_key: str = Field(alias="STRIPE_SECRET_KEY")
+    stripe_webhook_secret: str = Field(alias="STRIPE_WEBHOOK_SECRET")
+    stripe_checkout_success_url: str = Field(alias="STRIPE_CHECKOUT_SUCCESS_URL")
+    stripe_price_ids_raw: str = Field(alias="STRIPE_PRICE_IDS")
+
+    # Clerk config
+    clerk_secret_key: str = Field(alias="CLERK_SECRET_KEY")
+    clerk_publishable_key: str = Field(alias="CLERK_PUBLISHABLE_KEY")
+
+    # LLM config
+    openai_api_key: str = Field(alias="OPENAI_API_KEY")
+    anthropic_api_key: str = Field(alias="ANTHROPIC_API_KEY")
+    xai_api_key: str = Field(alias="XAI_API_KEY")
+
+    # Billing limits
+    min_balance_cents_for_research_pipeline: int = Field(
+        alias="MIN_BALANCE_CENTS_FOR_RESEARCH_PIPELINE"
+    )
+    min_balance_cents_for_chat_message: int = Field(alias="MIN_BALANCE_CENTS_FOR_CHAT_MESSAGE")
+    min_balance_cents_for_paper_review: int = Field(alias="MIN_BALANCE_CENTS_FOR_PAPER_REVIEW")
+
+    # LLM Pricing (JSON)
+    json_model_price_per_million_in_cents: str = Field(
+        alias="JSON_MODEL_PRICE_PER_MILLION_IN_CENTS"
+    )
+
+    # Other settings
+    sentry_dsn: str = Field(default="", alias="SENTRY_DSN")
+    sentry_environment: str = Field(default="", alias="SENTRY_ENVIRONMENT")
+    idea_max_completion_tokens: int = Field(default=8192, alias="IDEA_MAX_COMPLETION_TOKENS")
+    session_expire_hours: int = Field(default=24, alias="SESSION_EXPIRE_HOURS")
+    whitelist_emails_free_credit_raw: str = Field(default="", alias="WHITELIST_EMAILS_FREE_CREDIT")
+    railway_git_commit_sha: str = Field(default="", alias="RAILWAY_GIT_COMMIT_SHA")
+
+    # Computed fields (built in model_validator)
+    _cors_origins: Tuple[str, ...] = ()
+    _runpod_supported_gpus: Tuple[str, ...] = ()
+    _stripe_price_ids: Tuple[str, ...] = ()
+    _whitelist_emails_free_credit: Tuple[str, ...] = ()
+    _llm_pricing: LLMPricing | None = None
+    _resolved_api_title: str = ""
+
+    @field_validator("stripe_price_ids_raw")
+    @classmethod
+    def validate_stripe_price_ids(cls, v: str) -> str:
+        """Ensure at least one price ID is provided."""
+        if not v or not any(item.strip() for item in v.split(",")):
+            raise ValueError("STRIPE_PRICE_IDS must contain at least one price ID")
+        return v
+
+    @model_validator(mode="after")
+    def build_computed_fields(self) -> "Settings":
+        """Build computed fields after validation."""
+        object.__setattr__(self, "_cors_origins", _parse_comma_list(self.cors_origins_raw))
+        object.__setattr__(
+            self, "_runpod_supported_gpus", _parse_comma_list(self.runpod_supported_gpus_raw)
+        )
+        object.__setattr__(self, "_stripe_price_ids", _parse_comma_list(self.stripe_price_ids_raw))
+        object.__setattr__(
+            self,
+            "_whitelist_emails_free_credit",
+            _parse_comma_list(self.whitelist_emails_free_credit_raw),
+        )
+        object.__setattr__(
+            self,
+            "_llm_pricing",
+            LLMPricing(self.json_model_price_per_million_in_cents),
+        )
+        object.__setattr__(
+            self,
+            "_resolved_api_title",
+            self.api_title if self.api_title else f"{self.project_name} API",
+        )
+        return self
 
     @property
-    def uses_fake_runpod(self) -> bool:
-        """Return True if fake RunPod is configured."""
-        return bool(self.fake_base_url)
+    def cors_origins(self) -> Tuple[str, ...]:
+        return self._cors_origins
 
+    @property
+    def runpod_supported_gpus(self) -> Tuple[str, ...]:
+        return self._runpod_supported_gpus
 
-class ResearchPipelineConfig(NamedTuple):
-    """Research pipeline configuration."""
+    @property
+    def stripe_price_ids(self) -> Tuple[str, ...]:
+        return self._stripe_price_ids
 
-    monitor_poll_interval_seconds: int
-    monitor_heartbeat_timeout_seconds: int
-    monitor_max_missed_heartbeats: int
-    monitor_startup_grace_seconds: int
-    monitor_max_runtime_hours: int
-    max_restart_attempts: int
-    path: str
-    telemetry_webhook_url: str
-    hf_token: str
-    collect_disk_stats_paths: str
+    @property
+    def whitelist_emails_free_credit(self) -> Tuple[str, ...]:
+        return self._whitelist_emails_free_credit
 
+    @property
+    def llm_pricing(self) -> LLMPricing:
+        assert self._llm_pricing is not None
+        return self._llm_pricing
 
-class AWSConfig(NamedTuple):
-    """AWS S3 configuration."""
-
-    access_key_id: str
-    secret_access_key: str
-    region: str
-    s3_bucket_name: str
-
-
-class StripeConfig(NamedTuple):
-    """Stripe billing configuration."""
-
-    secret_key: str
-    webhook_secret: str
-    checkout_success_url: str
-    price_ids: Tuple[str, ...]
-
-
-class ClerkConfig(NamedTuple):
-    """Clerk authentication configuration."""
-
-    secret_key: str
-    publishable_key: str
-
-
-class LLMConfig(NamedTuple):
-    """LLM provider API keys."""
-
-    openai_api_key: str
-    anthropic_api_key: str
-    xai_api_key: str
-
-
-class BillingLimitsConfig(NamedTuple):
-    """Minimum balance requirements in cents."""
-
-    min_balance_cents_for_research_pipeline: int
-    min_balance_cents_for_chat_message: int
-    min_balance_cents_for_paper_review: int
-
-
-class RedisConfig(NamedTuple):
-    """Redis configuration for SSE event streaming."""
-
-    url: str
-    stream_maxlen: int  # Max events to keep per stream (approximate, uses ~)
-    stream_ttl_seconds: int  # TTL for stream keys (0 = no expiry)
-
-
-class ServerConfig(NamedTuple):
-    """Server runtime configuration."""
-
-    project_name: str
-    version: str
-    api_title: str
-    host: str
-    port: int
-    reload: bool
-    log_level: str
-    railway_environment_name: str
-    frontend_url: str
-    cors_origins: Tuple[str, ...]
-    cors_credentials: bool
-
-
-class Settings(NamedTuple):
-    """All application settings stored as immutable NamedTuple."""
-
-    server: ServerConfig
-    database: DatabaseConfig
-    redis: RedisConfig
-    runpod: RunPodConfig
-    research_pipeline: ResearchPipelineConfig
-    aws: AWSConfig
-    stripe: StripeConfig
-    clerk: ClerkConfig
-    llm: LLMConfig
-    billing_limits: BillingLimitsConfig
-    llm_pricing: LLMPricing
-    sentry_dsn: str
-    sentry_environment: str
-    idea_max_completion_tokens: int
-    session_expire_hours: int
-    whitelist_emails_free_credit: Tuple[str, ...]
-    railway_git_commit_sha: str
+    @property
+    def resolved_api_title(self) -> str:
+        return self._resolved_api_title
 
     @property
     def is_production(self) -> bool:
-        return self.server.railway_environment_name == "production"
+        return self.railway_environment_name == "production"
 
-
-def _load_settings() -> Settings:
-    """Load and validate all settings from environment variables.
-
-    Raises ConfigError with a clear message listing all missing required variables.
-    """
-    errors: List[str] = []
-
-    def get_required(name: str) -> str:
-        value = os.getenv(name)
-        if value is None or value == "":
-            errors.append(name)
-            return ""
-        return value
-
-    def get_optional(name: str, default: str) -> str:
-        return os.getenv(name, default)
-
-    def get_optional_int(name: str, default: int) -> int:
-        value = os.getenv(name)
-        if value is None or value == "":
-            return default
-        try:
-            return int(value)
-        except ValueError:
-            return default
-
-    def get_required_int(name: str) -> int:
-        value = os.getenv(name)
-        if value is None or value == "":
-            errors.append(name)
-            return 0
-        try:
-            return int(value)
-        except ValueError:
-            errors.append(f"{name} (must be integer, got '{value}')")
-            return 0
-
-    def get_optional_bool(name: str, default: bool) -> bool:
-        value = os.getenv(name)
-        if value is None or value == "":
-            return default
-        return value.lower() in ("true", "1", "yes")
-
-    def get_required_list(name: str) -> Tuple[str, ...]:
-        value = os.getenv(name)
-        if value is None or value == "":
-            errors.append(name)
-            return ()
-        return tuple(item.strip() for item in value.split(",") if item.strip())
-
-    def get_required_bool(name: str) -> bool:
-        value = os.getenv(name)
-        if value is None or value == "":
-            errors.append(name)
-            return False
-        return value.lower() in ("true", "1", "yes")
-
-    def get_required_float(name: str) -> float:
-        value = os.getenv(name)
-        if value is None or value == "":
-            errors.append(name)
-            return 0.0
-        try:
-            return float(value)
-        except ValueError:
-            errors.append(f"{name} (must be a number, got '{value}')")
-            return 0.0
-
-    # Load all configuration
-    # Server config
-    project_name = get_optional("PROJECT_NAME", "AE Scientist")
-    server = ServerConfig(
-        project_name=project_name,
-        version=get_optional("VERSION", "1.0.0"),
-        api_title=get_optional("API_TITLE", f"{project_name} API"),
-        host=get_optional("HOST", "0.0.0.0"),
-        port=get_optional_int("PORT", 8000),
-        reload=get_required_bool("SERVER_AUTO_RELOAD"),
-        log_level=get_required("LOG_LEVEL"),
-        railway_environment_name=get_optional("RAILWAY_ENVIRONMENT_NAME", "development"),
-        frontend_url=get_required("FRONTEND_URL"),
-        cors_origins=get_required_list("CORS_ORIGINS"),
-        cors_credentials=get_required_bool("CORS_CREDENTIALS"),
-    )
-
-    # Database config (required)
-    database = DatabaseConfig(
-        url=get_required("DATABASE_URL"),
-        pool_min_conn=get_required_int("DB_POOL_MIN_CONN"),
-        pool_max_conn=get_required_int("DB_POOL_MAX_CONN"),
-        pool_usage_warn_threshold=get_required_float("DB_POOL_USAGE_WARN_THRESHOLD"),
-        skip_connection=get_optional_bool("SKIP_DB_CONNECTION", False),
-    )
-
-    # Redis config (optional - defaults for local development)
-    redis = RedisConfig(
-        url=get_required("REDIS_URL"),
-        stream_maxlen=get_optional_int("REDIS_STREAM_MAXLEN", 1000),
-        stream_ttl_seconds=get_optional_int("REDIS_STREAM_TTL_SECONDS", 86400),  # 24 hours
-    )
-
-    # RunPod config (required)
-    runpod = RunPodConfig(
-        api_key=get_required("RUNPOD_API_KEY"),
-        ssh_access_key=get_required("RUNPOD_SSH_ACCESS_KEY"),
-        supported_gpus=get_required_list("RUNPOD_SUPPORTED_GPUS"),
-        fake_base_url=get_optional("FAKE_RUNPOD_BASE_URL", ""),
-        fake_graphql_url=get_optional("FAKE_RUNPOD_GRAPHQL_URL", ""),
-    )
-
-    # Research pipeline config (required)
-    research_pipeline = ResearchPipelineConfig(
-        monitor_poll_interval_seconds=get_required_int("PIPELINE_MONITOR_POLL_INTERVAL_SECONDS"),
-        monitor_heartbeat_timeout_seconds=get_required_int(
-            "PIPELINE_MONITOR_HEARTBEAT_TIMEOUT_SECONDS"
-        ),
-        monitor_max_missed_heartbeats=get_required_int("PIPELINE_MONITOR_MAX_MISSED_HEARTBEATS"),
-        monitor_startup_grace_seconds=get_required_int("PIPELINE_MONITOR_STARTUP_GRACE_SECONDS"),
-        monitor_max_runtime_hours=get_required_int("PIPELINE_MONITOR_MAX_RUNTIME_HOURS"),
-        max_restart_attempts=get_required_int("PIPELINE_MAX_RESTART_ATTEMPTS"),
-        path=get_optional("RESEARCH_PIPELINE_PATH", ""),
-        telemetry_webhook_url=get_required("TELEMETRY_WEBHOOK_URL"),
-        hf_token=get_required("HF_TOKEN"),
-        collect_disk_stats_paths=get_optional("COLLECT_DISK_STATS_PATHS", ""),
-    )
-
-    # AWS config (required)
-    aws = AWSConfig(
-        access_key_id=get_required("AWS_ACCESS_KEY_ID"),
-        secret_access_key=get_required("AWS_SECRET_ACCESS_KEY"),
-        region=get_required("AWS_REGION"),
-        s3_bucket_name=get_required("AWS_S3_BUCKET_NAME"),
-    )
-
-    # Stripe config (required)
-    stripe_price_ids_raw = get_required("STRIPE_PRICE_IDS")
-    stripe_price_ids = tuple(
-        item.strip() for item in stripe_price_ids_raw.split(",") if item.strip()
-    )
-    if not stripe_price_ids:
-        errors.append("STRIPE_PRICE_IDS (must contain at least one price ID)")
-    stripe = StripeConfig(
-        secret_key=get_required("STRIPE_SECRET_KEY"),
-        webhook_secret=get_required("STRIPE_WEBHOOK_SECRET"),
-        checkout_success_url=get_required("STRIPE_CHECKOUT_SUCCESS_URL"),
-        price_ids=stripe_price_ids,
-    )
-
-    # Clerk config (required)
-    clerk = ClerkConfig(
-        secret_key=get_required("CLERK_SECRET_KEY"),
-        publishable_key=get_required("CLERK_PUBLISHABLE_KEY"),
-    )
-
-    # LLM config (required - at least keys must be set, even if empty for unused providers)
-    llm = LLMConfig(
-        openai_api_key=get_required("OPENAI_API_KEY"),
-        anthropic_api_key=get_required("ANTHROPIC_API_KEY"),
-        xai_api_key=get_required("XAI_API_KEY"),
-    )
-
-    # Billing limits (required)
-    billing_limits = BillingLimitsConfig(
-        min_balance_cents_for_research_pipeline=get_required_int(
-            "MIN_BALANCE_CENTS_FOR_RESEARCH_PIPELINE"
-        ),
-        min_balance_cents_for_chat_message=get_required_int("MIN_BALANCE_CENTS_FOR_CHAT_MESSAGE"),
-        min_balance_cents_for_paper_review=get_required_int("MIN_BALANCE_CENTS_FOR_PAPER_REVIEW"),
-    )
-
-    # LLM Pricing (required)
-    llm_pricing_raw = get_required("JSON_MODEL_PRICE_PER_MILLION_IN_CENTS")
-
-    # Check for errors before proceeding
-    if errors:
-        error_list = "\n  - ".join(errors)
-        raise ConfigError(
-            f"Missing required environment variables:\n  - {error_list}\n\n"
-            f"Please set these variables in your .env file or environment."
-        )
-
-    # Parse LLM pricing (will raise ConfigError if invalid)
-    llm_pricing = LLMPricing(llm_pricing_raw)
-
-    # Optional settings
-    whitelist_raw = get_optional("WHITELIST_EMAILS_FREE_CREDIT", "")
-    whitelist_emails = tuple(email.strip() for email in whitelist_raw.split(",") if email.strip())
-
-    return Settings(
-        server=server,
-        database=database,
-        redis=redis,
-        runpod=runpod,
-        research_pipeline=research_pipeline,
-        aws=aws,
-        stripe=stripe,
-        clerk=clerk,
-        llm=llm,
-        billing_limits=billing_limits,
-        llm_pricing=llm_pricing,
-        sentry_dsn=get_optional("SENTRY_DSN", ""),
-        sentry_environment=get_optional("SENTRY_ENVIRONMENT", ""),
-        idea_max_completion_tokens=get_optional_int("IDEA_MAX_COMPLETION_TOKENS", 8192),
-        session_expire_hours=get_optional_int("SESSION_EXPIRE_HOURS", 24),
-        whitelist_emails_free_credit=whitelist_emails,
-        railway_git_commit_sha=get_optional("RAILWAY_GIT_COMMIT_SHA", ""),
-    )
+    @property
+    def uses_fake_runpod(self) -> bool:
+        return bool(self.fake_runpod_base_url)
 
 
 # Load settings at import time - fails fast if configuration is invalid
 try:
-    settings = _load_settings()
-except ConfigError as e:
+    settings = Settings()  # type: ignore[call-arg]
+except Exception as e:
     print(f"\n{'=' * 60}", file=sys.stderr)
     print("CONFIGURATION ERROR", file=sys.stderr)
     print("=" * 60, file=sys.stderr)

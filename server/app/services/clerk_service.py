@@ -32,18 +32,18 @@ class ClerkService:
         self.client = None
         self.jwks_client = None
 
-        if not settings.clerk.secret_key:
+        if not settings.clerk_secret_key:
             logger.warning("CLERK_SECRET_KEY not configured - Clerk authentication will not work")
             return
 
-        if not settings.clerk.publishable_key:
+        if not settings.clerk_publishable_key:
             logger.warning(
                 "CLERK_PUBLISHABLE_KEY not configured - Clerk authentication will not work"
             )
             return
 
         try:
-            self.client = Clerk(bearer_auth=settings.clerk.secret_key)
+            self.client = Clerk(bearer_auth=settings.clerk_secret_key)
 
             # JWKS client for JWT verification (networkless)
             # Extract the Clerk frontend API URL from the publishable key
@@ -52,7 +52,7 @@ class ClerkService:
             # Example: pk_test_ZG9taW5hbnQtZHJhZ29uLTg4LmNsZXJrLmFjY291bnRzLmRldg==
             # The key is base64 encoded and contains the domain
             # Get the part after pk_test_ or pk_live_
-            key_parts = settings.clerk.publishable_key.split("_")
+            key_parts = settings.clerk_publishable_key.split("_")
             if len(key_parts) >= 3:
                 encoded_domain = "_".join(key_parts[2:])
                 # Decode base64 to get the domain, strip any null bytes or special chars

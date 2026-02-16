@@ -390,7 +390,7 @@ class SummarizerService:
                 if not filtered_new_messages:
                     return True, {"latest_summary": ""}
                 async with AsyncPostgresSaver.from_conn_string(
-                    settings.database.url
+                    settings.database_url
                 ) as checkpointer:
                     # Only run setup once to avoid deadlocks on CREATE INDEX CONCURRENTLY
                     if not _checkpointer_setup_done:

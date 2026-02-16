@@ -22,10 +22,10 @@ from app.services.research_pipeline.runpod import get_supported_gpu_types, warm_
 from app.validation import validate_configuration
 
 # Initialize Sentry (must be done before FastAPI app is created)
-if settings.sentry_dsn and settings.server.railway_environment_name != "development":
+if settings.sentry_dsn and settings.railway_environment_name != "development":
     sentry_sdk.init(
         dsn=settings.sentry_dsn,
-        environment=settings.sentry_environment or settings.server.railway_environment_name,
+        environment=settings.sentry_environment or settings.railway_environment_name,
         traces_sample_rate=1.0,
         send_default_pii=True,
     )
@@ -34,7 +34,7 @@ if settings.sentry_dsn and settings.server.railway_environment_name != "developm
 def configure_logging() -> None:
     """Configure logging for the application."""
     # Set logging level from environment variable
-    log_level = getattr(logging, settings.server.log_level.upper(), logging.INFO)
+    log_level = getattr(logging, settings.log_level.upper(), logging.INFO)
 
     # Configure root logger with JSON format in production for Railway
     root_logger = logging.getLogger()
@@ -65,7 +65,7 @@ def configure_logging() -> None:
     root_logger.addHandler(handler)
 
     logger = logging.getLogger(__name__)
-    logger.info("Logging configured at %s level", settings.server.log_level)
+    logger.info("Logging configured at %s level", settings.log_level)
 
     # Set specific loggers to appropriate levels
     # Reduce noise from third-party libraries
@@ -91,7 +91,7 @@ def configure_logging() -> None:
     logging.getLogger("pdfplumber").setLevel(logging.WARNING)
 
     logger = logging.getLogger(__name__)
-    logger.info("Logging configured at %s level", settings.server.log_level)
+    logger.info("Logging configured at %s level", settings.log_level)
 
 
 # Configure logging before creating the app
@@ -124,7 +124,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(
     title="AE Scientist API",
-    version=settings.server.version,
+    version=settings.version,
     description="Transform LLM conversations into actionable AE ideas",
     lifespan=lifespan,
 )
@@ -135,8 +135,8 @@ app.add_middleware(AuthenticationMiddleware)
 # Set up CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=list(settings.server.cors_origins),
-    allow_credentials=settings.server.cors_credentials,
+    allow_origins=list(settings.cors_origins),
+    allow_credentials=settings.cors_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -154,7 +154,7 @@ app.include_router(mcp_router)
 @app.get("/")
 async def root() -> Dict[str, str]:
     """Get basic API information."""
-    return {"message": settings.server.api_title}
+    return {"message": settings.resolved_api_title}
 
 
 @app.get("/health")

@@ -82,12 +82,12 @@ def _get_research_pipeline_path() -> Path:
     1. RESEARCH_PIPELINE_PATH environment variable (set in Docker)
     2. Navigate from this file to repo root (for local development)
     """
-    if settings.research_pipeline.path:
-        research_pipeline_path = Path(settings.research_pipeline.path)
+    if settings.research_pipeline_path:
+        research_pipeline_path = Path(settings.research_pipeline_path)
         if research_pipeline_path.exists():
             return research_pipeline_path
         raise RuntimeError(
-            f"RESEARCH_PIPELINE_PATH set but directory not found: {settings.research_pipeline.path}"
+            f"RESEARCH_PIPELINE_PATH set but directory not found: {settings.research_pipeline_path}"
         )
 
     # Fallback for local development: navigate from this file to repo root
@@ -215,7 +215,7 @@ def ensure_code_tarball_uploaded() -> str:
 
 def _is_using_fake_runpod() -> bool:
     """Check if the fake runpod is being used (for local development)."""
-    return settings.runpod.uses_fake_runpod
+    return settings.uses_fake_runpod
 
 
 def get_code_tarball_info() -> CodeTarballInfo:

@@ -60,7 +60,7 @@ class XAIService(OpenAIService):
     """Service for interacting with xAI's Grok API using the OpenAI-compatible path."""
 
     def __init__(self) -> None:
-        self._xai_api_key = settings.llm.xai_api_key
+        self._xai_api_key = settings.xai_api_key
         if not self._xai_api_key:
             raise ValueError("XAI_API_KEY environment variable is required")
         LangChainLLMService.__init__(

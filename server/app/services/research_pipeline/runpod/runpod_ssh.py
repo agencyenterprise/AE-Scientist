@@ -131,7 +131,7 @@ def send_execution_feedback_via_ssh(
         port=port,
         payload={"payload": payload},
         endpoint=f"/terminate/{execution_id}",
-        private_key=settings.runpod.ssh_access_key,
+        private_key=settings.runpod_ssh_access_key,
         timeout=60,
         error_cls=TerminationRequestError,
     )
@@ -175,7 +175,7 @@ def request_stage_skip_via_ssh(
         port=port,
         payload={"reason": resolved_reason},
         endpoint="/skip-stage",
-        private_key=settings.runpod.ssh_access_key,
+        private_key=settings.runpod_ssh_access_key,
         timeout=30,
         error_cls=RuntimeError,
     )

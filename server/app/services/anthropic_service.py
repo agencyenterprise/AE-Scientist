@@ -51,7 +51,7 @@ class AnthropicService(LangChainLLMService):
         )
 
     def _build_chat_model(self, *, model_id: str) -> ChatAnthropic:
-        api_key = settings.llm.anthropic_api_key
+        api_key = settings.anthropic_api_key
         if not api_key:
             raise ValueError("ANTHROPIC_API_KEY environment variable is required")
         logger.debug("Initializing Anthropic model '%s'", model_id)

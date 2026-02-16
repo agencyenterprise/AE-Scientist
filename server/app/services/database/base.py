@@ -35,7 +35,7 @@ class BaseDatabaseManager(ConnectionProvider):
     def __init__(self) -> None:
         """Initialize database manager."""
         self._conninfo = self._build_conninfo()
-        self._skip_db_connections = settings.database.skip_connection
+        self._skip_db_connections = settings.skip_db_connection
         if self._skip_db_connections:
             logger.debug("Skipping database connection (SKIP_DB_CONNECTION=true)")
             return
@@ -116,17 +116,17 @@ class BaseDatabaseManager(ConnectionProvider):
 
     @staticmethod
     def _pool_bounds() -> Tuple[int, int]:
-        return settings.database.pool_min_conn, settings.database.pool_max_conn
+        return settings.db_pool_min_conn, settings.db_pool_max_conn
 
     @staticmethod
     def _build_conninfo() -> str:
-        return settings.database.url
+        return settings.database_url
 
     @staticmethod
     def _log_pool_usage(*, pool: ConnectionPool, action: str) -> None:
         """Log pool usage to detect spikes."""
         used, idle, max_conn, ratio = BaseDatabaseManager._calculate_pool_usage(pool=pool)
-        if ratio >= settings.database.pool_usage_warn_threshold:
+        if ratio >= settings.db_pool_usage_warn_threshold:
             logger.warning(
                 "DB pool high usage (%s/%s used, %s idle) during %s",
                 used,
@@ -162,7 +162,7 @@ class BaseDatabaseManager(ConnectionProvider):
             0,
         )
         ratio = checked_out / max_size if max_size else 0.0
-        if ratio >= settings.database.pool_usage_warn_threshold:
+        if ratio >= settings.db_pool_usage_warn_threshold:
             logger.warning(
                 "Async DB pool high usage (%s/%s used, %s idle) during %s",
                 checked_out,

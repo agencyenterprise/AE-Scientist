@@ -136,7 +136,7 @@ class BillingService:
         No credit mapping needed.
         """
         # Validate that the price_id is in the allowed list
-        allowed_price_ids = settings.stripe.price_ids
+        allowed_price_ids = settings.stripe_price_ids
         if price_id not in allowed_price_ids:
             logger.warning("User %s attempted to use invalid price_id: %s", user.id, price_id)
             raise HTTPException(
@@ -162,10 +162,10 @@ class BillingService:
 
         resolved_success_url = (
             success_url
-            or settings.stripe.checkout_success_url
-            or (f"{settings.server.frontend_url.rstrip('/')}/billing?success=1")
+            or settings.stripe_checkout_success_url
+            or (f"{settings.frontend_url.rstrip('/')}/billing?success=1")
         )
-        resolved_cancel_url = cancel_url or f"{settings.server.frontend_url.rstrip('/')}/billing"
+        resolved_cancel_url = cancel_url or f"{settings.frontend_url.rstrip('/')}/billing"
 
         # Get or create Stripe customer
         stripe_customer_id = user.stripe_customer_id

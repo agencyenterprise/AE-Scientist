@@ -124,8 +124,8 @@ class PodBillingSummary(NamedTuple):
 class RunPodManager:
     def __init__(self, api_key: str):
         self.api_key = api_key
-        self.base_url = settings.runpod.fake_base_url or "https://rest.runpod.io/v1"
-        self.graphql_url = settings.runpod.fake_graphql_url or "https://api.runpod.io/graphql"
+        self.base_url = settings.fake_runpod_base_url or "https://rest.runpod.io/v1"
+        self.graphql_url = settings.fake_runpod_graphql_url or "https://api.runpod.io/graphql"
 
     async def _make_request(
         self,
@@ -343,12 +343,12 @@ class RunPodManager:
 
 
 def get_pipeline_startup_grace_seconds() -> int:
-    return max(settings.research_pipeline.monitor_startup_grace_seconds, 1)
+    return max(settings.pipeline_monitor_startup_grace_seconds, 1)
 
 
 def get_supported_gpu_types() -> list[str]:
     """Return the GPU types that can be targeted when launching RunPod jobs."""
-    return list(settings.runpod.supported_gpus)
+    return list(settings.runpod_supported_gpus)
 
 
 async def launch_research_pipeline_run(
@@ -400,7 +400,7 @@ async def launch_research_pipeline_run(
         commit_hash=tarball_info.commit_hash,
     )
 
-    creator = RunPodManager(api_key=settings.runpod.api_key)
+    creator = RunPodManager(api_key=settings.runpod_api_key)
 
     pod_env = {
         "CODE_TARBALL_URL": tarball_info.url,
@@ -428,7 +428,7 @@ async def launch_research_pipeline_run(
 
 
 async def fetch_pod_ready_metadata(*, pod_id: str) -> PodReadyMetadata:
-    manager = RunPodManager(api_key=settings.runpod.api_key)
+    manager = RunPodManager(api_key=settings.runpod_api_key)
     poll_interval_seconds = POD_READY_POLL_INTERVAL_SECONDS
     startup_grace_seconds = get_pipeline_startup_grace_seconds()
     max_attempts = max(1, math.ceil(startup_grace_seconds / poll_interval_seconds))
@@ -446,7 +446,7 @@ async def fetch_pod_ready_metadata(*, pod_id: str) -> PodReadyMetadata:
 
 
 async def terminate_pod(*, pod_id: str) -> None:
-    creator = RunPodManager(api_key=settings.runpod.api_key)
+    creator = RunPodManager(api_key=settings.runpod_api_key)
     try:
         logger.info("Terminating RunPod pod %s...", pod_id)
         await creator.delete_pod(pod_id=pod_id)
@@ -457,5 +457,5 @@ async def terminate_pod(*, pod_id: str) -> None:
 
 
 async def fetch_pod_billing_summary(*, pod_id: str) -> PodBillingSummary | None:
-    manager = RunPodManager(api_key=settings.runpod.api_key)
+    manager = RunPodManager(api_key=settings.runpod_api_key)
     return await manager.get_pod_billing_summary(pod_id=pod_id)

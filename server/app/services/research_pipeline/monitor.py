@@ -114,7 +114,7 @@ class ResearchPipelineMonitor:
         self._max_runtime = timedelta(hours=max_runtime_hours)
         self._task: Optional[asyncio.Task[None]] = None
         self._stop_event: Optional[asyncio.Event] = None
-        self._runpod_manager: RunPodManager = RunPodManager(api_key=settings.runpod.api_key)
+        self._runpod_manager: RunPodManager = RunPodManager(api_key=settings.runpod_api_key)
 
     async def start(self) -> None:
         if self._task is not None and not self._task.done():
@@ -671,9 +671,9 @@ class ResearchPipelineMonitor:
 
 
 pipeline_monitor = ResearchPipelineMonitor(
-    poll_interval_seconds=settings.research_pipeline.monitor_poll_interval_seconds,
-    heartbeat_timeout_seconds=settings.research_pipeline.monitor_heartbeat_timeout_seconds,
-    max_missed_heartbeats=settings.research_pipeline.monitor_max_missed_heartbeats,
-    startup_grace_seconds=settings.research_pipeline.monitor_startup_grace_seconds,
-    max_runtime_hours=settings.research_pipeline.monitor_max_runtime_hours,
+    poll_interval_seconds=settings.pipeline_monitor_poll_interval_seconds,
+    heartbeat_timeout_seconds=settings.pipeline_monitor_heartbeat_timeout_seconds,
+    max_missed_heartbeats=settings.pipeline_monitor_max_missed_heartbeats,
+    startup_grace_seconds=settings.pipeline_monitor_startup_grace_seconds,
+    max_runtime_hours=settings.pipeline_monitor_max_runtime_hours,
 )

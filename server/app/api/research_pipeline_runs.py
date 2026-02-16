@@ -72,7 +72,7 @@ logger = logging.getLogger(__name__)
 
 
 def _get_fake_runpod_base_url() -> str | None:
-    value = settings.runpod.fake_base_url
+    value = settings.fake_runpod_base_url
     return value.strip() if value else None
 
 
@@ -454,7 +454,7 @@ async def submit_idea_for_research(
 
     await enforce_minimum_balance(
         user_id=user.id,
-        required_cents=settings.billing_limits.min_balance_cents_for_research_pipeline,
+        required_cents=settings.min_balance_cents_for_research_pipeline,
         action="research_pipeline",
     )
 

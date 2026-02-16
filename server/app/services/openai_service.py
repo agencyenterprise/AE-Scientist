@@ -131,7 +131,7 @@ class OpenAIService(LangChainLLMService):
         )
 
     def _build_chat_model(self, *, model_id: str) -> ChatOpenAI:
-        api_key = settings.llm.openai_api_key
+        api_key = settings.openai_api_key
         if not api_key:
             raise ValueError("OPENAI_API_KEY environment variable is required")
         logger.debug("Initializing OpenAI model '%s'", model_id)

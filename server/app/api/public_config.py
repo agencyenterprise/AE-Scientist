@@ -32,9 +32,9 @@ BEST_PAPER_URL_EXPIRATION = 3600
 @router.get("", response_model=PublicConfigResponse)
 async def get_public_config() -> PublicConfigResponse:
     return PublicConfigResponse(
-        pipeline_monitor_max_runtime_hours=settings.research_pipeline.monitor_max_runtime_hours,
-        min_balance_cents_for_research_pipeline=settings.billing_limits.min_balance_cents_for_research_pipeline,
-        min_balance_cents_for_paper_review=settings.billing_limits.min_balance_cents_for_paper_review,
+        pipeline_monitor_max_runtime_hours=settings.pipeline_monitor_max_runtime_hours,
+        min_balance_cents_for_research_pipeline=settings.min_balance_cents_for_research_pipeline,
+        min_balance_cents_for_paper_review=settings.min_balance_cents_for_paper_review,
     )
 
 

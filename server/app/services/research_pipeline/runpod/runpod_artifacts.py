@@ -75,7 +75,7 @@ def _upload_runpod_artifacts_via_ssh_sync(
         host,
         port,
     )
-    key_path = write_temp_key_file(settings.runpod.ssh_access_key)
+    key_path = write_temp_key_file(settings.runpod_ssh_access_key)
     # Source the pod's .env file which contains TELEMETRY_WEBHOOK_URL, TELEMETRY_WEBHOOK_TOKEN, and RUN_ID
     env_file = f"{WORKSPACE_PATH}/AE-Scientist/research_pipeline/.env"
     log_file = f"{WORKSPACE_PATH}/research_pipeline.log"

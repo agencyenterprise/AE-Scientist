@@ -319,7 +319,7 @@ class PaperReviewService:
         # Check user has minimum balance
         await enforce_minimum_balance(
             user_id=user_id,
-            required_cents=settings.billing_limits.min_balance_cents_for_paper_review,
+            required_cents=settings.min_balance_cents_for_paper_review,
             action="paper_review",
         )
 

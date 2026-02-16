@@ -63,7 +63,7 @@ async def init_redis() -> None:
 
     try:
         _redis_pool = ConnectionPool.from_url(
-            settings.redis.url,
+            settings.redis_url,
             decode_responses=True,
             max_connections=20,
         )
@@ -71,7 +71,7 @@ async def init_redis() -> None:
 
         # Test connection
         await _redis_client.ping()  # type: ignore[misc]
-        logger.info("Redis connection established: %s", settings.redis.url)
+        logger.info("Redis connection established: %s", settings.redis_url)
     except Exception as exc:
         logger.error("Failed to connect to Redis: %s", exc)
         raise
@@ -134,13 +134,13 @@ async def publish_event(
     message_id: str = await client.xadd(
         stream_key,
         event,  # type: ignore[arg-type]
-        maxlen=settings.redis.stream_maxlen,
+        maxlen=settings.redis_stream_maxlen,
         approximate=True,
     )
 
     # Set TTL on the stream key if configured
-    if settings.redis.stream_ttl_seconds > 0:
-        await client.expire(stream_key, settings.redis.stream_ttl_seconds)
+    if settings.redis_stream_ttl_seconds > 0:
+        await client.expire(stream_key, settings.redis_stream_ttl_seconds)
 
     logger.debug(
         "Published event to %s: type=%s, id=%s",

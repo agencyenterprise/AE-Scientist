@@ -306,7 +306,7 @@ async def _fetch_gpu_info(*, gpu_types: Sequence[str]) -> list[FetchedGpuInfo]:
             memory_in_gb=memory_in_gb,
         )
 
-    runpod.api_key = settings.runpod.api_key
+    runpod.api_key = settings.runpod_api_key
     tasks = [asyncio.to_thread(_fetch_one_sync, gpu_type) for gpu_type in gpu_types]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 

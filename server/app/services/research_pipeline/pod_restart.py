@@ -51,7 +51,7 @@ async def attempt_pod_restart(
         True if restart was initiated successfully, False if restart
         should not be attempted (max attempts exceeded, etc.)
     """
-    max_restarts = settings.research_pipeline.max_restart_attempts
+    max_restarts = settings.pipeline_max_restart_attempts
 
     if run.restart_count >= max_restarts:
         logger.warning(

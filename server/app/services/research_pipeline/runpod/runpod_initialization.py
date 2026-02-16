@@ -55,11 +55,11 @@ class RunPodEnvironment:
 
 def load_runpod_environment() -> RunPodEnvironment:
     return RunPodEnvironment(
-        openai_api_key=settings.llm.openai_api_key,
-        hf_token=settings.research_pipeline.hf_token,
-        telemetry_webhook_url=settings.research_pipeline.telemetry_webhook_url,
+        openai_api_key=settings.openai_api_key,
+        hf_token=settings.hf_token,
+        telemetry_webhook_url=settings.telemetry_webhook_url,
         sentry_dsn=settings.sentry_dsn,
-        sentry_environment=settings.sentry_environment or settings.server.railway_environment_name,
+        sentry_environment=settings.sentry_environment or settings.railway_environment_name,
     )
 
 
@@ -245,7 +245,7 @@ def _await_external_cleanup_commands() -> list[str]:
 
 
 def _resolve_disk_stats_paths() -> str:
-    raw = settings.research_pipeline.collect_disk_stats_paths or DEFAULT_COLLECT_DISK_STATS_PATHS
+    raw = settings.collect_disk_stats_paths or DEFAULT_COLLECT_DISK_STATS_PATHS
     paths = [segment.strip() for segment in raw.split(",") if segment.strip()]
     sanitized = ",".join(paths) if paths else DEFAULT_COLLECT_DISK_STATS_PATHS
     return sanitized

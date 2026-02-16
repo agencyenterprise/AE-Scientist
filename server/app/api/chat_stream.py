@@ -271,7 +271,7 @@ N/A
         # Pre-check minimum balance before allowing chat message
         await enforce_minimum_balance(
             user_id=user.id,
-            required_cents=settings.billing_limits.min_balance_cents_for_chat_message,
+            required_cents=settings.min_balance_cents_for_chat_message,
             action="chat_message",
         )
 

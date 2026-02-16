@@ -27,6 +27,7 @@ dependencies = [
     "openai==2.8.1",
     "pdfplumber==0.11.7",
     "pydantic[email]>=2.0.0",
+    "pydantic-settings>=2.0.0",
     "playwright==1.40.0",
     "python-dotenv==1.0.1",
     "python-magic==0.4.27",
