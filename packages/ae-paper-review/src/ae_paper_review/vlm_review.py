@@ -2,8 +2,8 @@
 
 import hashlib
 import logging
-import os
 import re
+from pathlib import Path
 from typing import Any, Dict, List, NamedTuple, Optional
 
 import pymupdf
@@ -16,10 +16,37 @@ from .models import (
     ImageReview,
     ImageSelectionReview,
 )
-from .pdf_loader import load_paper
 from .prompts import render_text
 
 logger = logging.getLogger(__name__)
+
+
+class FigureReviewResult(NamedTuple):
+    """Result of figure review with token usage."""
+
+    reviews: List[FigureImageCaptionRefReview]
+    token_usage: TokenUsage
+
+
+class FigureSelectionReviewResult(NamedTuple):
+    """Result of figure selection review with token usage."""
+
+    reviews: Dict[str, Any]
+    token_usage: TokenUsage
+
+
+class DuplicateFiguresResult(NamedTuple):
+    """Result of duplicate figure detection with token usage."""
+
+    analysis: str | Dict[str, str]
+    token_usage: TokenUsage
+
+
+class ImageReviewResult(NamedTuple):
+    """Result of single image review with token usage."""
+
+    review: Dict[str, Any] | None
+    token_usage: TokenUsage
 
 
 # Pre-render static templates
@@ -43,8 +70,8 @@ class _ImgCapSelectionPromptContext(NamedTuple):
 
 
 def extract_figure_screenshots(
-    pdf_path: str,
-    img_folder_path: str,
+    pdf_path: Path,
+    img_folder_path: Path,
     num_pages: Optional[int] = None,
     min_text_length: int = 50,
     min_vertical_gap: int = 30,
@@ -61,8 +88,8 @@ def extract_figure_screenshots(
     Returns:
         List of dicts with img_name, caption, images, main_text_figrefs
     """
-    os.makedirs(img_folder_path, exist_ok=True)
-    doc = pymupdf.open(pdf_path)
+    img_folder_path.mkdir(parents=True, exist_ok=True)
+    doc = pymupdf.open(str(pdf_path))
     page_range = range(len(doc)) if num_pages is None else range(min(num_pages, len(doc)))
 
     # Extract all text blocks from the document
@@ -150,8 +177,8 @@ def extract_figure_screenshots(
                     f"figure_{fig_label_escaped}_{page_num}_{clip_rect}".encode()
                 ).hexdigest()[:10]
                 fig_filename = f"figure_{fig_label_escaped}_Page_{page_num + 1}_{fig_hash}.png"
-                fig_filepath = os.path.join(img_folder_path, fig_filename)
-                pix.save(fig_filepath)
+                fig_filepath = img_folder_path / fig_filename
+                pix.save(str(fig_filepath))
 
                 # Find references across the entire document
                 fig_label_escaped = re.escape(fig_label)
@@ -177,39 +204,6 @@ def extract_figure_screenshots(
                 )
 
     return result_pairs
-
-
-def extract_abstract(text: str) -> str:
-    """Extract abstract from paper text.
-
-    Args:
-        text: Full paper text in markdown format
-
-    Returns:
-        Extracted abstract text or empty string if not found
-    """
-    lines = text.split("\n")
-    heading_pattern = re.compile(r"^\s*#+\s*(.*)$")
-
-    abstract_start = None
-    for i, line in enumerate(lines):
-        match = heading_pattern.match(line)
-        if match:
-            heading_text = match.group(1)
-            if "abstract" in heading_text.lower():
-                abstract_start = i
-                break
-
-    if abstract_start is None:
-        return ""
-
-    abstract_lines = []
-    for j in range(abstract_start + 1, len(lines)):
-        if heading_pattern.match(lines[j]):
-            break
-        abstract_lines.append(lines[j])
-
-    return "\n".join(abstract_lines).strip()
 
 
 def generate_vlm_img_cap_ref_review(
@@ -253,19 +247,19 @@ def generate_vlm_img_cap_ref_review(
 
 
 def generate_vlm_img_review(
-    img: Dict[str, Any], model: str, temperature: float, usage: TokenUsage
-) -> Dict[str, Any] | None:
+    img: Dict[str, Any], model: str, temperature: float
+) -> ImageReviewResult:
     """Generate a simple VLM review for an image.
 
     Args:
         img: Dict with images list
         model: Model in "provider:model" format (e.g., "anthropic:claude-sonnet-4-20250514")
         temperature: Sampling temperature
-        usage: Optional token usage accumulator
 
     Returns:
-        Review dict or None if failed
+        ImageReviewResult containing review dict and token usage
     """
+    usage = TokenUsage()
     prompt = render_text(template_name="vlm/img_review_prompt.txt.j2", context={})
     try:
         parsed, _ = get_structured_response_from_vlm(
@@ -279,35 +273,33 @@ def generate_vlm_img_review(
         )
     except Exception:
         logger.exception("Failed to obtain structured VLM image review.")
-        return None
-    return parsed.model_dump(by_alias=True)
+        return ImageReviewResult(review=None, token_usage=usage)
+    return ImageReviewResult(review=parsed.model_dump(by_alias=True), token_usage=usage)
 
 
 def perform_imgs_cap_ref_review(
-    model: str, pdf_path: str, temperature: float, usage: TokenUsage
-) -> List[FigureImageCaptionRefReview]:
+    model: str,
+    pdf_path: Path,
+    temperature: float,
+    abstract: str,
+) -> FigureReviewResult:
     """Review all figures in a paper with caption and reference analysis.
 
     Args:
         model: Model in "provider:model" format (e.g., "anthropic:claude-sonnet-4-20250514")
         pdf_path: Path to the PDF file
         temperature: Sampling temperature
-        usage: Optional token usage accumulator
+        abstract: Paper abstract text
 
     Returns:
-        List of FigureImageCaptionRefReview for each figure
+        FigureReviewResult containing reviews and token usage
     """
-    paper_txt = load_paper(pdf_path)
-    img_folder_path = os.path.join(
-        os.path.dirname(pdf_path),
-        f"{os.path.splitext(os.path.basename(pdf_path))[0]}_imgs",
-    )
-    if not os.path.exists(img_folder_path):
-        os.makedirs(img_folder_path)
+    usage = TokenUsage()
+    img_folder_path = pdf_path.parent / f"{pdf_path.stem}_imgs"
+    img_folder_path.mkdir(parents=True, exist_ok=True)
 
     img_pairs = extract_figure_screenshots(pdf_path, img_folder_path)
     img_reviews: List[FigureImageCaptionRefReview] = []
-    abstract = extract_abstract(paper_txt)
 
     for img in img_pairs:
         review = generate_vlm_img_cap_ref_review(
@@ -322,30 +314,25 @@ def perform_imgs_cap_ref_review(
                 FigureImageCaptionRefReview(figure_name=img["img_name"], review=review)
             )
 
-    return img_reviews
+    return FigureReviewResult(reviews=img_reviews, token_usage=usage)
 
 
 def detect_duplicate_figures(
-    model: str, pdf_path: str, temperature: float, usage: TokenUsage
-) -> str | Dict[str, str]:
+    model: str, pdf_path: Path, temperature: float
+) -> DuplicateFiguresResult:
     """Detect duplicate or similar figures in a paper.
 
     Args:
         model: Model in "provider:model" format (e.g., "anthropic:claude-sonnet-4-20250514")
         pdf_path: Path to the PDF file
         temperature: Sampling temperature
-        usage: Optional token usage accumulator
 
     Returns:
-        Analysis string or error dict
+        DuplicateFiguresResult containing analysis and token usage
     """
-    load_paper(pdf_path)
-    img_folder_path = os.path.join(
-        os.path.dirname(pdf_path),
-        f"{os.path.splitext(os.path.basename(pdf_path))[0]}_imgs",
-    )
-    if not os.path.exists(img_folder_path):
-        os.makedirs(img_folder_path)
+    usage = TokenUsage()
+    img_folder_path = pdf_path.parent / f"{pdf_path.stem}_imgs"
+    img_folder_path.mkdir(parents=True, exist_ok=True)
 
     img_pairs = extract_figure_screenshots(pdf_path, img_folder_path)
 
@@ -375,10 +362,10 @@ def detect_duplicate_figures(
             temperature=temperature,
             usage=usage,
         )
-        return content
+        return DuplicateFiguresResult(analysis=content, token_usage=usage)
     except Exception as e:
         logger.exception(f"Error analyzing images: {e}")
-        return {"error": str(e)}
+        return DuplicateFiguresResult(analysis={"error": str(e)}, token_usage=usage)
 
 
 def generate_vlm_img_selection_review(
@@ -397,7 +384,7 @@ def generate_vlm_img_selection_review(
         model: Model in "provider:model" format (e.g., "anthropic:claude-sonnet-4-20250514")
         reflection_page_info: Page limit information
         temperature: Sampling temperature
-        usage: Optional token usage accumulator
+        usage: Token usage accumulator
 
     Returns:
         Review dict or None if failed
@@ -429,8 +416,12 @@ def generate_vlm_img_selection_review(
 
 
 def perform_imgs_cap_ref_review_selection(
-    model: str, pdf_path: str, reflection_page_info: str, temperature: float, usage: TokenUsage
-) -> Dict[str, Any]:
+    model: str,
+    pdf_path: Path,
+    reflection_page_info: str,
+    temperature: float,
+    abstract: str,
+) -> FigureSelectionReviewResult:
     """Review figures for selection decisions.
 
     Args:
@@ -438,22 +429,17 @@ def perform_imgs_cap_ref_review_selection(
         pdf_path: Path to the PDF file
         reflection_page_info: Page limit information
         temperature: Sampling temperature
-        usage: Optional token usage accumulator
+        abstract: Paper abstract text
 
     Returns:
-        Dict mapping figure names to reviews
+        FigureSelectionReviewResult containing reviews and token usage
     """
-    paper_txt = load_paper(pdf_path)
-    img_folder_path = os.path.join(
-        os.path.dirname(pdf_path),
-        f"{os.path.splitext(os.path.basename(pdf_path))[0]}_imgs",
-    )
-    if not os.path.exists(img_folder_path):
-        os.makedirs(img_folder_path)
+    usage = TokenUsage()
+    img_folder_path = pdf_path.parent / f"{pdf_path.stem}_imgs"
+    img_folder_path.mkdir(parents=True, exist_ok=True)
 
     img_pairs = extract_figure_screenshots(pdf_path, img_folder_path)
     img_reviews: Dict[str, Any] = {}
-    abstract = extract_abstract(paper_txt)
 
     for img in img_pairs:
         review = generate_vlm_img_selection_review(
@@ -466,4 +452,4 @@ def perform_imgs_cap_ref_review_selection(
         )
         img_reviews[img["img_name"]] = review
 
-    return img_reviews
+    return FigureSelectionReviewResult(reviews=img_reviews, token_usage=usage)

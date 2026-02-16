@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, cast
 from urllib.parse import quote
 
-from ae_paper_review import ReviewProgressEvent, ReviewResult, load_paper, perform_review
+from ae_paper_review import ReviewProgressEvent, ReviewResult, perform_review
 from psycopg import AsyncConnection
 
 from app.config import settings
@@ -73,7 +73,7 @@ def calculate_review_cost_cents(
 
 
 def _run_review_sync(
-    paper_text: str,
+    pdf_path: Path,
     model: str,
     num_reviews_ensemble: int,
     num_reflections: int,
@@ -85,7 +85,7 @@ def _run_review_sync(
     blocking the main event loop.
 
     Args:
-        paper_text: The extracted text from the paper PDF
+        pdf_path: Path to the PDF file to review
         model: Model in "provider:model" format (e.g., "anthropic:claude-sonnet-4-20250514")
         num_reviews_ensemble: Number of ensemble reviews
         num_reflections: Number of reflection rounds
@@ -101,7 +101,7 @@ def _run_review_sync(
         )
 
     return perform_review(
-        paper_text,
+        pdf_path,
         model=model,
         temperature=1,
         event_callback=on_progress,
@@ -182,13 +182,10 @@ class PaperReviewService:
                 tmp_file.write(pdf_content)
                 tmp_path = Path(tmp_file.name)
 
-            # Load paper text from PDF (relatively fast, ok to do here)
-            paper_text = load_paper(str(tmp_path))
-
             # Run the LLM review in a thread pool to avoid blocking
             result = await asyncio.to_thread(
                 _run_review_sync,
-                paper_text,
+                tmp_path,
                 model,
                 num_reviews_ensemble,
                 num_reflections,

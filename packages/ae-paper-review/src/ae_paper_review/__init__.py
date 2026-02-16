@@ -4,14 +4,11 @@ This package provides LLM and VLM-based paper review capabilities that can be
 used independently of the full research pipeline.
 
 Example usage:
-    from ae_paper_review import perform_review, load_paper
+    from pathlib import Path
+    from ae_paper_review import perform_review
 
-    # Load paper from PDF
-    paper_text = load_paper("paper.pdf")
-
-    # Perform review using "provider:model" format (LangChain native format)
     result = perform_review(
-        paper_text,
+        Path("paper.pdf"),
         model="anthropic:claude-sonnet-4-20250514",
         temperature=0.1,
         event_callback=lambda e: print(f"Progress: {e.progress:.0%}"),
@@ -26,26 +23,21 @@ Example usage:
     print(f"Tokens used: {result.token_usage}")
 """
 
-from .llm.token_tracking import TokenUsageDetail, TokenUsageSummary
+from .llm.token_tracking import TokenUsage, TokenUsageDetail
 from .llm_review import (
+    AbstractExtractionResult,
     ReviewProgressEvent,
     ReviewResult,
-    get_review_fewshot_examples,
+    extract_abstract_from_pdf,
     perform_review,
 )
-from .models import (
-    FigureImageCaptionRefReview,
-    ImageCaptionRefReview,
-    ImageReview,
-    ImageSelectionReview,
-    ReviewResponseModel,
-)
-from .pdf_loader import load_paper
+from .models import FigureImageCaptionRefReview, ReviewResponseModel
 from .vlm_review import (
+    DuplicateFiguresResult,
+    FigureReviewResult,
+    FigureSelectionReviewResult,
+    ImageReviewResult,
     detect_duplicate_figures,
-    extract_abstract,
-    extract_figure_screenshots,
-    generate_vlm_img_cap_ref_review,
     generate_vlm_img_review,
     perform_imgs_cap_ref_review,
     perform_imgs_cap_ref_review_selection,
@@ -58,25 +50,23 @@ __all__ = [
     "__version__",
     # Models
     "ReviewResponseModel",
-    "ImageCaptionRefReview",
-    "ImageSelectionReview",
-    "ImageReview",
     "FigureImageCaptionRefReview",
     # LLM Review
     "perform_review",
     "ReviewResult",
-    "load_paper",
-    "get_review_fewshot_examples",
     "ReviewProgressEvent",
+    "extract_abstract_from_pdf",
+    "AbstractExtractionResult",
     # Token Usage
-    "TokenUsageSummary",
+    "TokenUsage",
     "TokenUsageDetail",
     # VLM Review
-    "extract_figure_screenshots",
-    "extract_abstract",
-    "generate_vlm_img_cap_ref_review",
     "generate_vlm_img_review",
     "perform_imgs_cap_ref_review",
     "perform_imgs_cap_ref_review_selection",
     "detect_duplicate_figures",
+    "FigureReviewResult",
+    "FigureSelectionReviewResult",
+    "DuplicateFiguresResult",
+    "ImageReviewResult",
 ]

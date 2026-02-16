@@ -28,7 +28,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, NamedTuple, Optional, Protocol, cast
 
-from ae_paper_review import ReviewResponseModel, ReviewResult, load_paper
+from ae_paper_review import (
+    ReviewResponseModel,
+    ReviewResult,
+    extract_abstract_from_pdf,
+    perform_imgs_cap_ref_review,
+)
 from omegaconf import OmegaConf
 
 from ai_scientist.api_types import ArtifactType
@@ -37,11 +42,7 @@ from ai_scientist.latest_run_finder import normalize_run_name
 from ai_scientist.perform_citations import gather_citations
 from ai_scientist.perform_plotting import aggregate_plots
 from ai_scientist.perform_writeup import perform_writeup
-from ai_scientist.review_integration import (
-    build_auto_review_context,
-    perform_imgs_cap_ref_review,
-    perform_review,
-)
+from ai_scientist.review_integration import perform_review, publish_token_usage
 from ai_scientist.review_storage import FigureReviewRecorder, ReviewResponseRecorder
 from ai_scientist.sentry_config import set_sentry_run_context
 from ai_scientist.telemetry import (
@@ -130,42 +131,42 @@ def parse_arguments() -> argparse.Namespace:
     return args
 
 
-def find_pdf_path_for_review(idea_dir: str, run_dir_name: str | None = None) -> str | None:
+def find_pdf_path_for_review(idea_dir: str, run_dir_name: str | None = None) -> Path | None:
     # Look under the run-specific logs directory if provided
-    search_dir = idea_dir
+    search_dir = Path(idea_dir)
     if run_dir_name:
-        candidate = osp.join(idea_dir, "logs", run_dir_name)
-        if os.path.exists(candidate):
+        candidate = search_dir / "logs" / run_dir_name
+        if candidate.exists():
             search_dir = candidate
-    pdf_files = [f for f in os.listdir(search_dir) if f.endswith(".pdf")]
-    reflection_pdfs = [f for f in pdf_files if "reflection" in f]
+    pdf_files = [f for f in search_dir.iterdir() if f.suffix == ".pdf"]
+    reflection_pdfs = [f for f in pdf_files if "reflection" in f.name]
 
-    pdf_path = None  # Initialize to avoid UnboundLocalError
+    pdf_path: Path | None = None
 
     if reflection_pdfs:
         # First check if there's a final version
-        final_pdfs = [f for f in reflection_pdfs if "final" in f.lower()]
+        final_pdfs = [f for f in reflection_pdfs if "final" in f.name.lower()]
         if final_pdfs:
             # Use the final version if available
-            pdf_path = osp.join(search_dir, final_pdfs[0])
+            pdf_path = final_pdfs[0]
         else:
             # Try to find numbered reflections
-            reflection_nums = []
+            reflection_nums: list[tuple[int, Path]] = []
             for f in reflection_pdfs:
-                match = re.search(r"reflection[_.]?(\d+)", f)
+                match = re.search(r"reflection[_.]?(\d+)", f.name)
                 if match:
                     reflection_nums.append((int(match.group(1)), f))
 
             if reflection_nums:
                 # Get the file with the highest reflection number
                 highest_reflection = max(reflection_nums, key=lambda x: x[0])
-                pdf_path = osp.join(search_dir, highest_reflection[1])
+                pdf_path = highest_reflection[1]
             else:
                 # Fall back to the first reflection PDF if no numbers found
-                pdf_path = osp.join(search_dir, reflection_pdfs[0])
+                pdf_path = reflection_pdfs[0]
     elif pdf_files:
         # No reflection PDFs, use any PDF
-        pdf_path = osp.join(search_dir, pdf_files[0])
+        pdf_path = pdf_files[0]
 
     return pdf_path
 
@@ -814,32 +815,42 @@ def run_review_stage(
         idea_dir=reports_base,
         run_dir_name=run_dir_path.name if run_dir_path is not None else None,
     )
-    if not pdf_path or not os.path.exists(pdf_path):
+    if not pdf_path or not pdf_path.exists():
         logger.warning("No PDF found for review (writeup likely failed). Skipping review.")
         return
 
-    logger.info(f"Paper found at: {pdf_path}")
-    paper_content = load_paper(pdf_path)
+    logger.info("Paper found at: %s", pdf_path)
     review_model = review_cfg.model
-    review_context = build_auto_review_context(reports_base, None, paper_content or "")
     review_result = perform_review(
-        paper_content,
+        pdf_path,
         model=review_model,
         temperature=review_cfg.temperature,
         event_callback=event_callback,
         run_id=run_id,
         num_reflections=2,
         num_reviews_ensemble=3,
-        context=review_context,
     )
     if not isinstance(review_result, ReviewResult):
         raise TypeError("perform_review must return ReviewResult")
     review: ReviewResponseModel = review_result.review
-    review_img_cap_ref = perform_imgs_cap_ref_review(
+
+    # Extract abstract (has its own token usage)
+    abstract_result = extract_abstract_from_pdf(
+        pdf_path=pdf_path,
+        model=review_model,
+    )
+    abstract = abstract_result.abstract
+    publish_token_usage(usage=abstract_result.token_usage)
+
+    # Run VLM figure review
+    figure_review_result = perform_imgs_cap_ref_review(
         model=review_model,
         pdf_path=pdf_path,
+        abstract=abstract,
         temperature=review_cfg.temperature,
     )
+    review_img_cap_ref = figure_review_result.reviews
+    publish_token_usage(usage=figure_review_result.token_usage)
     serialized_img_reviews = [
         {
             "figure_name": item.figure_name,

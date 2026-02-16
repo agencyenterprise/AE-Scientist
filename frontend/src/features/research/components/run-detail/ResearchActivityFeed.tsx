@@ -990,7 +990,7 @@ function NodeExecutionGroupItem({
     group.executionType === EXECUTION_TYPE.AGGREGATION
       ? "Aggregation"
       : group.executionType === EXECUTION_TYPE.SEED
-        ? `Seed ${group.nodeIndex ?? "?"}`
+        ? `Seed - Node ${group.nodeIndex ?? "?"}`
         : `Node ${group.nodeIndex ?? "?"} execution`;
 
   return (

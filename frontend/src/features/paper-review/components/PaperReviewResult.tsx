@@ -218,7 +218,16 @@ export function PaperReviewResult({ review }: PaperReviewResultProps) {
         <div className="flex items-center gap-3">
           {getDecisionIcon(content.decision)}
           <div>
-            <div className="font-semibold">{content.decision}</div>
+            <div className="flex items-center gap-2">
+              <span className="font-semibold">{content.decision}</span>
+              {content.overall !== null && content.overall !== undefined && content.overall > 0 && (
+                <>
+                  <span className="opacity-50">·</span>
+                  <span className="text-lg font-bold">{content.overall}/10</span>
+                  <span className="text-sm opacity-70">({LABELS_OVERALL[content.overall]})</span>
+                </>
+              )}
+            </div>
             <div className="text-sm opacity-80">Cost: ${(review.cost_cents / 100).toFixed(2)}</div>
           </div>
         </div>
