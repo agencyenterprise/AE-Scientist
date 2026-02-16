@@ -10,6 +10,8 @@ from psycopg import AsyncCursor
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from app.config import settings
+
 from .base import ConnectionProvider
 
 logger = logging.getLogger(__name__)
@@ -57,10 +59,10 @@ class BillingDatabaseMixin(ConnectionProvider):  # pylint: disable=abstract-meth
         """Create a wallet row for the user if one does not yet exist.
 
         Balance is in cents:
-        - Free users: 50,000 cents ($500.00)
-        - Paid users: 0 cents ($0.00)
+        - Internal users (AE Studio/whitelisted): 50,000 cents ($500.00)
+        - Regular users: CREDIT_CENTS_NEW_USERS (default 0)
         """
-        balance = 50_000 if receives_free_balance else 0
+        balance = 50_000 if receives_free_balance else settings.credit_cents_new_users
         await cursor.execute(
             """
             INSERT INTO billing_user_wallets (user_id, balance)

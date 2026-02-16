@@ -90,6 +90,12 @@ Operations are billed based on actual costs in cents. Users must maintain a mini
 | `MIN_BALANCE_CENTS_FOR_CHAT_MESSAGE` | Minimum balance (cents) before sending a chat message | 10 ($0.10) |
 | `MIN_BALANCE_CENTS_FOR_PAPER_REVIEW` | Minimum balance (cents) before paper review | 100 ($1.00) |
 
+#### New User Credits
+
+| Variable | Description | Default |
+| --- | --- | --- |
+| `CREDIT_CENTS_NEW_USERS` | Free credits (cents) given to new users on registration | 0 ($0.00) |
+
 #### Cost Calculation
 
 | Variable | Description |

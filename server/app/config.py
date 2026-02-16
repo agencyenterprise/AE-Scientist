@@ -176,6 +176,7 @@ class Settings(BaseSettings):
     )
     min_balance_cents_for_chat_message: int = Field(alias="MIN_BALANCE_CENTS_FOR_CHAT_MESSAGE")
     min_balance_cents_for_paper_review: int = Field(alias="MIN_BALANCE_CENTS_FOR_PAPER_REVIEW")
+    credit_cents_new_users: int = Field(default=0, alias="CREDIT_CENTS_NEW_USERS")
 
     # LLM Pricing (JSON)
     json_model_price_per_million_in_cents: str = Field(
@@ -267,7 +268,7 @@ class Settings(BaseSettings):
 
 # Load settings at import time - fails fast if configuration is invalid
 try:
-    settings = Settings()  # type: ignore[call-arg]
+    settings = Settings()  # pyright: ignore[reportCallIssue]
 except Exception as e:
     print(f"\n{'=' * 60}", file=sys.stderr)
     print("CONFIGURATION ERROR", file=sys.stderr)
