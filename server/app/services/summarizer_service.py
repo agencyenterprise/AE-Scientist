@@ -412,11 +412,15 @@ class SummarizerService:
                         middleware=middleware_sequence,
                         checkpointer=checkpointer,
                     )
+                    # Ensure the conversation ends with a user message
+                    # (some models like Claude Opus 4.5+ don't support assistant message prefill)
+                    messages_for_agent = list(filtered_new_messages)
+                    if messages_for_agent and messages_for_agent[-1].get("role") == "assistant":
+                        messages_for_agent.append({"role": "user", "content": "Please continue."})
+
                     result = await agent.ainvoke(
                         {
-                            "messages": [
-                                *filtered_new_messages,
-                            ],
+                            "messages": messages_for_agent,
                         },
                         config=self._get_agent_config_for_conversation(conversation_id),
                     )
