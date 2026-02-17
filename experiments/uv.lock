@@ -2623,6 +2623,7 @@ dev = [
     { name = "vulture" },
 ]
 notebooks = [
+    { name = "ipykernel" },
     { name = "jupyter" },
     { name = "matplotlib" },
     { name = "pandas" },
@@ -2652,6 +2653,7 @@ dev = [
     { name = "vulture", specifier = ">=2.14" },
 ]
 notebooks = [
+    { name = "ipykernel", specifier = ">=6.29.0" },
     { name = "jupyter", specifier = ">=1.0.0" },
     { name = "matplotlib", specifier = ">=3.9.0" },
     { name = "pandas", specifier = ">=2.2.0" },
