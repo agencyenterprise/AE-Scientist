@@ -75,9 +75,9 @@ export function ConversationHeader({
   return (
     <div className="mb-2 relative">
       {/* Title row with cost button */}
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-3 relative z-10">
-        {/* Title Section - Takes priority on mobile */}
-        <div className="flex flex-col gap-1 min-w-0 flex-1">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-3 relative z-10">
+        {/* Title Section - Constrained to left panel width on desktop to avoid banner overlap */}
+        <div className="flex flex-col gap-1 min-w-0 flex-1 md:max-w-[38%]">
           <TitleEditor
             title={conversation.title}
             isEditing={isEditingTitle}

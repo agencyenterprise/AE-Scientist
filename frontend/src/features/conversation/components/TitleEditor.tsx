@@ -81,23 +81,25 @@ export function TitleEditor({
   }
 
   return (
-    <div className="flex items-center gap-1.5 sm:gap-2">
-      <h1 className="text-base sm:text-xl font-bold text-foreground truncate">{title}</h1>
-      <button
-        onClick={onStartEdit}
-        className="p-1 text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
-        title="Edit title"
-      >
-        <Pencil className="w-4 h-4" />
-      </button>
-      <button
-        onClick={onDelete}
-        disabled={isDeleting}
-        className="p-1 text-red-500 hover:text-red-700 transition-colors flex-shrink-0 disabled:opacity-50"
-        title="Delete conversation"
-      >
-        <Trash2 className="w-4 h-4" />
-      </button>
+    <div className="flex items-start gap-1.5 sm:gap-2">
+      <h1 className="text-base sm:text-xl font-bold text-foreground break-words">{title}</h1>
+      <div className="flex items-center gap-1 flex-shrink-0">
+        <button
+          onClick={onStartEdit}
+          className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+          title="Edit title"
+        >
+          <Pencil className="w-4 h-4" />
+        </button>
+        <button
+          onClick={onDelete}
+          disabled={isDeleting}
+          className="p-1 text-red-500 hover:text-red-700 transition-colors disabled:opacity-50"
+          title="Delete conversation"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
     </div>
   );
 }
