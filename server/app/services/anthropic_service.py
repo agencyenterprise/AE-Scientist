@@ -15,6 +15,14 @@ logger = logging.getLogger(__name__)
 
 SUPPORTED_MODELS = [
     LLMModel(
+        id="claude-opus-4-6",
+        provider="anthropic",
+        label="Claude Opus 4.6",
+        supports_images=True,
+        supports_pdfs=True,
+        context_window_tokens=1_000_000,
+    ),
+    LLMModel(
         id="claude-opus-4-5",
         provider="anthropic",
         label="Claude Opus 4.5",
