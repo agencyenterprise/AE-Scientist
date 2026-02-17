@@ -115,7 +115,7 @@ async def create_paper_review(
     num_reviews_ensemble: int = Form(
         ..., ge=1, le=5, description="Number of ensemble reviews (1-5)"
     ),
-    num_reflections: int = Form(..., ge=1, le=3, description="Number of reflection rounds (1-3)"),
+    num_reflections: int = Form(..., ge=0, le=3, description="Number of reflection rounds (0-3)"),
 ) -> PaperReviewStartedResponse:
     """
     Submit a paper for review.

@@ -21,7 +21,13 @@ lint-research:
 lint-server:
 	$(MAKE) -C server lint
 
-lint: lint-ae-paper-review lint-research lint-server
+lint-microsite:
+	$(MAKE) -C paper-review-microsite lint
+
+lint-experiments:
+	$(MAKE) -C experiments lint
+
+lint: lint-ae-paper-review lint-research lint-server lint-microsite lint-experiments
 	@echo "✅ All linting complete"
 
 lint-frontend:
@@ -78,4 +84,4 @@ redis-rm:
 	@docker rm ae-scientist-redis 2>/dev/null || true
 	@echo "✅ Redis container removed"
 
-.PHONY: install-ae-paper-review install-research install-server install lint-ae-paper-review lint-research lint-server lint lint-frontend dev-frontend dev-server export-openapi gen-api-types migrate-db fake-runpod redis redis-stop redis-rm
+.PHONY: install-ae-paper-review install-research install-server install lint-ae-paper-review lint-research lint-server lint-microsite lint-experiments lint lint-frontend dev-frontend dev-server export-openapi gen-api-types migrate-db fake-runpod redis redis-stop redis-rm

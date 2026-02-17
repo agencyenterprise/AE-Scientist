@@ -229,7 +229,7 @@ export function PaperReviewUpload({ onStartNewReview }: PaperReviewUploadProps) 
 
       // Review parameters (hardcoded for now, user can't configure these yet)
       formData.append("num_reviews_ensemble", "3");
-      formData.append("num_reflections", "2");
+      formData.append("num_reflections", "1");
 
       // Use fetch directly for multipart form data
       const headers = withAuthHeaders(new Headers());
