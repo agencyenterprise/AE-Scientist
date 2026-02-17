@@ -24,6 +24,12 @@ dev = [
     "types-requests>=2.32.0",
     "vulture>=2.14",
 ]
+notebooks = [
+    "jupyter>=1.0.0",
+    "matplotlib>=3.9.0",
+    "seaborn>=0.13.0",
+    "pandas>=2.2.0",
+]
 
 [tool.uv.sources]
 ae-paper-review = { path = "../packages/ae-paper-review" }
