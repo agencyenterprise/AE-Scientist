@@ -1,13 +1,10 @@
 "use client";
 
-import { ModelSelector } from "@/features/model-selector/components/ModelSelector";
-import { PromptTypes } from "@/shared/lib/prompt-types";
 import type { ConversationCostResponse, ConversationDetail } from "@/types";
 import { useState } from "react";
-import { DollarSign, ExternalLink, GitBranch, MessageSquare } from "lucide-react";
+import { DollarSign, ExternalLink, GitBranch, MessageSquare, Rocket } from "lucide-react";
 import { detectPlatform } from "@/shared/utils/platform-detection";
 
-import { useConversationContext } from "../context/ConversationContext";
 import { useConversationActions } from "../hooks/useConversationActions";
 import { DeleteConfirmModal } from "./DeleteConfirmModal";
 import { CostDetailModal } from "./CostDetailModal";
@@ -35,18 +32,6 @@ export function ConversationHeader({
   const [showCostModal, setShowCostModal] = useState(false);
 
   const { isDeleting, isUpdatingTitle, deleteConversation, updateTitle } = useConversationActions();
-
-  // Get model selection state from context
-  const {
-    selectedModel,
-    selectedProvider,
-    effectiveCapabilities,
-    isReadOnly,
-    isStreaming,
-    handleModelChange,
-    handleModelDefaults,
-    handleModelCapabilities,
-  } = useConversationContext();
 
   const handleDeleteConversation = async (): Promise<void> => {
     const success = await deleteConversation(conversation.id);
@@ -88,78 +73,86 @@ export function ConversationHeader({
   };
 
   return (
-    <div className="flex flex-col gap-2 mb-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:mb-4 md:mb-6">
-      {/* Title Section - Takes priority on mobile */}
-      <div className="flex flex-col gap-1 min-w-0 flex-1">
-        <TitleEditor
-          title={conversation.title}
-          isEditing={isEditingTitle}
-          editValue={editTitle}
-          isUpdating={isUpdatingTitle}
-          isDeleting={isDeleting}
-          onEditValueChange={setEditTitle}
-          onStartEdit={handleStartEdit}
-          onSave={handleSaveTitle}
-          onCancel={handleCancelEdit}
-          onDelete={() => setShowDeleteConfirm(true)}
-        />
-        {conversation.parent_run_id && (
-          <div className="flex items-center gap-1.5 text-xs text-slate-400">
-            <GitBranch className="w-3 h-3 flex-shrink-0" />
-            <span>Seeded from</span>
-            <a
-              href={`/research/${conversation.parent_run_id}`}
-              className="text-emerald-400 hover:text-emerald-300 hover:underline"
-            >
-              parent run
-            </a>
-          </div>
-        )}
-        {(() => {
-          const platform = detectPlatform(conversation.url);
-          if (!platform) return null;
-          return (
+    <div className="mb-2 relative">
+      {/* Title row with cost button */}
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-3 relative z-10">
+        {/* Title Section - Takes priority on mobile */}
+        <div className="flex flex-col gap-1 min-w-0 flex-1">
+          <TitleEditor
+            title={conversation.title}
+            isEditing={isEditingTitle}
+            editValue={editTitle}
+            isUpdating={isUpdatingTitle}
+            isDeleting={isDeleting}
+            onEditValueChange={setEditTitle}
+            onStartEdit={handleStartEdit}
+            onSave={handleSaveTitle}
+            onCancel={handleCancelEdit}
+            onDelete={() => setShowDeleteConfirm(true)}
+          />
+          {conversation.parent_run_id && (
             <div className="flex items-center gap-1.5 text-xs text-slate-400">
-              <MessageSquare className="w-3 h-3" />
-              <span>Imported from</span>
+              <GitBranch className="w-3 h-3 flex-shrink-0" />
+              <span>Seeded from</span>
               <a
-                href={conversation.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-400 hover:text-blue-300 hover:underline inline-flex items-center gap-1"
+                href={`/research/${conversation.parent_run_id}`}
+                className="text-emerald-400 hover:text-emerald-300 hover:underline"
               >
-                {platform.displayName}
-                <ExternalLink className="w-3 h-3" />
+                parent run
               </a>
             </div>
-          );
-        })()}
-      </div>
+          )}
+          {(() => {
+            const platform = detectPlatform(conversation.url);
+            if (!platform) return null;
+            return (
+              <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                <MessageSquare className="w-3 h-3" />
+                <span>Imported from</span>
+                <a
+                  href={conversation.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-400 hover:text-blue-300 hover:underline inline-flex items-center gap-1"
+                >
+                  {platform.displayName}
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            );
+          })()}
+        </div>
 
-      {/* Model Selector - Wraps on mobile */}
-      <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+        {/* Cost button - hidden on mobile since balance is in floating nav menu */}
         {costDetails && (
           <button
             onClick={handleShowCost}
-            className="flex items-center space-x-1 px-2 py-1.5 text-xs font-medium text-[var(--primary-700)] hover:bg-[var(--muted)] rounded border border-[var(--border)] transition-colors"
+            className="hidden sm:flex items-center space-x-1 px-2 py-1.5 text-xs font-medium text-[var(--primary-700)] hover:bg-[var(--muted)] rounded border border-[var(--border)] transition-colors flex-shrink-0"
             title="View conversation costs"
             aria-label="View conversation costs"
           >
             <DollarSign className="w-4 h-4 flex-shrink-0" />
-            <span className="hidden xs:inline">Cost</span>
+            <span>Cost</span>
           </button>
         )}
-        <ModelSelector
-          promptType={PromptTypes.IDEA_CHAT}
-          onModelChange={handleModelChange}
-          onDefaultsChange={handleModelDefaults}
-          onCapabilitiesChange={handleModelCapabilities}
-          selectedModel={selectedModel}
-          selectedProvider={selectedProvider}
-          disabled={isReadOnly || isStreaming}
-          showMakeDefault={true}
-          conversationCapabilities={effectiveCapabilities}
-        />
+      </div>
+
+      {/* Workflow banner - absolutely positioned over right panel area, same vertical level as title */}
+      <div className="hidden md:block absolute top-0 left-0 right-0 pointer-events-none">
+        <div className="flex">
+          {/* Spacer for left panel (2/5 width + gap) */}
+          <div className="w-2/5 flex-shrink-0" />
+          <div className="w-3 flex-shrink-0" />
+          {/* Banner centered in right panel area (3/5 width) */}
+          <div className="flex-1 flex justify-center pointer-events-auto">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+              <Rocket className="h-3.5 w-3.5 text-emerald-400" />
+              <span className="text-xs text-emerald-300">
+                Review your project and launch research when ready
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <DeleteConfirmModal

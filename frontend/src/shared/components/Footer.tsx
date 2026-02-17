@@ -2,7 +2,7 @@
 
 export function Footer() {
   return (
-    <footer className="border-t border-slate-800 bg-slate-950/50 px-4 py-3 sm:px-8">
+    <footer className="border-t border-slate-800 bg-slate-950/50 px-4 py-2 sm:px-8">
       <div className="flex items-center justify-center text-sm text-slate-500">
         <span>
           Built by{" "}

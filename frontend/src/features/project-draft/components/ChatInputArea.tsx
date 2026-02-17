@@ -1,5 +1,7 @@
 import type { FileMetadata } from "@/types";
 
+import { useConversationContext } from "@/features/conversation/context/ConversationContext";
+
 import { ChatErrorBanner } from "./ChatErrorBanner";
 import { ChatFileUploadSection } from "./ChatFileUploadSection";
 import { ChatPendingFiles } from "./ChatPendingFiles";
@@ -47,6 +49,16 @@ export function ChatInputArea({
   onToggleFileUpload,
   inputRef,
 }: ChatInputAreaProps) {
+  const {
+    selectedModel,
+    selectedProvider,
+    effectiveCapabilities,
+    isReadOnly,
+    handleModelChange,
+    handleModelDefaults,
+    handleModelCapabilities,
+  } = useConversationContext();
+
   return (
     <div className="flex-shrink-0 rounded-2xl border border-slate-800">
       {error && <ChatErrorBanner error={error} />}
@@ -79,6 +91,15 @@ export function ChatInputArea({
         showFileUpload={showFileUpload}
         pendingFilesCount={pendingFiles.length}
         inputRef={inputRef}
+        modelSelectorProps={{
+          selectedModel,
+          selectedProvider,
+          effectiveCapabilities,
+          isReadOnly,
+          handleModelChange,
+          handleModelDefaults,
+          handleModelCapabilities,
+        }}
       />
     </div>
   );

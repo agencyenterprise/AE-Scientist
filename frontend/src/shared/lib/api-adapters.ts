@@ -127,7 +127,7 @@ export function convertApiResearchRun(apiRun: ResearchRunListItemApi): ResearchR
     status: apiRun.status,
     initializationStatus: apiRun.initialization_status,
     ideaTitle: apiRun.idea_title,
-    ideaMarkdown: apiRun.idea_hypothesis ?? null, // Backend uses 'idea_hypothesis' but it's actually full markdown
+    ideaMarkdown: apiRun.idea_markdown ?? null,
     currentStage: apiRun.current_stage ?? null,
     progress: apiRun.progress ?? null,
     gpuType: apiRun.gpu_type,

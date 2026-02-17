@@ -34,9 +34,7 @@ def _is_external_url(url: str | None) -> bool:
 def _row_to_list_item(row: dict) -> ResearchRunListItem:
     """Convert a database row to a ResearchRunListItem."""
     idea_title = row.get("title") or "Untitled"
-    idea_markdown = row.get("idea_markdown", "")
-    # Pass full markdown, frontend handles preview
-    idea_hypothesis = idea_markdown if idea_markdown else None
+    idea_markdown = row.get("idea_markdown", "") or None
 
     # Only include conversation_url if it's an external URL (not manual://, etc.)
     raw_url = row.get("conversation_url")
@@ -56,7 +54,7 @@ def _row_to_list_item(row: dict) -> ResearchRunListItem:
         status=row["status"],
         initialization_status=row.get("initialization_status") or "pending",
         idea_title=idea_title,
-        idea_hypothesis=idea_hypothesis,
+        idea_markdown=idea_markdown,
         current_stage=row.get("current_stage"),
         progress=row.get("progress"),
         gpu_type=row["gpu_type"],

@@ -12,7 +12,7 @@ import {
   isModelDefault,
 } from "@/features/model-selector/utils/modelUtils";
 import { useEffect } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Bot } from "lucide-react";
 
 interface ModelSelectorProps {
   promptType: string;
@@ -25,6 +25,7 @@ interface ModelSelectorProps {
   showMakeDefault?: boolean;
   showCapabilities?: boolean;
   conversationCapabilities?: ConversationCapabilities;
+  compact?: boolean;
 }
 
 export function ModelSelector({
@@ -38,6 +39,7 @@ export function ModelSelector({
   showMakeDefault = false,
   showCapabilities = true,
   conversationCapabilities,
+  compact = false,
 }: ModelSelectorProps) {
   const { defaultModel, providers, isLoading, updateDefault, isUpdatingDefault } =
     useModelSelectorData({ promptType });
@@ -130,6 +132,13 @@ export function ModelSelector({
   };
 
   if (isLoading) {
+    if (compact) {
+      return (
+        <div className="px-3 py-2 h-10 flex items-center justify-center">
+          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-muted-foreground"></div>
+        </div>
+      );
+    }
     return (
       <div className="flex items-center space-x-2 text-xs text-muted-foreground">
         <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-muted-foreground"></div>
@@ -145,16 +154,30 @@ export function ModelSelector({
         ref={buttonRef}
         onClick={toggle}
         disabled={disabled}
-        className={`flex items-center space-x-1 px-2 py-1 text-xs font-medium border rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-          isUsingCustomSelection
-            ? "bg-primary/10 border-primary text-primary"
-            : "bg-card border-border text-foreground"
-        }`}
+        className={
+          compact
+            ? `px-3 py-2 h-10 rounded-lg border border-border hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-colors ${
+                isUsingCustomSelection ? "bg-primary/10 border-primary/30" : "bg-card"
+              }`
+            : `flex items-center space-x-1 px-2 py-1 text-xs font-medium border rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                isUsingCustomSelection
+                  ? "bg-primary/10 border-primary text-primary"
+                  : "bg-card border-border text-foreground"
+              }`
+        }
         title={`Current model: ${currentModelLabel} (${currentModel}) - ${currentProvider}${isUsingCustomSelection ? " - Custom selection" : " - Default"}`}
       >
-        <span>Model:</span>
-        <span className="font-semibold">{currentModelLabel}</span>
-        <ChevronDown className={`w-3 h-3 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+        {compact ? (
+          <Bot
+            className={`w-4 h-4 ${isUsingCustomSelection ? "text-primary" : "text-muted-foreground"}`}
+          />
+        ) : (
+          <>
+            <span>Model:</span>
+            <span className="font-semibold">{currentModelLabel}</span>
+            <ChevronDown className={`w-3 h-3 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+          </>
+        )}
       </button>
 
       {isOpen && coords && (

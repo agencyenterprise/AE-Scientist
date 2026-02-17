@@ -180,7 +180,7 @@ export function ConversationView({
   return (
     <ConversationProvider>
       <>
-        <div className="flex flex-col md:h-[calc(100vh-180px)] md:overflow-hidden">
+        <div className="flex flex-col md:h-[calc(100vh-128px)] md:overflow-hidden">
           <ConversationHeader
             conversation={conversation}
             onConversationDeleted={onConversationDeleted}
@@ -193,37 +193,47 @@ export function ConversationView({
           {/* Mobile Tab Switcher - Segmented control at top, only on mobile */}
           <div
             ref={setTabSwitcherElement}
-            className="flex-shrink-0 flex md:hidden border-b border-slate-800 bg-slate-900/80"
+            className="flex-shrink-0 md:hidden border-b border-slate-800 bg-slate-900/80"
           >
-            <button
-              onClick={() => handleMobileViewChange("chat")}
-              className={cn(
-                "flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-colors border-b-2",
-                mobileProjectView === "chat"
-                  ? "text-sky-400 border-sky-400 bg-sky-500/10"
-                  : "text-slate-400 border-transparent hover:text-slate-300"
-              )}
-            >
-              <MessageSquare className="h-4 w-4" />
-              Chat
-            </button>
-            <button
-              onClick={() => handleMobileViewChange("draft")}
-              className={cn(
-                "flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-colors border-b-2",
-                mobileProjectView === "draft"
-                  ? "text-amber-400 border-amber-400 bg-amber-500/10"
-                  : "text-slate-400 border-transparent hover:text-slate-300"
-              )}
-            >
-              <div className="relative flex items-center gap-2">
-                <Lightbulb className="h-4 w-4" />
-                Idea
-                {hasIdeaUpdate && (
-                  <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+            {/* Mobile workflow banner */}
+            <div className="flex items-center justify-center gap-2 px-3 py-1.5 bg-emerald-500/10 border-b border-emerald-500/20">
+              <Rocket className="h-3 w-3 text-emerald-400" />
+              <span className="text-xs text-emerald-300">
+                Review and launch research when ready
+              </span>
+            </div>
+            {/* Tab buttons */}
+            <div className="flex">
+              <button
+                onClick={() => handleMobileViewChange("chat")}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-colors border-b-2",
+                  mobileProjectView === "chat"
+                    ? "text-sky-400 border-sky-400 bg-sky-500/10"
+                    : "text-slate-400 border-transparent hover:text-slate-300"
                 )}
-              </div>
-            </button>
+              >
+                <MessageSquare className="h-4 w-4" />
+                Chat
+              </button>
+              <button
+                onClick={() => handleMobileViewChange("draft")}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-colors border-b-2",
+                  mobileProjectView === "draft"
+                    ? "text-amber-400 border-amber-400 bg-amber-500/10"
+                    : "text-slate-400 border-transparent hover:text-slate-300"
+                )}
+              >
+                <div className="relative flex items-center gap-2">
+                  <Lightbulb className="h-4 w-4" />
+                  Idea
+                  {hasIdeaUpdate && (
+                    <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+                  )}
+                </div>
+              </button>
+            </div>
           </div>
 
           {/* Dynamic Content Area - Flexbox layout for smart space allocation */}

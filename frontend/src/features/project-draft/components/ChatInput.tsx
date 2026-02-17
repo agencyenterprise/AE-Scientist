@@ -1,5 +1,21 @@
 import { useRef, useCallback } from "react";
 import { Paperclip, Send, Loader2 } from "lucide-react";
+import { ModelSelector } from "@/features/model-selector/components/ModelSelector";
+import { PromptTypes } from "@/shared/lib/prompt-types";
+import type { ConversationCapabilities } from "@/features/model-selector/utils/modelUtils";
+
+interface ModelSelectorProps {
+  selectedModel: string;
+  selectedProvider: string;
+  effectiveCapabilities: ConversationCapabilities | undefined;
+  isReadOnly: boolean;
+  handleModelChange: (model: string, provider: string) => void;
+  handleModelDefaults: (model: string, provider: string) => void;
+  handleModelCapabilities: (capabilities: {
+    supportsImages: boolean;
+    supportsPdfs: boolean;
+  }) => void;
+}
 
 interface ChatInputProps {
   inputMessage: string;
@@ -12,6 +28,7 @@ interface ChatInputProps {
   showFileUpload: boolean;
   pendingFilesCount: number;
   inputRef?: React.RefObject<HTMLTextAreaElement | null>;
+  modelSelectorProps?: ModelSelectorProps;
 }
 
 export function ChatInput({
@@ -25,6 +42,7 @@ export function ChatInput({
   showFileUpload,
   pendingFilesCount,
   inputRef: externalInputRef,
+  modelSelectorProps,
 }: ChatInputProps) {
   const internalInputRef = useRef<HTMLTextAreaElement>(null);
   const inputRef = externalInputRef || internalInputRef;
@@ -95,6 +113,22 @@ export function ChatInput({
         >
           <Paperclip className="w-4 h-4 text-muted-foreground" />
         </button>
+
+        {/* Model Selector (compact icon) */}
+        {modelSelectorProps && (
+          <ModelSelector
+            promptType={PromptTypes.IDEA_CHAT}
+            onModelChange={modelSelectorProps.handleModelChange}
+            onDefaultsChange={modelSelectorProps.handleModelDefaults}
+            onCapabilitiesChange={modelSelectorProps.handleModelCapabilities}
+            selectedModel={modelSelectorProps.selectedModel}
+            selectedProvider={modelSelectorProps.selectedProvider}
+            disabled={modelSelectorProps.isReadOnly || isStreaming}
+            showMakeDefault={true}
+            conversationCapabilities={modelSelectorProps.effectiveCapabilities}
+            compact={true}
+          />
+        )}
 
         <button
           onClick={onSendMessage}

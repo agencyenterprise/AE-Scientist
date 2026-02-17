@@ -90,9 +90,7 @@ class ResearchRunListItem(BaseModel):
         ..., description="Initialization status message (pending/initializing/running)"
     )
     idea_title: str = Field(..., description="Title from the idea version")
-    idea_hypothesis: Optional[str] = Field(
-        None, description="Short hypothesis from the idea version"
-    )
+    idea_markdown: Optional[str] = Field(None, description="Markdown content from the idea version")
     current_stage: Optional[str] = Field(None, description="Latest stage from progress events")
     progress: Optional[float] = Field(
         None,
