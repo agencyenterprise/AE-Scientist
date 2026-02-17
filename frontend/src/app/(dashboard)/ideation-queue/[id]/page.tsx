@@ -114,7 +114,7 @@ export default function ConversationPage({ params }: ConversationPageProps) {
   };
 
   return (
-    <div className="p-3 sm:p-6">
+    <div>
       <ConversationView
         conversation={selectedConversation}
         isLoading={isLoading && !selectedConversation}

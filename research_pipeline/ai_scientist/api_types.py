@@ -1471,11 +1471,10 @@ class ResearchRunListItem(BaseModel):
     idea_title: Annotated[
         str, Field(description="Title from the idea version", title="Idea Title")
     ]
-    idea_hypothesis: Annotated[
+    idea_markdown: Annotated[
         str | None,
         Field(
-            description="Short hypothesis from the idea version",
-            title="Idea Hypothesis",
+            description="Markdown content from the idea version", title="Idea Markdown"
         ),
     ] = None
     current_stage: Annotated[

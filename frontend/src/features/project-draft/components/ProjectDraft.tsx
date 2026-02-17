@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import type { ConversationDetail, Idea as IdeaType } from "@/types";
 import { api } from "@/shared/lib/api-client-typed";
 import { CreateProjectModal } from "./CreateProjectModal";
-import { SectionEditModal } from "./SectionEditModal";
 
 // Hooks
 import { useProjectDraftState } from "../hooks/useProjectDraftState";
@@ -23,8 +22,7 @@ interface ProjectDraftProps {
 }
 
 export function ProjectDraft({ conversation, externalUpdate }: ProjectDraftProps) {
-  // Title editing state
-  const [isTitleEditOpen, setIsTitleEditOpen] = useState(false);
+  // Title saving state (inline editing is handled by ProjectDraftHeader)
   const [isTitleSaving, setIsTitleSaving] = useState(false);
 
   // State management hooks
@@ -149,8 +147,6 @@ export function ProjectDraft({ conversation, externalUpdate }: ProjectDraftProps
         await versionState.loadVersions();
         versionState.setSelectedVersionForComparison(previousVersion);
         versionState.setShowDiffs(true);
-
-        setIsTitleEditOpen(false);
       }
     } finally {
       setIsTitleSaving(false);
@@ -213,7 +209,8 @@ export function ProjectDraft({ conversation, externalUpdate }: ProjectDraftProps
               comparisonVersion={versionState.comparisonVersion}
               nextVersion={versionState.nextVersion}
               titleDiffContent={diffState.titleDiffContent}
-              onEditTitle={() => setIsTitleEditOpen(true)}
+              onTitleSave={handleTitleSave}
+              isTitleSaving={isTitleSaving}
               allVersions={versionState.allVersions}
               canNavigatePrevious={versionState.canNavigatePrevious}
               canNavigateNext={versionState.canNavigateNext}
@@ -258,18 +255,6 @@ export function ProjectDraft({ conversation, externalUpdate }: ProjectDraftProps
         onSelectGpuType={projectState.setSelectedGpuType}
         isGpuTypeLoading={projectState.isGpuTypeLoading}
       />
-
-      {/* Title Edit Modal */}
-      {projectState.projectDraft?.active_version?.title && (
-        <SectionEditModal
-          isOpen={isTitleEditOpen}
-          onClose={() => setIsTitleEditOpen(false)}
-          title="Title"
-          content={projectState.projectDraft.active_version.title}
-          onSave={handleTitleSave}
-          isSaving={isTitleSaving}
-        />
-      )}
     </>
   );
 }

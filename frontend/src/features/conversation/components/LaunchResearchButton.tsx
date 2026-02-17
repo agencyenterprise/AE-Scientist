@@ -1,5 +1,6 @@
 import { CreateProjectModal } from "@/features/project-draft/components/CreateProjectModal";
 import { Button } from "@/shared/components/ui/button";
+import { Rocket } from "lucide-react";
 import { useLaunchResearch } from "../hooks/useLaunchResearch";
 
 interface LaunchResearchButtonProps {
@@ -38,6 +39,7 @@ export function LaunchResearchButton({
         disabled={disabled || isLaunching}
         aria-label="Launch research for this idea"
       >
+        <Rocket className="h-4 w-4 mr-1.5" />
         Launch Research
       </Button>
       <CreateProjectModal

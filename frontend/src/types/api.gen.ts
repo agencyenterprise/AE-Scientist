@@ -5191,10 +5191,10 @@ export interface components {
              */
             idea_title: string;
             /**
-             * Idea Hypothesis
-             * @description Short hypothesis from the idea version
+             * Idea Markdown
+             * @description Markdown content from the idea version
              */
-            idea_hypothesis?: string | null;
+            idea_markdown?: string | null;
             /**
              * Current Stage
              * @description Latest stage from progress events

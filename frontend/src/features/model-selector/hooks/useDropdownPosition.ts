@@ -104,8 +104,12 @@ export function useDropdownPosition(): UseDropdownPositionReturn {
     const spaceBelow = viewportHeight - buttonRect.bottom - DROPDOWN_MARGIN - VIEWPORT_MARGIN;
     const spaceAbove = buttonRect.top - DROPDOWN_MARGIN - VIEWPORT_MARGIN;
 
-    // On mobile, prefer opening below; on desktop, prefer above if there's enough space
-    const openAbove = !isMobile && spaceAbove >= MIN_DROPDOWN_HEIGHT;
+    // Decide whether to open above or below:
+    // - On mobile: open above if there's not enough space below (chat input is at bottom)
+    // - On desktop: prefer above if there's enough space
+    const openAbove = isMobile
+      ? spaceBelow < MIN_DROPDOWN_HEIGHT && spaceAbove >= MIN_DROPDOWN_HEIGHT
+      : spaceAbove >= MIN_DROPDOWN_HEIGHT;
 
     const availableHeight = openAbove ? spaceAbove : spaceBelow;
     const maxHeight = Math.min(availableHeight, MAX_DROPDOWN_HEIGHT);

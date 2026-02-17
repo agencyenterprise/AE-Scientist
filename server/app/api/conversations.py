@@ -711,7 +711,7 @@ async def _create_failure_idea(
 ) -> None:
     """Create a failure idea entry so the UI can show the error state."""
     failure_title = "Failed to Generate Idea"
-    failure_markdown = f"""## Short Hypothesis
+    failure_markdown = f"""## Project Summary
 Generation failed
 
 ## Related Work

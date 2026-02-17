@@ -10890,7 +10890,7 @@
             "title": "Idea Title",
             "description": "Title from the idea version"
           },
-          "idea_hypothesis": {
+          "idea_markdown": {
             "anyOf": [
               {
                 "type": "string"
@@ -10899,8 +10899,8 @@
                 "type": "null"
               }
             ],
-            "title": "Idea Hypothesis",
-            "description": "Short hypothesis from the idea version"
+            "title": "Idea Markdown",
+            "description": "Markdown content from the idea version"
           },
           "current_stage": {
             "anyOf": [

@@ -1,5 +1,6 @@
 import type { Idea, IdeaVersion } from "@/types";
 import React from "react";
+import { Rocket } from "lucide-react";
 import { isIdeaGenerating } from "../utils/versionUtils";
 import { useConversationContext } from "@/features/conversation/context/ConversationContext";
 
@@ -63,7 +64,7 @@ export function ProjectDraftFooter({
       </div>
 
       {/* Footer with Create Project Button */}
-      <div className="flex-shrink-0 py-3 border-border">
+      <div className="flex-shrink-0 pt-2 pb-1 border-border">
         <button
           onClick={onCreateProject}
           disabled={isDisabled}
@@ -72,10 +73,14 @@ export function ProjectDraftFooter({
               ? "Navigate to the latest version or revert to this version before launching research"
               : undefined
           }
-          className={cn("btn-primary-gradient w-full text-xs py-3 px-2", {
-            "opacity-50 cursor-not-allowed": isDisabled,
-          })}
+          className={cn(
+            "btn-primary-gradient w-full text-xs py-3 px-2 flex items-center justify-center gap-1.5",
+            {
+              "opacity-50 cursor-not-allowed": isDisabled,
+            }
+          )}
         >
+          <Rocket className="h-4 w-4" />
           <span>Launch Research</span>
         </button>
       </div>

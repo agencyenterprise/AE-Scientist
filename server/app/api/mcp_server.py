@@ -54,23 +54,20 @@ TOOLS = [
                 "content": {
                     "type": "string",
                     "description": """The research idea content in markdown format with the following sections:
-## Short Hypothesis
+## Project Summary
 [2-3 sentences describing the core hypothesis]
 
-## Related Work
-[Brief overview of relevant prior research]
-
-## Abstract
+## Idea Description
 [Comprehensive description of the research idea]
 
-## Experiments
+## Proposed Experiments
 [Bulleted list of proposed experiments]
 
 ## Expected Outcome
 [Description of anticipated results]
 
-## Risk Factors and Limitations
-[Bulleted list of potential risks and limitations]""",
+## Key Considerations
+[Bulleted list of practical guidance: important parameters, potential pitfalls, and tips for successful execution]""",
                 },
             },
             "required": ["idea", "content"],
