@@ -550,7 +550,7 @@ class UpdateIdeaInput(BaseModel):
     )
     idea_markdown: str = Field(
         ...,
-        description="Complete idea content in markdown format with sections: Project Summary, Related Work, Abstract, Experiments, Expected Outcome, Risk Factors and Limitations. Do NOT include the title as a header.",
+        description="Complete idea content in markdown format with sections: Project Summary, Idea Description, Proposed Experiments, Expected Outcome, Key Considerations. Do NOT include the title as a header.",
     )
 
 
