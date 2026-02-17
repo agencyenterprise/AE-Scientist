@@ -5262,9 +5262,9 @@
           "num_reflections": {
             "type": "integer",
             "maximum": 3.0,
-            "minimum": 1.0,
+            "minimum": 0.0,
             "title": "Num Reflections",
-            "description": "Number of reflection rounds (1-3)"
+            "description": "Number of reflection rounds (0-3)"
           }
         },
         "type": "object",

@@ -41,7 +41,7 @@ result = perform_review(
     model="anthropic:claude-sonnet-4-20250514",
     temperature=0.1,
     event_callback=lambda e: print(f"Progress: {e.progress:.0%}"),
-    num_reflections=2,
+    num_reflections=1,
     num_fs_examples=1,
     num_reviews_ensemble=3,
 )

@@ -91,7 +91,9 @@ def create_client_v1() -> openreview.Client:
 
 def create_client_v2() -> OpenReviewClient:
     """Create an OpenReview API V2 client."""
-    return openreview.api.OpenReviewClient(baseurl="https://api2.openreview.net")
+    return openreview.api.OpenReviewClient(  # pyright: ignore[reportAttributeAccessIssue]
+        baseurl="https://api2.openreview.net"
+    )
 
 
 def fetch_submissions(

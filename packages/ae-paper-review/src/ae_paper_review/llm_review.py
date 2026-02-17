@@ -181,7 +181,7 @@ class ReviewOrchestrator:
             )
 
             # Run reflections
-            if num_reflections > 1:
+            if num_reflections > 0:
                 review = self._run_reflections(
                     review=review,
                     all_file_ids=all_file_ids,
@@ -348,14 +348,18 @@ class ReviewOrchestrator:
         all_file_ids: list[str],
         num_reflections: int,
     ) -> ReviewResponseModel:
-        """Run reflection rounds."""
-        total_reflection_rounds = num_reflections - 1
+        """Run reflection rounds.
 
-        for reflection_round in range(total_reflection_rounds):
-            step_progress = reflection_round / total_reflection_rounds
+        Args:
+            review: Initial review to reflect on
+            all_file_ids: File IDs for the paper and fewshot examples
+            num_reflections: Number of reflection rounds (0 = none, 1 = one round, etc.)
+        """
+        for reflection_round in range(num_reflections):
+            step_progress = reflection_round / num_reflections
             self._emit_progress(
                 step="reflection",
-                substep=f"Reflection {reflection_round + 1} of {total_reflection_rounds}",
+                substep=f"Reflection {reflection_round + 1} of {num_reflections}",
                 progress=0.85 + 0.15 * step_progress,
                 step_progress=step_progress,
             )
@@ -363,7 +367,7 @@ class ReviewOrchestrator:
             reflection_prompt = render_text(
                 template_name="llm_review/reflection_prompt.txt.j2",
                 context={
-                    "current_round": reflection_round + 2,
+                    "current_round": reflection_round + 1,
                     "num_reflections": num_reflections,
                 },
             )

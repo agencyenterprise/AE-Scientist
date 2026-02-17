@@ -41,22 +41,29 @@ class TestConfig:
 
 
 # The 5 configurations to test
-# All use: 3 ensemble reviews, 1 reflection
+# All use: 3 ensemble reviews
+# num_reflections: 0 = no reflection, 1 = one reflection round
 TEST_CONFIGS = [
     TestConfig(
         name="grok-reasoning",
         model="xai:grok-4-1-fast-reasoning",
-        num_reflections=1,
-        description="Grok 4.1 Fast Reasoning, 3 reviews, 1 reflection",
+        num_reflections=0,
+        description="Grok 4.1 Fast Reasoning, 3 reviews, no reflection",
     ),
     TestConfig(
         name="grok-non-reasoning",
         model="xai:grok-4-1-fast-non-reasoning",
-        num_reflections=1,
-        description="Grok 4.1 Fast Non-Reasoning, 3 reviews, 1 reflection",
+        num_reflections=0,
+        description="Grok 4.1 Fast Non-Reasoning, 3 reviews, no reflection",
     ),
     TestConfig(
         name="gpt-5.2",
+        model="openai:gpt-5.2",
+        num_reflections=0,
+        description="GPT-5.2, 3 reviews, no reflection",
+    ),
+    TestConfig(
+        name="gpt-5.2-reflection",
         model="openai:gpt-5.2",
         num_reflections=1,
         description="GPT-5.2, 3 reviews, 1 reflection",
@@ -64,8 +71,8 @@ TEST_CONFIGS = [
     TestConfig(
         name="claude-opus",
         model="anthropic:claude-opus-4-6",
-        num_reflections=1,
-        description="Claude Opus 4.6, 3 reviews, 1 reflection",
+        num_reflections=0,
+        description="Claude Opus 4.6, 3 reviews, no reflection",
     ),
 ]
 

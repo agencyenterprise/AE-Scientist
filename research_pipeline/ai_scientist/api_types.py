@@ -121,8 +121,8 @@ class BodyCreatePaperReviewApiPaperReviewsPost(BaseModel):
     num_reflections: Annotated[
         int,
         Field(
-            description="Number of reflection rounds (1-3)",
-            ge=1,
+            description="Number of reflection rounds (0-3)",
+            ge=0,
             le=3,
             title="Num Reflections",
         ),

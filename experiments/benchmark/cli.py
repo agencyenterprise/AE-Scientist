@@ -107,14 +107,18 @@ def print_metrics_summary(*, result: dict) -> None:
     rho_full = metrics["spearman_rho_full"]
     p_full = metrics["spearman_pvalue_full"]
     if ci_full:
-        print(f"Full dataset: ρ = {rho_full:.3f} (p = {p_full:.4f}) 95% CI [{ci_full['lower']:.3f}, {ci_full['upper']:.3f}]")
+        print(
+            f"Full dataset: ρ = {rho_full:.3f} (p = {p_full:.4f}) 95% CI [{ci_full['lower']:.3f}, {ci_full['upper']:.3f}]"
+        )
     else:
         print(f"Full dataset: ρ = {rho_full:.3f} (p = {p_full:.4f})")
 
     rho_random = metrics["spearman_rho_random_only"]
     p_random = metrics["spearman_pvalue_random_only"]
     if ci_random:
-        print(f"Random-only:  ρ = {rho_random:.3f} (p = {p_random:.4f}) 95% CI [{ci_random['lower']:.3f}, {ci_random['upper']:.3f}]")
+        print(
+            f"Random-only:  ρ = {rho_random:.3f} (p = {p_random:.4f}) 95% CI [{ci_random['lower']:.3f}, {ci_random['upper']:.3f}]"
+        )
     else:
         print(f"Random-only:  ρ = {rho_random:.3f} (p = {p_random:.4f})")
 

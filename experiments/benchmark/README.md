@@ -87,7 +87,7 @@ python -m benchmark.run_configs --config grok-non-reasoning
 
 All configs use production settings:
 - `num_reviews_ensemble=3` - 3 independent reviews aggregated
-- `num_reflections=1` - 1 reflection round per review
+- `num_reflections=0` - No reflection (0 = none, 1 = one round, etc.)
 - `num_fs_examples=1` - 1 few-shot example
 - `temperature=1` - Standard temperature
 
@@ -116,7 +116,7 @@ To start fresh, delete the output file or use `--fresh` flag.
   "config": {
     "model": "anthropic:claude-opus-4-6",
     "temperature": 1,
-    "num_reflections": 1,
+    "num_reflections": 0,
     "num_fs_examples": 1,
     "num_reviews_ensemble": 3,
     "max_papers": 50

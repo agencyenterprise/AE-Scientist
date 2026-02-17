@@ -76,7 +76,7 @@ def test_model(pdf_path: Path, model: str) -> dict:
             model=model,
             temperature=1,
             event_callback=progress_callback,
-            num_reflections=1, 
+            num_reflections=1,
             num_fs_examples=1, 
             num_reviews_ensemble=1, 
         )

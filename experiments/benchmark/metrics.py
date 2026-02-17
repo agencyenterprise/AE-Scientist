@@ -16,8 +16,8 @@ from sklearn.metrics import (  # type: ignore[import-untyped]
 
 from .models import (
     BenchmarkMetrics,
-    ConfidenceInterval,
     ConferenceMetrics,
+    ConfidenceInterval,
     CorrelationResult,
     PaperReviewResult,
 )
@@ -47,8 +47,8 @@ def compute_spearman_correlation(
         return CorrelationResult(correlation=0.0, pvalue=1.0)
 
     result = stats.spearmanr(real_scores, generated_scores)
-    correlation = float(result.statistic)
-    pvalue = float(result.pvalue)
+    correlation = float(result.statistic)  # pyright: ignore[reportAttributeAccessIssue]
+    pvalue = float(result.pvalue)  # pyright: ignore[reportAttributeAccessIssue]
 
     # Handle NaN (e.g., when all values are identical)
     if math.isnan(correlation):
@@ -93,7 +93,7 @@ def compute_bootstrap_ci(
         # Compute Spearman for this bootstrap sample
         try:
             result = stats.spearmanr(boot_real, boot_gen)
-            rho = float(result.statistic)
+            rho = float(result.statistic)  # pyright: ignore[reportAttributeAccessIssue]
             if not math.isnan(rho):
                 bootstrap_rhos.append(rho)
         except Exception:
@@ -275,9 +275,13 @@ def compute_metrics(*, results: list[PaperReviewResult]) -> BenchmarkMetrics:
     if sum(y_true) > 0 and sum(y_true) < len(y_true):
         tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
         accuracy = accuracy_score(y_true, y_pred)
-        precision = precision_score(y_true, y_pred, zero_division=0.0)
-        recall = recall_score(y_true, y_pred, zero_division=0.0)
-        f1 = f1_score(y_true, y_pred, zero_division=0.0)
+        precision = precision_score(
+            y_true, y_pred, zero_division=0.0  # pyright: ignore[reportArgumentType]
+        )
+        recall = recall_score(
+            y_true, y_pred, zero_division=0.0  # pyright: ignore[reportArgumentType]
+        )
+        f1 = f1_score(y_true, y_pred, zero_division=0.0)  # pyright: ignore[reportArgumentType]
 
         # AUC-ROC uses generated overall score as probability
         # Normalize to 0-1 range

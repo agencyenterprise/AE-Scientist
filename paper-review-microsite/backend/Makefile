@@ -24,7 +24,7 @@ dev: migrate
 	VIRTUAL_ENV= LOG_LEVEL=DEBUG uv run -m uvicorn app.main:app --reload --reload-dir . --reload-dir ../../packages/ae-paper-review
 
 # OpenAPI export
-export-openapi:
+export-openapi: install
 	@echo "Exporting OpenAPI schema..."
 	VIRTUAL_ENV= uv run --no-sync export_openapi.py > openapi.json
 

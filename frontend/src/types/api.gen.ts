@@ -2195,7 +2195,7 @@ export interface components {
             num_reviews_ensemble: number;
             /**
              * Num Reflections
-             * @description Number of reflection rounds (1-3)
+             * @description Number of reflection rounds (0-3)
              */
             num_reflections: number;
         };

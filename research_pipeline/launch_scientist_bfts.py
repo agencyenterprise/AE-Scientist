@@ -827,7 +827,7 @@ def run_review_stage(
         temperature=review_cfg.temperature,
         event_callback=event_callback,
         run_id=run_id,
-        num_reflections=2,
+        num_reflections=1,
         num_reviews_ensemble=3,
     )
     if not isinstance(review_result, ReviewResult):
