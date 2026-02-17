@@ -44,7 +44,7 @@ def _run_uv(
             cwd=str(cwd),
         )
     except subprocess.CalledProcessError as e:
-        logger.error(
+        logger.warning(
             "uv command failed: %s (exit code %s)\nstdout: %s\nstderr: %s",
             e.cmd,
             e.returncode,
@@ -118,6 +118,11 @@ def ensure_codex_venv(*, workspace_dir: Path, research_pipeline_root: Path) -> P
                 if venv_dir.exists():
                     shutil.rmtree(venv_dir, ignore_errors=True)
             else:
+                logger.error(
+                    "Venv setup failed after %d attempts: %s",
+                    max_retries + 1,
+                    venv_dir,
+                )
                 raise
 
     raise RuntimeError("ensure_codex_venv: unreachable")
