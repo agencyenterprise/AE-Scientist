@@ -9,7 +9,7 @@ install-server:
 	$(MAKE) -C server install
 
 install: install-ae-paper-review install-research install-server
-	@echo "✅ All dependencies installed"
+	@echo "All dependencies installed"
 
 # Linting targets
 lint-ae-paper-review:
@@ -21,26 +21,20 @@ lint-research:
 lint-server:
 	$(MAKE) -C server lint
 
-lint-microsite:
-	$(MAKE) -C paper-review-microsite lint
-
-lint-experiments:
-	$(MAKE) -C experiments lint
-
-lint: lint-ae-paper-review lint-research lint-server lint-microsite lint-experiments
-	@echo "✅ All linting complete"
+lint: lint-ae-paper-review lint-research lint-server
+	@echo "All linting complete"
 
 lint-frontend:
-	@echo "🔍 Linting frontend..."
-	cd frontend && npm run format:check || (echo "🛠  Formatting frontend sources..." && npm run format && npm run format:check)
+	@echo "Linting frontend..."
+	cd frontend && npm run format:check || (echo "Formatting frontend sources..." && npm run format && npm run format:check)
 	cd frontend && npm run lint -- --max-warnings 0
 	cd frontend && npm run style:check
-	@echo "🔍 Type checking frontend..."
+	@echo "Type checking frontend..."
 	cd frontend && npx tsc --noEmit
 
 # Development servers
 dev-frontend:
-	@echo "🚀 Starting frontend development server..."
+	@echo "Starting frontend development server..."
 	cd frontend && npm run dev
 
 dev-server:
@@ -68,20 +62,20 @@ migrate-db:
 
 # Redis for SSE event streaming
 redis:
-	@echo "🔴 Starting Redis container..."
+	@echo "Starting Redis container..."
 	@docker run -d --name ae-scientist-redis -p 6379:6379 redis:7-alpine || \
 		(docker start ae-scientist-redis 2>/dev/null && echo "Redis container already exists, starting it...")
-	@echo "✅ Redis is running on localhost:6379"
+	@echo "Redis is running on localhost:6379"
 
 redis-stop:
-	@echo "🛑 Stopping Redis container..."
+	@echo "Stopping Redis container..."
 	@docker stop ae-scientist-redis 2>/dev/null || true
-	@echo "✅ Redis stopped"
+	@echo "Redis stopped"
 
 redis-rm:
-	@echo "🗑️  Removing Redis container..."
+	@echo "Removing Redis container..."
 	@docker stop ae-scientist-redis 2>/dev/null || true
 	@docker rm ae-scientist-redis 2>/dev/null || true
-	@echo "✅ Redis container removed"
+	@echo "Redis container removed"
 
-.PHONY: install-ae-paper-review install-research install-server install lint-ae-paper-review lint-research lint-server lint-microsite lint-experiments lint lint-frontend dev-frontend dev-server export-openapi gen-api-types migrate-db fake-runpod redis redis-stop redis-rm
+.PHONY: install-ae-paper-review install-research install-server install lint-ae-paper-review lint-research lint-server lint lint-frontend dev-frontend dev-server export-openapi gen-api-types migrate-db fake-runpod redis redis-stop redis-rm
