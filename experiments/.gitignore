@@ -1,8 +1,0 @@
-# Output data
-data/
-data_50/
-
-# Python
-__pycache__/
-*.py[cod]
-.venv/
