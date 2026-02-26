@@ -28,12 +28,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, NamedTuple, Optional, Protocol, cast
 
-from ae_paper_review import (
-    ReviewResponseModel,
-    ReviewResult,
-    extract_abstract_from_pdf,
-    perform_imgs_cap_ref_review,
-)
+from ae_paper_review import Provider, ReviewResult
 from omegaconf import OmegaConf
 
 from ai_scientist.api_types import ArtifactType
@@ -81,6 +76,7 @@ from ai_scientist.treesearch.stages.stage2_tuning import Stage2Tuning
 from ai_scientist.treesearch.stages.stage3_plotting import Stage3Plotting
 from ai_scientist.treesearch.stages.stage4_ablation import Stage4Ablation
 from ai_scientist.treesearch.utils.serialize import load_json as load_json_dc
+from ai_scientist.vlm import extract_abstract_from_pdf, perform_imgs_cap_ref_review
 from management_server import (
     initialize_execution_registry,
     shutdown_execution_registry_manager,
@@ -821,18 +817,20 @@ def run_review_stage(
 
     logger.info("Paper found at: %s", pdf_path)
     review_model = review_cfg.model
+    provider_str, model_name = review_model.split(":", 1)
     review_result = perform_review(
         pdf_path,
-        model=review_model,
+        provider=Provider(provider_str),
+        model=model_name,
         temperature=review_cfg.temperature,
         event_callback=event_callback,
         run_id=run_id,
         num_reflections=1,
-        num_reviews_ensemble=3,
+        conference=review_cfg.conference,
     )
     if not isinstance(review_result, ReviewResult):
         raise TypeError("perform_review must return ReviewResult")
-    review: ReviewResponseModel = review_result.review
+    review = review_result.review
 
     # Extract abstract (has its own token usage)
     abstract_result = extract_abstract_from_pdf(

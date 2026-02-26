@@ -8,6 +8,7 @@ from typing import Hashable, Optional, cast
 
 import coolname  # type: ignore[import-untyped]
 import shutup  # type: ignore[import-untyped]
+from ae_paper_review import Conference
 from dataclasses_json import DataClassJsonMixin
 from omegaconf import OmegaConf
 
@@ -152,6 +153,7 @@ class WriteupConfig:
 class ReviewConfig:
     model: str
     temperature: float
+    conference: Conference
 
 
 @dataclass

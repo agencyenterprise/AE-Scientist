@@ -12,60 +12,34 @@ import {
   ChevronUp,
   Download,
   Loader2,
+  Eye,
 } from "lucide-react";
 import { config } from "@/shared/lib/config";
 import { withAuthHeaders } from "@/shared/lib/session-token";
-import type { components } from "@/types/api.gen";
+import type { AnyPaperReviewDetail } from "@/features/paper-review/api";
 
-// Use generated type for token usage
-export type TokenUsage = components["schemas"]["TokenUsage"];
-
-// Local types for nested review structure (different from flat API response)
-export interface ReviewContent {
-  summary: string;
-  strengths: string[];
-  weaknesses: string[];
-  questions: string[];
-  limitations: string[];
-  ethical_concerns: boolean;
-  ethical_concerns_explanation: string;
-  originality: number;
-  quality: number;
-  clarity: number;
-  significance: number;
-  soundness: number;
-  presentation: number;
-  contribution: number;
-  overall: number;
-  confidence: number;
-  decision: string;
-}
-
-export interface PaperReviewResponse {
-  id: number;
-  review: ReviewContent;
-  token_usage: TokenUsage;
-  cost_cents: number;
-  original_filename: string;
-  model: string;
-  created_at: string;
-}
+export type { AnyPaperReviewDetail };
 
 interface PaperReviewResultProps {
-  review: PaperReviewResponse;
+  data: AnyPaperReviewDetail;
 }
 
 interface ScoreMetric {
   label: string;
-  key: keyof ReviewContent;
+  key: string;
   max: number;
 }
 
-const SCORE_METRICS: ScoreMetric[] = [
-  { label: "Originality", key: "originality", max: 4 },
+const NEURIPS_METRICS: ScoreMetric[] = [
   { label: "Quality", key: "quality", max: 4 },
   { label: "Clarity", key: "clarity", max: 4 },
   { label: "Significance", key: "significance", max: 4 },
+  { label: "Originality", key: "originality", max: 4 },
+  { label: "Overall", key: "overall", max: 6 },
+  { label: "Confidence", key: "confidence", max: 5 },
+];
+
+const ICLR_METRICS: ScoreMetric[] = [
   { label: "Soundness", key: "soundness", max: 4 },
   { label: "Presentation", key: "presentation", max: 4 },
   { label: "Contribution", key: "contribution", max: 4 },
@@ -73,13 +47,19 @@ const SCORE_METRICS: ScoreMetric[] = [
   { label: "Confidence", key: "confidence", max: 5 },
 ];
 
-// Label mappings for scores
-const LABELS_LOW_TO_HIGH: Record<number, string> = {
-  1: "Low",
-  2: "Medium",
-  3: "High",
-  4: "Very high",
-};
+const ICML_METRICS: ScoreMetric[] = [{ label: "Overall", key: "overall", max: 5 }];
+
+function getMetricsForConference(conference: string): ScoreMetric[] {
+  if (conference === "neurips_2025") return NEURIPS_METRICS;
+  if (conference === "iclr_2025") return ICLR_METRICS;
+  return ICML_METRICS;
+}
+
+function getOverallMax(conference: string): number {
+  if (conference === "neurips_2025") return 6;
+  if (conference === "icml") return 5;
+  return 10;
+}
 
 const LABELS_POOR_TO_EXCELLENT: Record<number, string> = {
   1: "Poor",
@@ -88,17 +68,30 @@ const LABELS_POOR_TO_EXCELLENT: Record<number, string> = {
   4: "Excellent",
 };
 
-const LABELS_OVERALL: Record<number, string> = {
+const LABELS_NEURIPS_OVERALL: Record<number, string> = {
+  1: "Strong Reject",
+  2: "Reject",
+  3: "Borderline Reject",
+  4: "Borderline Accept",
+  5: "Accept",
+  6: "Strong Accept",
+};
+
+const LABELS_ICLR_OVERALL: Record<number, string> = {
   1: "Very Strong Reject",
-  2: "Strong Reject",
   3: "Reject",
-  4: "Borderline Reject",
-  5: "Borderline Accept",
-  6: "Weak Accept",
-  7: "Accept",
-  8: "Strong Accept",
-  9: "Very Strong Accept",
-  10: "Award Quality",
+  5: "Borderline Reject",
+  6: "Borderline Accept",
+  8: "Accept",
+  10: "Strong Accept",
+};
+
+const LABELS_ICML_OVERALL: Record<number, string> = {
+  1: "Reject",
+  2: "Weak Reject",
+  3: "Weak Accept",
+  4: "Accept",
+  5: "Strong Accept",
 };
 
 const LABELS_CONFIDENCE: Record<number, string> = {
@@ -109,19 +102,21 @@ const LABELS_CONFIDENCE: Record<number, string> = {
   5: "Absolutely certain",
 };
 
-function getScoreLabel(key: keyof ReviewContent, score: number): string {
+function getScoreLabel(key: string, score: number, conference: string): string {
   switch (key) {
     case "originality":
     case "quality":
     case "clarity":
     case "significance":
-      return LABELS_LOW_TO_HIGH[score] || "";
     case "soundness":
     case "presentation":
     case "contribution":
       return LABELS_POOR_TO_EXCELLENT[score] || "";
     case "overall":
-      return LABELS_OVERALL[score] || "";
+      if (conference === "neurips_2025") return LABELS_NEURIPS_OVERALL[score] || "";
+      if (conference === "iclr_2025") return LABELS_ICLR_OVERALL[score] || "";
+      if (conference === "icml") return LABELS_ICML_OVERALL[score] || "";
+      return "";
     case "confidence":
       return LABELS_CONFIDENCE[score] || "";
     default:
@@ -184,15 +179,19 @@ function CollapsibleSection({
   );
 }
 
-export function PaperReviewResult({ review }: PaperReviewResultProps) {
-  const content = review.review;
+export function PaperReviewResult({ data }: PaperReviewResultProps) {
   const [isDownloading, setIsDownloading] = useState(false);
+  const conference = data.conference;
+  const overallMax = getOverallMax(conference);
+  const scoreMetrics = getMetricsForConference(conference);
+  const decision = data.decision || "";
+  const overall = data.overall;
 
   const handleDownload = async () => {
     setIsDownloading(true);
     try {
       const headers = withAuthHeaders(new Headers());
-      const response = await fetch(`${config.apiUrl}/paper-reviews/${review.id}/download`, {
+      const response = await fetch(`${config.apiUrl}/paper-reviews/${data.id}/download`, {
         headers,
         credentials: "include",
       });
@@ -201,9 +200,8 @@ export function PaperReviewResult({ review }: PaperReviewResultProps) {
         return;
       }
 
-      const data = await response.json();
-      // Open the download URL in a new tab (it's a signed S3 URL)
-      window.open(data.download_url, "_blank");
+      const downloadData = await response.json();
+      window.open(downloadData.download_url, "_blank");
     } finally {
       setIsDownloading(false);
     }
@@ -213,22 +211,28 @@ export function PaperReviewResult({ review }: PaperReviewResultProps) {
     <div className="space-y-4 sm:space-y-6">
       {/* Decision Banner */}
       <div
-        className={`flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4 ${getDecisionColor(content.decision)}`}
+        className={`flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4 ${getDecisionColor(decision)}`}
       >
         <div className="flex items-center gap-3">
-          {getDecisionIcon(content.decision)}
+          {getDecisionIcon(decision)}
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-semibold">{content.decision}</span>
-              {content.overall !== null && content.overall !== undefined && content.overall > 0 && (
+              <span className="font-semibold">{decision}</span>
+              {overall != null && overall > 0 && (
                 <>
                   <span className="opacity-50">·</span>
-                  <span className="text-lg font-bold">{content.overall}/10</span>
-                  <span className="text-sm opacity-70">({LABELS_OVERALL[content.overall]})</span>
+                  <span className="text-lg font-bold">
+                    {overall}/{overallMax}
+                  </span>
+                  <span className="text-sm opacity-70">
+                    ({getScoreLabel("overall", overall, conference)})
+                  </span>
                 </>
               )}
             </div>
-            <div className="text-sm opacity-80">Cost: ${(review.cost_cents / 100).toFixed(2)}</div>
+            <div className="text-sm opacity-80">
+              Cost: ${((data.cost_cents ?? 0) / 100).toFixed(2)}
+            </div>
           </div>
         </div>
         <button
@@ -247,18 +251,24 @@ export function PaperReviewResult({ review }: PaperReviewResultProps) {
       </div>
 
       {/* Summary */}
-      <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-3 sm:p-4">
-        <h3 className="mb-2 font-medium text-white sm:mb-3">Summary</h3>
-        <p className="text-sm leading-relaxed text-slate-300">{content.summary}</p>
-      </div>
+      {data.summary && (
+        <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-3 sm:p-4">
+          <h3 className="mb-2 font-medium text-white sm:mb-3">Summary</h3>
+          <p className="text-sm leading-relaxed text-slate-300">{data.summary}</p>
+        </div>
+      )}
 
       {/* Scores Grid */}
       <div>
         <h3 className="mb-2 font-medium text-white sm:mb-3">Quantitative Scores</h3>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-5">
-          {SCORE_METRICS.map(metric => {
-            const score = content[metric.key] as number;
-            const label = getScoreLabel(metric.key, score);
+          {scoreMetrics.map(metric => {
+            const score = (data as Record<string, unknown>)[metric.key] as
+              | number
+              | null
+              | undefined;
+            if (score == null) return null;
+            const label = getScoreLabel(metric.key, score, conference);
             return (
               <div
                 key={metric.label}
@@ -280,83 +290,160 @@ export function PaperReviewResult({ review }: PaperReviewResultProps) {
         </div>
       </div>
 
-      {/* Strengths */}
-      <CollapsibleSection
-        title={`Strengths (${content.strengths.length})`}
-        icon={<ThumbsUp className="h-5 w-5 text-emerald-400" />}
-      >
-        <ul className="space-y-2">
-          {content.strengths.map((strength, i) => (
-            <li key={i} className="flex gap-2 text-sm text-slate-300">
-              <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-emerald-400" />
-              {strength}
-            </li>
-          ))}
-        </ul>
-      </CollapsibleSection>
-
-      {/* Weaknesses */}
-      <CollapsibleSection
-        title={`Weaknesses (${content.weaknesses.length})`}
-        icon={<ThumbsDown className="h-5 w-5 text-red-400" />}
-      >
-        <ul className="space-y-2">
-          {content.weaknesses.map((weakness, i) => (
-            <li key={i} className="flex gap-2 text-sm text-slate-300">
-              <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-red-400" />
-              {weakness}
-            </li>
-          ))}
-        </ul>
-      </CollapsibleSection>
-
-      {/* Questions */}
-      {content.questions.length > 0 && (
+      {/* NeurIPS: combined Strengths & Weaknesses */}
+      {data.conference === "neurips_2025" && data.strengths_and_weaknesses && (
         <CollapsibleSection
-          title={`Questions (${content.questions.length})`}
-          icon={<HelpCircle className="h-5 w-5 text-sky-400" />}
+          title="Strengths & Weaknesses"
+          icon={<ThumbsUp className="h-5 w-5 text-emerald-400" />}
+        >
+          <p className="text-sm leading-relaxed text-slate-300">{data.strengths_and_weaknesses}</p>
+        </CollapsibleSection>
+      )}
+
+      {/* ICLR: separate Strengths and Weaknesses */}
+      {data.conference === "iclr_2025" && (
+        <>
+          {data.strengths && data.strengths.length > 0 && (
+            <CollapsibleSection
+              title={`Strengths (${data.strengths.length})`}
+              icon={<ThumbsUp className="h-5 w-5 text-emerald-400" />}
+            >
+              <ul className="space-y-2">
+                {data.strengths.map((strength, i) => (
+                  <li key={i} className="flex gap-2 text-sm text-slate-300">
+                    <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-emerald-400" />
+                    {strength}
+                  </li>
+                ))}
+              </ul>
+            </CollapsibleSection>
+          )}
+          {data.weaknesses && data.weaknesses.length > 0 && (
+            <CollapsibleSection
+              title={`Weaknesses (${data.weaknesses.length})`}
+              icon={<ThumbsDown className="h-5 w-5 text-red-400" />}
+            >
+              <ul className="space-y-2">
+                {data.weaknesses.map((weakness, i) => (
+                  <li key={i} className="flex gap-2 text-sm text-slate-300">
+                    <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-red-400" />
+                    {weakness}
+                  </li>
+                ))}
+              </ul>
+            </CollapsibleSection>
+          )}
+        </>
+      )}
+
+      {/* ICML: claims, prior work, other aspects */}
+      {data.conference === "icml" && (
+        <>
+          {data.claims_and_evidence && (
+            <CollapsibleSection
+              title="Claims & Evidence"
+              icon={<CheckCircle className="h-5 w-5 text-emerald-400" />}
+            >
+              <p className="text-sm leading-relaxed text-slate-300">{data.claims_and_evidence}</p>
+            </CollapsibleSection>
+          )}
+          {data.relation_to_prior_work && (
+            <CollapsibleSection
+              title="Relation to Prior Work"
+              icon={<HelpCircle className="h-5 w-5 text-sky-400" />}
+            >
+              <p className="text-sm leading-relaxed text-slate-300">
+                {data.relation_to_prior_work}
+              </p>
+            </CollapsibleSection>
+          )}
+          {data.other_aspects && (
+            <CollapsibleSection
+              title="Other Aspects"
+              icon={<AlertTriangle className="h-5 w-5 text-amber-400" />}
+            >
+              <p className="text-sm leading-relaxed text-slate-300">{data.other_aspects}</p>
+            </CollapsibleSection>
+          )}
+        </>
+      )}
+
+      {/* Questions (ICLR and ICML) */}
+      {(data.conference === "iclr_2025" || data.conference === "icml") &&
+        data.questions &&
+        data.questions.length > 0 && (
+          <CollapsibleSection
+            title={`Questions (${data.questions.length})`}
+            icon={<HelpCircle className="h-5 w-5 text-sky-400" />}
+            defaultOpen={false}
+          >
+            <ul className="space-y-2">
+              {data.questions.map((question, i) => (
+                <li key={i} className="flex gap-2 text-sm text-slate-300">
+                  <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-sky-400" />
+                  {question}
+                </li>
+              ))}
+            </ul>
+          </CollapsibleSection>
+        )}
+
+      {/* Limitations (NeurIPS and ICLR) */}
+      {(data.conference === "neurips_2025" || data.conference === "iclr_2025") &&
+        data.limitations && (
+          <CollapsibleSection
+            title="Limitations"
+            icon={<AlertTriangle className="h-5 w-5 text-amber-400" />}
+            defaultOpen={false}
+          >
+            <p className="text-sm leading-relaxed text-slate-300">{data.limitations}</p>
+          </CollapsibleSection>
+        )}
+
+      {/* Clarity Issues (all conferences) */}
+      {data.clarity_issues && data.clarity_issues.length > 0 && (
+        <CollapsibleSection
+          title={`Clarity Issues (${data.clarity_issues.length})`}
+          icon={<Eye className="h-5 w-5 text-violet-400" />}
           defaultOpen={false}
         >
-          <ul className="space-y-2">
-            {content.questions.map((question, i) => (
-              <li key={i} className="flex gap-2 text-sm text-slate-300">
-                <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-sky-400" />
-                {question}
+          <ul className="space-y-3">
+            {data.clarity_issues.map((item, i) => (
+              <li key={i} className="text-sm text-slate-300">
+                <span className="font-medium text-violet-400">{item.location}:</span> {item.issue}
               </li>
             ))}
           </ul>
         </CollapsibleSection>
       )}
 
-      {/* Limitations */}
-      {content.limitations.length > 0 && (
-        <CollapsibleSection
-          title={`Limitations (${content.limitations.length})`}
-          icon={<AlertTriangle className="h-5 w-5 text-amber-400" />}
-          defaultOpen={false}
-        >
-          <ul className="space-y-2">
-            {content.limitations.map((limitation, i) => (
-              <li key={i} className="flex gap-2 text-sm text-slate-300">
-                <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-amber-400" />
-                {limitation}
-              </li>
-            ))}
-          </ul>
-        </CollapsibleSection>
-      )}
+      {/* Ethical Concerns (NeurIPS and ICLR) */}
+      {(data.conference === "neurips_2025" || data.conference === "iclr_2025") &&
+        data.ethical_concerns && (
+          <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-red-400 sm:p-4">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 shrink-0" />
+              <span className="text-sm font-medium">
+                Ethical concerns were identified in this paper
+              </span>
+            </div>
+            {data.ethical_concerns_explanation && (
+              <p className="mt-2 text-sm text-red-300">{data.ethical_concerns_explanation}</p>
+            )}
+          </div>
+        )}
 
-      {/* Ethical Concerns */}
-      {content.ethical_concerns && (
+      {/* Ethical Issues (ICML) */}
+      {data.conference === "icml" && data.ethical_issues && (
         <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-red-400 sm:p-4">
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 shrink-0" />
             <span className="text-sm font-medium">
-              Ethical concerns were identified in this paper
+              Ethical issues were identified in this paper
             </span>
           </div>
-          {content.ethical_concerns_explanation && (
-            <p className="mt-2 text-sm text-red-300">{content.ethical_concerns_explanation}</p>
+          {data.ethical_issues_explanation && (
+            <p className="mt-2 text-sm text-red-300">{data.ethical_issues_explanation}</p>
           )}
         </div>
       )}

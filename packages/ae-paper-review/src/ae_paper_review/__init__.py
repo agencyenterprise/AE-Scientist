@@ -1,46 +1,32 @@
 """ae-paper-review: Standalone paper review functionality for AI Scientist.
 
-This package provides LLM and VLM-based paper review capabilities that can be
+This package provides LLM-based paper review capabilities that can be
 used independently of the full research pipeline.
 
-Example usage:
-    from pathlib import Path
-    from ae_paper_review import perform_review
+Each conference model matches the official review form structure:
+- NeurIPS 2025: Combined strengths_and_weaknesses, 1-6 overall scale
+- ICLR 2025: Separate strengths/weaknesses, soundness/presentation/contribution
+- ICML 2025: Claims-based assessment, no confidence score
 
-    result = perform_review(
-        Path("paper.pdf"),
-        model="anthropic:claude-sonnet-4-20250514",
-        temperature=0.1,
-        event_callback=lambda e: print(f"Progress: {e.progress:.0%}"),
-        num_reflections=1,
-        num_fs_examples=1,
-        num_reviews_ensemble=3,
-    )
-
-    # Access review results
-    print(f"Decision: {result.review.decision}")
-    print(f"Overall Score: {result.review.overall}")
-    print(f"Tokens used: {result.token_usage}")
 """
 
-from .llm.token_tracking import TokenUsage, TokenUsageDetail
+from .llm.base import Provider
+from .llm.token_tracking import TokenUsage, TokenUsageDetail, TokenUsageSummary
 from .llm_review import (
-    AbstractExtractionResult,
+    REVIEW_RUBRIC_MENTIONS_REPRODUCIBILITY,
     ReviewProgressEvent,
     ReviewResult,
-    extract_abstract_from_pdf,
     perform_review,
 )
-from .models import FigureImageCaptionRefReview, ReviewResponseModel
-from .vlm_review import (
-    DuplicateFiguresResult,
-    FigureReviewResult,
-    FigureSelectionReviewResult,
-    ImageReviewResult,
-    detect_duplicate_figures,
-    generate_vlm_img_review,
-    perform_imgs_cap_ref_review,
-    perform_imgs_cap_ref_review_selection,
+from .models import (
+    ClarityIssue,
+    Conference,
+    ICLRReviewModel,
+    ICMLReviewModel,
+    MissingReferencesResults,
+    NeurIPSReviewModel,
+    PresentationCheckResults,
+    ReviewModel,
 )
 
 __version__ = "0.1.0"
@@ -48,25 +34,26 @@ __version__ = "0.1.0"
 __all__ = [
     # Version
     "__version__",
-    # Models
-    "ReviewResponseModel",
-    "FigureImageCaptionRefReview",
+    # Provider
+    "Provider",
+    # Conference-specific models
+    "ClarityIssue",
+    "NeurIPSReviewModel",
+    "ICLRReviewModel",
+    "ICMLReviewModel",
+    # Pipeline result models
+    "MissingReferencesResults",
+    "PresentationCheckResults",
+    # Review
+    "ReviewModel",
+    "Conference",
     # LLM Review
+    "REVIEW_RUBRIC_MENTIONS_REPRODUCIBILITY",
     "perform_review",
     "ReviewResult",
     "ReviewProgressEvent",
-    "extract_abstract_from_pdf",
-    "AbstractExtractionResult",
     # Token Usage
+    "TokenUsageSummary",
     "TokenUsage",
     "TokenUsageDetail",
-    # VLM Review
-    "generate_vlm_img_review",
-    "perform_imgs_cap_ref_review",
-    "perform_imgs_cap_ref_review_selection",
-    "detect_duplicate_figures",
-    "FigureReviewResult",
-    "FigureSelectionReviewResult",
-    "DuplicateFiguresResult",
-    "ImageReviewResult",
 ]

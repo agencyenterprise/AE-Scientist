@@ -19,11 +19,11 @@ import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import { config } from "@/shared/lib/config";
 import { withAuthHeaders } from "@/shared/lib/session-token";
-import { PaperReviewResult, type PaperReviewResponse } from "./PaperReviewResult";
+import { PaperReviewResult, type AnyPaperReviewDetail } from "./PaperReviewResult";
 import type { components } from "@/types/api.gen";
 
 // Use generated types from OpenAPI schema
-type ReviewDetailResponse = components["schemas"]["PaperReviewDetail"];
+type ReviewDetailResponse = AnyPaperReviewDetail;
 type PaperReviewSummary = components["schemas"]["PaperReviewSummary"];
 type PaperReviewListResponse = components["schemas"]["PaperReviewListResponse"];
 
@@ -81,10 +81,17 @@ function getStatusText(
   }
 }
 
-function getScoreColor(score: number | null | undefined): string {
+function getOverallMax(conference: string | null | undefined): number {
+  if (conference === "neurips_2025") return 6;
+  if (conference === "icml") return 5;
+  return 10;
+}
+
+function getScoreColor(score: number | null | undefined, max: number): string {
   if (score === null || score === undefined) return "text-slate-500";
-  if (score >= 7) return "text-emerald-400";
-  if (score >= 5) return "text-amber-400";
+  const ratio = score / max;
+  if (ratio >= 0.75) return "text-emerald-400";
+  if (ratio >= 0.5) return "text-amber-400";
   return "text-red-400";
 }
 
@@ -100,7 +107,7 @@ export function PaperReviewHistory({ refreshKey }: PaperReviewHistoryProps) {
 
   // State for expanded review
   const [expandedReviewId, setExpandedReviewId] = useState<number | null>(null);
-  const [expandedReviewData, setExpandedReviewData] = useState<PaperReviewResponse | null>(null);
+  const [expandedReviewData, setExpandedReviewData] = useState<ReviewDetailResponse | null>(null);
   const [loadingReviewId, setLoadingReviewId] = useState<number | null>(null);
 
   const fetchReviews = async () => {
@@ -141,40 +148,7 @@ export function PaperReviewHistory({ refreshKey }: PaperReviewHistoryProps) {
 
       const data: ReviewDetailResponse = await response.json();
 
-      // Transform to PaperReviewResponse format
-      const result: PaperReviewResponse = {
-        id: data.id,
-        review: {
-          summary: data.summary || "",
-          strengths: data.strengths || [],
-          weaknesses: data.weaknesses || [],
-          questions: data.questions || [],
-          limitations: data.limitations || [],
-          ethical_concerns: data.ethical_concerns || false,
-          ethical_concerns_explanation: data.ethical_concerns_explanation || "",
-          originality: data.originality || 0,
-          quality: data.quality || 0,
-          clarity: data.clarity || 0,
-          significance: data.significance || 0,
-          soundness: data.soundness || 0,
-          presentation: data.presentation || 0,
-          contribution: data.contribution || 0,
-          overall: data.overall || 0,
-          confidence: data.confidence || 0,
-          decision: data.decision || "",
-        },
-        token_usage: data.token_usage || {
-          input_tokens: 0,
-          cached_input_tokens: 0,
-          output_tokens: 0,
-        },
-        cost_cents: data.cost_cents || 0,
-        original_filename: data.original_filename,
-        model: data.model,
-        created_at: data.created_at,
-      };
-
-      setExpandedReviewData(result);
+      setExpandedReviewData(data);
       setExpandedReviewId(reviewId);
     } catch (err) {
       Sentry.captureException(err);
@@ -259,6 +233,7 @@ export function PaperReviewHistory({ refreshKey }: PaperReviewHistoryProps) {
         const isLoading = loadingReviewId === review.id;
         const isRestricted = review.access_restricted === true;
         const isClickable = review.status === "completed" && !isRestricted;
+        const overallMax = getOverallMax(review.conference);
 
         return (
           <div key={review.id}>
@@ -326,7 +301,9 @@ export function PaperReviewHistory({ refreshKey }: PaperReviewHistoryProps) {
                   {review.status === "completed" && review.overall !== null && !isRestricted && (
                     <span>
                       Score:{" "}
-                      <span className={getScoreColor(review.overall)}>{review.overall}/10</span>
+                      <span className={getScoreColor(review.overall, overallMax)}>
+                        {review.overall}/{overallMax}
+                      </span>
                     </span>
                   )}
                   <span className="hidden sm:inline">{review.model.split("/").pop()}</span>
@@ -378,7 +355,7 @@ export function PaperReviewHistory({ refreshKey }: PaperReviewHistoryProps) {
                     Close
                   </button>
                 </div>
-                <PaperReviewResult review={expandedReviewData} />
+                <PaperReviewResult data={expandedReviewData} />
               </div>
             )}
           </div>

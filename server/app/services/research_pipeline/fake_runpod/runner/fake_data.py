@@ -167,6 +167,7 @@ class FakeDataMixin:
                 model="openai:gpt-5.2",
                 input_tokens=input_tokens,
                 cached_input_tokens=cached_tokens,
+                cache_write_input_tokens=0,
                 output_tokens=output_tokens,
             )
             try:

@@ -6,14 +6,15 @@ Reviews are processed asynchronously in the background.
 """
 
 import logging
-from typing import List, Optional
+from typing import List, Literal, Optional
 
+from ae_paper_review import Conference
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
 
 from app.middleware.auth import get_current_user
 from app.models.billing import InsufficientBalanceError
-from app.models.paper_review import PaperReviewDetail
+from app.models.paper_review import AnyPaperReviewDetail
 from app.services.paper_review_service import get_paper_review_service
 
 router = APIRouter(prefix="/paper-reviews", tags=["paper-reviews"])
@@ -59,6 +60,9 @@ class PaperReviewSummary(BaseModel):
     access_restricted: bool = Field(
         False,
         description="True if user cannot view full review details due to insufficient credits",
+    )
+    conference: Optional[Literal["neurips_2025", "iclr_2025", "icml"]] = Field(
+        None, description="Conference schema used for review"
     )
     progress: float = Field(..., description="Review progress (0.0-1.0)")
     progress_step: str = Field(
@@ -112,10 +116,9 @@ async def create_paper_review(
     request: Request,
     file: UploadFile = File(..., description="PDF file to review"),
     model: str = Form(..., description="LLM model to use for review (provider:model format)"),
-    num_reviews_ensemble: int = Form(
-        ..., ge=1, le=5, description="Number of ensemble reviews (1-5)"
+    conference: str = Form(
+        ..., description="Conference schema to use (e.g. neurips_2025, iclr_2025, icml)"
     ),
-    num_reflections: int = Form(..., ge=0, le=3, description="Number of reflection rounds (0-3)"),
 ) -> PaperReviewStartedResponse:
     """
     Submit a paper for review.
@@ -155,8 +158,7 @@ async def create_paper_review(
             pdf_content=pdf_content,
             original_filename=file.filename,
             model=model,
-            num_reviews_ensemble=num_reviews_ensemble,
-            num_reflections=num_reflections,
+            conference=Conference(conference),
         )
 
         return PaperReviewStartedResponse(
@@ -228,11 +230,11 @@ async def list_paper_reviews(
         raise HTTPException(status_code=500, detail="Failed to list reviews") from e
 
 
-@router.get("/{review_id}", response_model=PaperReviewDetail)
+@router.get("/{review_id}", response_model=AnyPaperReviewDetail)
 async def get_paper_review(
     review_id: int,
     request: Request,
-) -> PaperReviewDetail:
+) -> AnyPaperReviewDetail:
     """
     Get a specific paper review by ID.
 

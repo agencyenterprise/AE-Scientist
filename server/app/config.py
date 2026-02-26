@@ -73,6 +73,16 @@ class LLMPricing:
             return self.get_input_price(model=model)
         return int(cached)
 
+    def get_cache_write_input_price(self, model: str) -> int:
+        """Get cache-write input price, falling back to normal input price."""
+        try:
+            cache_write = self._pricing_data[model].get("cache_write_input")
+        except KeyError:
+            raise ValueError(f"Pricing not found for model '{model}'.")
+        if cache_write is None:
+            return self.get_input_price(model=model)
+        return int(cache_write)
+
     def get_output_price(self, model: str) -> int:
         """Get the output price for a specific model in cents per million tokens."""
         try:

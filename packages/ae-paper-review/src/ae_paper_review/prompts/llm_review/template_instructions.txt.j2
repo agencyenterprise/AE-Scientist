@@ -1,6 +1,13 @@
-Produce a rigorous NeurIPS-style review. Your response must be valid JSON matching the ReviewResponseModel schema (fields defined via the structured output description).
+Produce a rigorous review following the conference format above. Your response must be valid JSON matching the schema (fields defined via the structured output description).
 
 Use every field exactly once and respect the documented rating scales. Ground every claim in the paper or provided context.
 
-For the "Decision" field, do not use Weak Accept, Borderline Accept, Borderline Reject, or Strong Reject. Only use Accept or Reject.
-
+For the "Decision" field, output only Accept or Reject.
+{% if conference_rubric == "neurips_2025" %}
+The Decision MUST be mechanically derived from your Overall score: scores 1-3 map to Reject, scores 4-6 map to Accept.
+{% elif conference_rubric == "iclr_2025" %}
+The Decision MUST be mechanically derived from your Overall score: scores 1, 3, or 5 map to Reject; scores 6, 8, or 10 map to Accept.
+{% elif conference_rubric == "icml" %}
+The Decision MUST be mechanically derived from your Overall score: scores 1-2 map to Reject, scores 3-5 map to Accept.
+{% endif %}
+Do not override this mapping. If you disagree with the implied decision, change your Overall score to reflect your true assessment, not the Decision field.

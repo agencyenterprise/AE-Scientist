@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Callable
 
 from ae_paper_review import (
+    Conference,
+    Provider,
     ReviewProgressEvent,
     ReviewResult,
     TokenUsage,
@@ -55,6 +57,7 @@ def _publish_token_usage(
                     model=usage_record.model,
                     input_tokens=usage_record.input_tokens,
                     cached_input_tokens=usage_record.cached_input_tokens,
+                    cache_write_input_tokens=usage_record.cache_write_input_tokens,
                     output_tokens=usage_record.output_tokens,
                 ),
             )
@@ -113,12 +116,13 @@ def make_event_callback_adapter(
 def perform_review(
     pdf_path: Path,
     *,
+    provider: Provider,
     model: str,
     temperature: float,
     event_callback: Callable[[BaseEvent], None],
     run_id: str,
     num_reflections: int,
-    num_reviews_ensemble: int,
+    conference: Conference,
 ) -> ReviewResult:
     """Perform paper review with research_pipeline integration.
 
@@ -128,31 +132,35 @@ def perform_review(
 
     Args:
         pdf_path: Path to the PDF file to review
-        model: LLM model identifier in "provider:model" format (e.g., "anthropic:claude-sonnet-4-20250514")
+        provider: LLM provider enum
+        model: Model name (e.g., "claude-sonnet-4-20250514")
         temperature: Sampling temperature
         event_callback: Callback for progress events (expects BaseEvent)
         run_id: Run ID for events
         num_reflections: Number of reflection rounds
-        num_reviews_ensemble: Number of ensemble reviews
+        conference: Target conference for the review
 
     Returns:
         ReviewResult containing review and token usage
     """
-    # Adapt event callback for the package's ReviewProgressEvent type
     adapted_callback = make_event_callback_adapter(run_id, event_callback)
 
-    # Perform the review (returns ReviewResult with token usage)
     result = _perform_review(
         pdf_path=pdf_path,
+        provider=provider,
         model=model,
         temperature=temperature,
         event_callback=adapted_callback,
         num_reflections=num_reflections,
-        num_fs_examples=1,
-        num_reviews_ensemble=num_reviews_ensemble,
+        conference=conference,
+        provide_rubric=True,
+        skip_novelty_search=False,
+        skip_citation_check=False,
+        skip_missing_references=False,
+        skip_presentation_check=False,
+        is_vanilla_prompt=False,
     )
 
-    # Publish token usage to webhook if configured
     webhook_client = _get_webhook_client()
     _publish_token_usage(webhook_client, result.token_usage_detailed)
 

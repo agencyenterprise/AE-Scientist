@@ -27,11 +27,18 @@ _.memory_total_mib  # gpu_manager.py
 _.partition  # hw_stats.py
 _.to_stage  # agent_manager.py
 _.config_adjustments  # agent_manager.py
+_.populate_by_name  # ai_scientist/vlm/* - Pydantic Config attribute
+_.overall_comments  # ai_scientist/vlm/models.py - structured response field
+_.containing_sub_figures  # ai_scientist/vlm/models.py - structured response field
+_.informative_review  # ai_scientist/vlm/models.py - structured response field
+_.caption  # ai_scientist/vlm/review.py - NamedTuple -> _asdict() context
+_.main_text_figrefs  # ai_scientist/vlm/review.py - NamedTuple -> _asdict() context
 
 # Callback methods (called by frameworks)
 _.on_llm_end  # token_tracker.py - LangChain callback
 _.stop  # event_persistence.py, hw_stats.py - thread stop methods
 _.close  # artifact_manager.py - context manager
+_.get_source  # ai_scientist/vlm/render.py - Jinja2 loader protocol
 
 # Classes/functions used by external code or tests
 _.ArtifactPublisher  # artifact_manager.py

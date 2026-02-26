@@ -9,15 +9,11 @@ Usage:
 """
 
 import argparse
-import importlib.resources
 import logging
 import sys
 from pathlib import Path
 
-from ae_paper_review import ReviewProgressEvent, perform_review
-
-# Default test PDF from fewshot examples
-DEFAULT_PDF = "2_carpe_diem.pdf"
+from ae_paper_review import Conference, Provider, ReviewProgressEvent, perform_review
 
 logging.basicConfig(
     level=logging.INFO,
@@ -71,21 +67,28 @@ def test_model(pdf_path: Path, model: str) -> dict:
     print("=" * 60)
 
     try:
+        provider_str, model_name = model.split(":", 1)
         result = perform_review(
-            pdf_path,
-            model=model,
-            temperature=1,
+            pdf_path=pdf_path,
+            provider=Provider(provider_str),
+            model=model_name,
+            temperature=1.0,
             event_callback=progress_callback,
             num_reflections=1,
-            num_fs_examples=1, 
-            num_reviews_ensemble=1, 
+            conference=Conference.NEURIPS_2025,
+            provide_rubric=True,
+            skip_novelty_search=False,
+            skip_citation_check=False,
+            skip_missing_references=False,
+            skip_presentation_check=False,
+            is_vanilla_prompt=False,
         )
 
-        print(f"\nResult:")
+        print("\nResult:")
         print(f"  Decision: {result.review.decision}")
         print(f"  Overall Score: {result.review.overall}")
         print(f"  Confidence: {result.review.confidence}")
-        print(f"  Token Usage:")
+        print("  Token Usage:")
         print(f"    Input: {result.token_usage.input_tokens}")
         print(f"    Cached: {result.token_usage.cached_input_tokens}")
         print(f"    Output: {result.token_usage.output_tokens}")
@@ -109,20 +112,12 @@ def test_model(pdf_path: Path, model: str) -> dict:
         }
 
 
-def get_default_pdf_path() -> Path:
-    """Get the path to the default test PDF from fewshot examples."""
-    files = importlib.resources.files("ae_paper_review.fewshot_examples")
-    pdf_file = files.joinpath(DEFAULT_PDF)
-    with importlib.resources.as_file(pdf_file) as pdf_path:
-        return Path(pdf_path)
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description="Test perform_review with all supported models")
     parser.add_argument(
         "--pdf",
         type=Path,
-        help=f"Path to a PDF file to review (default: fewshot_examples/{DEFAULT_PDF})",
+        help="Path to a PDF file to review",
     )
     parser.add_argument(
         "--provider",
@@ -133,34 +128,17 @@ def main() -> None:
         "--model",
         help="Test a specific model (e.g., 'anthropic:claude-sonnet-4-5')",
     )
-    parser.add_argument(
-        "--num-reflections",
-        type=int,
-        default=1,
-        help="Number of reflection rounds (default: 1)",
-    )
-    parser.add_argument(
-        "--num-fs-examples",
-        type=int,
-        default=0,
-        help="Number of few-shot examples (default: 0)",
-    )
-    parser.add_argument(
-        "--num-ensemble",
-        type=int,
-        default=1,
-        help="Number of ensemble reviews (default: 1)",
-    )
     args = parser.parse_args()
 
     # Get PDF path
-    if args.pdf:
-        pdf_path = args.pdf
-        if not pdf_path.exists():
-            print(f"Error: PDF file not found: {pdf_path}")
-            sys.exit(1)
-    else:
-        pdf_path = get_default_pdf_path()
+    if args.pdf is None:
+        print("Error: --pdf is required because no default sample PDF is bundled.")
+        sys.exit(1)
+
+    pdf_path = args.pdf
+    if not pdf_path.exists():
+        print(f"Error: PDF file not found: {pdf_path}")
+        sys.exit(1)
 
     # Determine which models to test
     if args.model:
@@ -176,7 +154,6 @@ def main() -> None:
         models_to_test = ALL_MODELS
 
     print(f"Testing {len(models_to_test)} model(s) with PDF: {pdf_path}")
-    print(f"Settings: reflections={args.num_reflections}, fs_examples={args.num_fs_examples}, ensemble={args.num_ensemble}")
 
     results = []
     for model in models_to_test:

@@ -62,6 +62,7 @@ def save_cost_track(
     *,
     input_tokens: int,
     cached_input_tokens: int,
+    cache_write_input_tokens: int,
     output_tokens: int,
 ) -> None:
     """Save token usage either via webhook or to file depending on environment.
@@ -70,6 +71,7 @@ def save_cost_track(
         model: Model in "provider:model" format (e.g., "anthropic:claude-sonnet-4-20250514")
         input_tokens: Number of input tokens used
         cached_input_tokens: Number of cached input tokens
+        cache_write_input_tokens: Number of cache-write input tokens
         output_tokens: Number of output tokens used
     """
     run_id = RUN_ID
@@ -79,6 +81,7 @@ def save_cost_track(
             model=model,
             input_tokens=input_tokens,
             cached_input_tokens=cached_input_tokens,
+            cache_write_input_tokens=cache_write_input_tokens,
             output_tokens=output_tokens,
         )
     else:
@@ -99,6 +102,7 @@ def save_webhook_cost_track(
     model: str,
     input_tokens: int,
     cached_input_tokens: int,
+    cache_write_input_tokens: int,
     output_tokens: int,
 ) -> None:
     """Publish token usage via webhook.
@@ -107,6 +111,7 @@ def save_webhook_cost_track(
         model: Model in "provider:model" format (e.g., "anthropic:claude-sonnet-4-20250514")
         input_tokens: Number of input tokens used
         cached_input_tokens: Number of cached input tokens
+        cache_write_input_tokens: Number of cache-write input tokens
         output_tokens: Number of output tokens used
     """
     webhook_client = _get_webhook_client()
@@ -121,6 +126,7 @@ def save_webhook_cost_track(
                 model=model,
                 input_tokens=input_tokens,
                 cached_input_tokens=cached_input_tokens,
+                cache_write_input_tokens=cache_write_input_tokens,
                 output_tokens=output_tokens,
             ),
         )
@@ -208,11 +214,15 @@ class TrackCostCallbackHandler(BaseCallbackHandler):
                 cached_input_tokens = _usage_value_to_int(
                     value=usage_metadata.get("cached_input_tokens")
                 )
+                cache_write_input_tokens = _usage_value_to_int(
+                    value=usage_metadata.get("cache_creation_input_tokens")
+                )
                 output_tokens = _usage_value_to_int(value=usage_metadata.get("output_tokens"))
                 save_cost_track(
                     model=model_name,
                     input_tokens=input_tokens,
                     cached_input_tokens=cached_input_tokens,
+                    cache_write_input_tokens=cache_write_input_tokens,
                     output_tokens=output_tokens,
                 )
         except Exception:

@@ -31,8 +31,10 @@ dependencies = [
     "openai>=2.7.1",
     "pandas>=2.3.3",
     "pydantic[email]>=2.12.4",
+    "pillow>=10.0.0",
     "pymongo>=4.15.3",
-    # pymupdf, pymupdf4llm, pypdf provided by ae-paper-review
+    "pymupdf>=1.26.0",
+    "pymupdf4llm>=0.1.0",
     "python-dotenv>=1.2.1",
     "python-magic>=0.4.27",
     "python-ulid>=3.1.0",

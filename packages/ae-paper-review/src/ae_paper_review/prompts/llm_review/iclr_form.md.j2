@@ -1,0 +1,52 @@
+## Review Form (ICLR 2025)
+Below is a description of the questions you will be asked on the review form for each paper. This follows ICLR 2025 review guidelines (OpenReview format).
+After decisions have been made, reviews of accepted papers and opted-in rejected papers will be made public on OpenReview.
+
+1. **Summary**: Briefly summarize the paper and its contributions. This is not the place to critique the paper; the authors should generally agree with a well-written summary.
+
+2. **Strengths**: A substantive assessment of the strengths of the paper, touching on each of the following dimensions: originality, quality, clarity, and significance. We encourage reviewers to be broad in their definitions of originality and significance. For example, originality may arise from a new definition or problem formulation, creative combinations of existing ideas, application to a new domain, or removing limitations from prior results.
+
+3. **Weaknesses**: A substantive assessment of the weaknesses of the paper. Focus on constructive and actionable insights on how the work could improve towards its stated goals. Be specific, avoid generic remarks. For example, if you believe the contribution lacks novelty, provide references and an explanation as evidence; if you believe experiments are insufficient, explain why and exactly what is missing, etc. When identifying experimental weaknesses, name the specific missing experiment, absent control, omitted baseline, or untested alternative explanation. Assess whether evaluation metrics are appropriate and complete: Are standard metrics for this task included? Are relevant baselines compared? Is statistical significance or variance reported? Assess reproducibility: Is code available or promised? Are hyperparameters fully specified? Is the dataset accessible or described sufficiently to reconstruct? Can the experiments be reproduced from the information provided?
+
+4. **Questions**: Please list up and carefully describe any questions and suggestions for the authors. Think of the things where a response from the author can change your opinion, clarify a confusion or address a limitation. This is important for a productive rebuttal and discussion phase with the authors.
+
+5. **Ethical Concerns**: If there are ethical issues with this paper, please flag the paper for an ethics review and explain the specific concerns.
+
+6. **Clarity Issues**: List each specific clarity problem you identified. For each, state the location (Section, Equation, Figure, Table) and describe what is unclear or misleading. If no issues found, return an empty list. When assessing clarity, explicitly check for: undefined or inconsistent notation, undefined acronyms on first use, claims that lack supporting references to specific sections/figures/tables, logical gaps between sections, results discussed in text but not shown in any figure or table, and paragraphs that require re-reading to understand.
+
+7. **Soundness**: Please assign the paper a numerical rating on the following scale to indicate the soundness of the technical claims, experimental and research methodology and on whether the central claims of the paper are adequately supported with evidence.
+   - 4: excellent
+   - 3: good
+   - 2: fair
+   - 1: poor
+
+8. **Presentation**: Please assign the paper a numerical rating on the following scale to indicate the quality of the presentation. This should take into account the writing style and clarity, as well as contextualization relative to prior work. Visually inspect figures, tables, and mathematical notation: are figures legible with clear labels and captions? Are tables well-aligned and consistently formatted? Is mathematical notation correct, consistent, and unambiguous? If you rate this 1 (poor) or 2 (fair), you must list at least two entries in Clarity Issues above.
+   - 4: excellent
+   - 3: good
+   - 2: fair
+   - 1: poor
+
+9. **Contribution**: Please assign the paper a numerical rating on the following scale to indicate the quality of the overall contribution this paper makes to the research area being studied. Are the questions being asked important? Does the paper bring a significant originality of ideas and/or execution? Are the results valuable to share with the broader ICLR community?
+   - 4: excellent
+   - 3: good
+   - 2: fair
+   - 1: poor
+
+10. **Overall**: Please provide an "overall score" for this submission. IMPORTANT: ICLR 2025 uses discrete values only. You MUST choose one of: 1, 3, 5, 6, 8, or 10. For borderline papers where you are choosing between a score above and below the acceptance threshold (e.g., 5 vs 6): if weaknesses include any unreproducible claim, missing critical baseline, or unsupported core contribution, choose the lower score. Otherwise choose the higher score.
+    - 10: strong accept, should be highlighted at the conference
+    - 8: accept, good paper
+    - 6: marginally above the acceptance threshold
+    - 5: marginally below the acceptance threshold
+    - 3: reject, not good enough
+    - 1: strong reject
+
+11. **Confidence**: Please provide a "confidence score" for your assessment. Choices:
+    - 5: You are absolutely certain about your assessment. You are very familiar with the related work and checked the math/other details carefully.
+    - 4: You are confident in your assessment, but not absolutely certain. It is unlikely, but not impossible, that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work.
+    - 3: You are fairly confident in your assessment. It is possible that you did not understand some parts of the submission or that you are unfamiliar with some pieces of related work. Math/other details were not carefully checked.
+    - 2: You are willing to defend your assessment, but it is quite likely that you did not understand the central parts of the submission or that you are unfamiliar with some pieces of related work. Math/other details were not carefully checked.
+    - 1: You are unable to assess this paper and have alerted the area chairs to seek an opinion from different reviewers.
+
+12. **Decision**: Output only `Accept` or `Reject`. The Decision is derived from the Overall score (see template instructions below).
+
+{% include "llm_review/template_instructions.txt.j2" %}

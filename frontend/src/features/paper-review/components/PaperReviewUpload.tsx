@@ -10,13 +10,13 @@ import {
 } from "@/shared/utils/costs";
 import { ModelSelector } from "@/features/model-selector/components/ModelSelector";
 import { PromptTypes } from "@/shared/lib/prompt-types";
-import { PaperReviewResult, type PaperReviewResponse } from "./PaperReviewResult";
+import { PaperReviewResult, type AnyPaperReviewDetail } from "./PaperReviewResult";
 import type { components } from "@/types/api.gen";
 
 type UploadState = "idle" | "uploading" | "polling" | "complete" | "error";
 
 // Use generated types from OpenAPI schema
-type ReviewDetailResponse = components["schemas"]["PaperReviewDetail"];
+type ReviewDetailResponse = AnyPaperReviewDetail;
 type PendingReviewSummary = components["schemas"]["PendingReviewSummary"];
 type PaperReviewStartedResponse = components["schemas"]["PaperReviewStartedResponse"];
 
@@ -31,7 +31,7 @@ export function PaperReviewUpload({ onStartNewReview }: PaperReviewUploadProps) 
   const [uploadState, setUploadState] = useState<UploadState>("idle");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [reviewResult, setReviewResult] = useState<PaperReviewResponse | null>(null);
+  const [reviewResult, setReviewResult] = useState<ReviewDetailResponse | null>(null);
 
   // Track the current review being polled
   const [currentReviewId, setCurrentReviewId] = useState<number | null>(null);
@@ -126,39 +126,7 @@ export function PaperReviewUpload({ onStartNewReview }: PaperReviewUploadProps) 
             return;
           }
 
-          // Review is complete - transform to the format PaperReviewResult expects
-          const result: PaperReviewResponse = {
-            id: data.id,
-            review: {
-              summary: data.summary || "",
-              strengths: data.strengths || [],
-              weaknesses: data.weaknesses || [],
-              questions: data.questions || [],
-              limitations: data.limitations || [],
-              ethical_concerns: data.ethical_concerns || false,
-              ethical_concerns_explanation: data.ethical_concerns_explanation || "",
-              originality: data.originality || 0,
-              quality: data.quality || 0,
-              clarity: data.clarity || 0,
-              significance: data.significance || 0,
-              soundness: data.soundness || 0,
-              presentation: data.presentation || 0,
-              contribution: data.contribution || 0,
-              overall: data.overall || 0,
-              confidence: data.confidence || 0,
-              decision: data.decision || "",
-            },
-            token_usage: data.token_usage || {
-              input_tokens: 0,
-              cached_input_tokens: 0,
-              output_tokens: 0,
-            },
-            cost_cents: data.cost_cents || 0,
-            original_filename: data.original_filename,
-            model: data.model,
-            created_at: data.created_at,
-          };
-          setReviewResult(result);
+          setReviewResult(data);
           setUploadState("complete");
           setCurrentReviewId(null);
         } else if (data.status === "failed") {
@@ -227,9 +195,7 @@ export function PaperReviewUpload({ onStartNewReview }: PaperReviewUploadProps) 
         formData.append("model", `${effectiveProvider}:${effectiveModel}`);
       }
 
-      // Review parameters (hardcoded for now, user can't configure these yet)
-      formData.append("num_reviews_ensemble", "3");
-      formData.append("num_reflections", "1");
+      formData.append("conference", "neurips_2025");
 
       // Use fetch directly for multipart form data
       const headers = withAuthHeaders(new Headers());
@@ -339,7 +305,7 @@ export function PaperReviewUpload({ onStartNewReview }: PaperReviewUploadProps) 
             Upload Another Paper
           </button>
         </div>
-        <PaperReviewResult review={reviewResult} />
+        <PaperReviewResult data={reviewResult} />
       </div>
     );
   }

@@ -4,46 +4,9 @@ import { useParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2, ArrowLeft, AlertCircle, Lock } from "lucide-react";
 import Link from "next/link";
-import { fetchPaperReview, type PaperReviewDetail } from "@/features/paper-review/api";
-import {
-  PaperReviewResult,
-  type PaperReviewResponse,
-} from "@/features/paper-review/components/PaperReviewResult";
+import { fetchPaperReview } from "@/features/paper-review/api";
+import { PaperReviewResult } from "@/features/paper-review/components/PaperReviewResult";
 import { PageCard } from "@/shared/components/PageCard";
-
-function transformToReviewResponse(data: PaperReviewDetail): PaperReviewResponse {
-  return {
-    id: data.id,
-    review: {
-      summary: data.summary || "",
-      strengths: data.strengths || [],
-      weaknesses: data.weaknesses || [],
-      questions: data.questions || [],
-      limitations: data.limitations || [],
-      ethical_concerns: data.ethical_concerns || false,
-      ethical_concerns_explanation: data.ethical_concerns_explanation || "",
-      originality: data.originality || 0,
-      quality: data.quality || 0,
-      clarity: data.clarity || 0,
-      significance: data.significance || 0,
-      soundness: data.soundness || 0,
-      presentation: data.presentation || 0,
-      contribution: data.contribution || 0,
-      overall: data.overall || 0,
-      confidence: data.confidence || 0,
-      decision: data.decision || "",
-    },
-    token_usage: data.token_usage || {
-      input_tokens: 0,
-      cached_input_tokens: 0,
-      output_tokens: 0,
-    },
-    cost_cents: data.cost_cents || 0,
-    original_filename: data.original_filename,
-    model: data.model,
-    created_at: data.created_at,
-  };
-}
 
 export default function PaperReviewDetailPage() {
   const params = useParams();
@@ -63,10 +26,7 @@ export default function PaperReviewDetailPage() {
 
   const isNotCompleted = reviewData && reviewData.status !== "completed";
   const isAccessRestricted = reviewData?.access_restricted === true;
-  const review =
-    reviewData && !isNotCompleted && !isAccessRestricted
-      ? transformToReviewResponse(reviewData)
-      : null;
+  const review = reviewData && !isNotCompleted && !isAccessRestricted ? reviewData : null;
 
   if (isLoading || isPending) {
     return (
@@ -176,7 +136,7 @@ export default function PaperReviewDetailPage() {
           </p>
         </div>
 
-        <PaperReviewResult review={review} />
+        <PaperReviewResult data={review} />
       </div>
     </PageCard>
   );

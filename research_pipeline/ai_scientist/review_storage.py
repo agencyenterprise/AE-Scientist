@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ae_paper_review import FigureImageCaptionRefReview, ReviewResponseModel
+from ae_paper_review import ICLRReviewModel, NeurIPSReviewModel, ReviewModel
 
 from ai_scientist.api_types import (
     FigureReviewEvent,
@@ -11,8 +11,83 @@ from ai_scientist.api_types import (
     ReviewCompletedEvent,
 )
 from ai_scientist.telemetry.event_persistence import WebhookClient
+from ai_scientist.vlm import FigureImageCaptionRefReview
 
 logger = logging.getLogger(__name__)
+
+
+def _to_review_completed_event(
+    *,
+    review: ReviewModel,
+    source_path: str | None,
+    created_at: str,
+) -> ReviewCompletedEvent:
+    if isinstance(review, NeurIPSReviewModel):
+        return ReviewCompletedEvent(
+            summary=review.summary,
+            strengths=[review.strengths_and_weaknesses],
+            weaknesses=[],
+            originality=review.originality,
+            quality=review.quality,
+            clarity=review.clarity,
+            significance=review.significance,
+            questions=review.questions,
+            limitations=[review.limitations],
+            ethical_concerns=review.ethical_concerns,
+            ethical_concerns_explanation=review.ethical_concerns_explanation,
+            soundness=0,
+            presentation=0,
+            contribution=0,
+            overall=review.overall,
+            confidence=review.confidence,
+            decision=review.decision,
+            source_path=source_path,
+            created_at=created_at,
+        )
+    if isinstance(review, ICLRReviewModel):
+        return ReviewCompletedEvent(
+            summary=review.summary,
+            strengths=review.strengths,
+            weaknesses=review.weaknesses,
+            originality=0,
+            quality=0,
+            clarity=0,
+            significance=0,
+            questions=review.questions,
+            limitations=[review.limitations],
+            ethical_concerns=review.ethical_concerns,
+            ethical_concerns_explanation=review.ethical_concerns_explanation,
+            soundness=review.soundness,
+            presentation=review.presentation,
+            contribution=review.contribution,
+            overall=review.overall,
+            confidence=review.confidence,
+            decision=review.decision,
+            source_path=source_path,
+            created_at=created_at,
+        )
+    # ICMLReviewModel
+    return ReviewCompletedEvent(
+        summary=review.summary,
+        strengths=[review.claims_and_evidence],
+        weaknesses=[review.other_aspects],
+        originality=0,
+        quality=0,
+        clarity=0,
+        significance=0,
+        questions=review.questions,
+        limitations=[],
+        ethical_concerns=review.ethical_issues,
+        ethical_concerns_explanation=review.ethical_issues_explanation,
+        soundness=0,
+        presentation=0,
+        contribution=0,
+        overall=review.overall,
+        confidence=0,
+        decision=review.decision,
+        source_path=source_path,
+        created_at=created_at,
+    )
 
 
 @dataclass
@@ -31,36 +106,17 @@ class ReviewResponseRecorder:
     ) -> "ReviewResponseRecorder":
         return cls(run_id, webhook_client)
 
-    def insert_review(
-        self, *, review: ReviewResponseModel, source_path: Path | None = None
-    ) -> None:
+    def insert_review(self, *, review: ReviewModel, source_path: Path | None = None) -> None:
         """Publish review via webhook. Database persistence handled by server."""
         source_value = str(source_path) if source_path is not None else None
         created_at = datetime.now(timezone.utc).isoformat()
 
-        # Emit SSE event via webhook
         if self._webhook_client is not None:
             try:
                 self._webhook_client.publish(
                     kind="review_completed",
-                    payload=ReviewCompletedEvent(
-                        summary=review.summary,
-                        strengths=review.strengths,
-                        weaknesses=review.weaknesses,
-                        originality=review.originality,
-                        quality=review.quality,
-                        clarity=review.clarity,
-                        significance=review.significance,
-                        questions=review.questions,
-                        limitations=review.limitations,
-                        ethical_concerns=review.ethical_concerns,
-                        ethical_concerns_explanation=review.ethical_concerns_explanation,
-                        soundness=review.soundness,
-                        presentation=review.presentation,
-                        contribution=review.contribution,
-                        overall=review.overall,
-                        confidence=review.confidence,
-                        decision=review.decision,
+                    payload=_to_review_completed_event(
+                        review=review,
                         source_path=source_value,
                         created_at=created_at,
                     ),
@@ -94,7 +150,6 @@ class FigureReviewRecorder:
             return
         source_value = str(source_path) if source_path is not None else None
 
-        # Emit webhook event
         if self._webhook_client is not None:
             try:
                 review_events = [

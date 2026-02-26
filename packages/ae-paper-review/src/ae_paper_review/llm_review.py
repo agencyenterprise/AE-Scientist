@@ -1,53 +1,77 @@
 """LLM-based paper review functionality."""
 
-import importlib.resources
 import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, List, NamedTuple
+from typing import Any, Callable
 
-from .llm.native_pdf import NativePDFProvider, get_provider
-from .llm.token_tracking import (
+from .llm import (
+    LLMProvider,
+    Provider,
     TokenUsage,
     TokenUsageDetail,
     TokenUsageSummary,
+    get_provider,
 )
-from .models import PaperContextExtraction, ReviewResponseModel
+from .models import (
+    CitationCheckResults,
+    Conference,
+    ICLRReviewModel,
+    ICMLReviewModel,
+    MissingReferencesResults,
+    NeurIPSReviewModel,
+    NoveltySearchResults,
+    PresentationCheckResults,
+    ReviewModel,
+)
 from .prompts import render_text
-from .semantic_scholar import scan_for_related_papers
+
+# Type alias for schema classes
+_SchemaClass = type[NeurIPSReviewModel] | type[ICLRReviewModel] | type[ICMLReviewModel]
+
+# Mapping from Conference to rubric template name
+_CONFERENCE_RUBRIC_TEMPLATES: dict[Conference, str] = {
+    Conference.ICLR_2025: "llm_review/iclr_form.md.j2",
+    Conference.NEURIPS_2025: "llm_review/neurips_form.md.j2",
+    Conference.ICML: "llm_review/icml_form.md.j2",
+}
+
+# Mapping from Conference to schema class
+_CONFERENCE_SCHEMAS: dict[Conference, _SchemaClass] = {
+    Conference.ICLR_2025: ICLRReviewModel,
+    Conference.NEURIPS_2025: NeurIPSReviewModel,
+    Conference.ICML: ICMLReviewModel,
+}
+
+# Conferences whose rubrics mention reproducibility criteria,
+# enabling web search during the review step.
+REVIEW_RUBRIC_MENTIONS_REPRODUCIBILITY: list[Conference] = [Conference.NEURIPS_2025]
+
+_REVIEW_MAX_WEB_SEARCHES = 3
 
 logger = logging.getLogger(__name__)
+
+# Progress milestones tuned for current standalone review flow.
+# We assume num_reflections=1 in production, so most wall-clock time sits in the
+# pre-review analysis stages and the main review call.
+_PROGRESS_UPLOAD_START = 0.0
+_PROGRESS_NOVELTY_START = 0.01
+_PROGRESS_CITATION_START = 0.28
+_PROGRESS_MISSING_REFERENCES_START = 0.52
+_PROGRESS_PRESENTATION_START = 0.73
+_PROGRESS_REVIEW_START = 0.84
+_PROGRESS_REFLECTION_START = 0.95
+_PROGRESS_COMPLETE = 1.0
 
 
 @dataclass
 class ReviewResult:
     """Result of a paper review including the review and token usage."""
 
-    review: ReviewResponseModel
+    review: ReviewModel
     token_usage: TokenUsageSummary
     token_usage_detailed: list[TokenUsageDetail]
-
-
-class AbstractExtractionResult(NamedTuple):
-    """Result of abstract extraction from a PDF."""
-
-    abstract: str
-    token_usage: TokenUsage
-
-
-class FewshotExample(NamedTuple):
-    """A few-shot example with file_id and review text."""
-
-    file_id: str
-    review_text: str
-
-
-# Pre-render static system prompt
-_reviewer_system_prompt_balanced = render_text(
-    template_name="llm_review/reviewer_system_prompt_balanced.txt.j2",
-    context={},
-)
 
 
 class ReviewProgressEvent:
@@ -85,25 +109,51 @@ class ReviewOrchestrator:
 
     def __init__(
         self,
-        provider: NativePDFProvider,
+        provider: LLMProvider,
         model: str,
         temperature: float,
         event_callback: Callable[[ReviewProgressEvent], None],
         usage: TokenUsage,
+        conference: Conference,
+        provide_rubric: bool,
+        skip_novelty_search: bool,
+        skip_citation_check: bool,
+        skip_missing_references: bool,
+        skip_presentation_check: bool,
+        is_vanilla_prompt: bool,
     ) -> None:
         self._provider = provider
         self._model = model
         self._temperature = temperature
         self._event_callback = event_callback
         self._usage = usage
+        self._conference = conference
+        self._provide_rubric = provide_rubric
+        self._skip_novelty_search = skip_novelty_search
+        self._skip_citation_check = skip_citation_check
+        self._skip_missing_references = skip_missing_references
+        self._skip_presentation_check = skip_presentation_check
         self._uploaded_file_ids: list[str] = []
+
+        if is_vanilla_prompt:
+            system_template = "llm_review/reviewer_system_prompt_vanilla.txt.j2"
+            self._review_prompt_template = "llm_review/review_prompt_vanilla.txt.j2"
+        else:
+            system_template = "llm_review/reviewer_system_prompt_balanced.txt.j2"
+            self._review_prompt_template = "llm_review/review_prompt.txt.j2"
+
+        self._system_prompt = render_text(
+            template_name=system_template,
+            context={
+                "conference_rubric": conference.value,
+            },
+        )
+        self._schema_class: _SchemaClass = _CONFERENCE_SCHEMAS[conference]
 
     def run(
         self,
         pdf_path: Path,
         num_reflections: int,
-        num_fs_examples: int,
-        num_reviews_ensemble: int,
     ) -> ReviewResult:
         """Run the full review process."""
         try:
@@ -111,73 +161,149 @@ class ReviewOrchestrator:
             self._emit_progress(
                 step="upload",
                 substep="Uploading files...",
-                progress=0.0,
+                progress=_PROGRESS_UPLOAD_START,
                 step_progress=0.0,
             )
 
             paper_file_id = self._provider.upload_pdf(pdf_path=pdf_path, filename="paper.pdf")
             self._uploaded_file_ids.append(paper_file_id)
 
-            fewshot_examples = self._upload_fewshot_examples(num_fs_examples=num_fs_examples)
+            # Novelty search via web search
+            if self._skip_novelty_search:
+                novelty_results = None
+            else:
+                self._emit_progress(
+                    step="novelty_search",
+                    substep="Searching for related work...",
+                    progress=_PROGRESS_NOVELTY_START,
+                    step_progress=0.0,
+                )
 
-            # Extract context
-            self._emit_progress(
-                step="context_extraction",
-                substep="Extracting paper context...",
-                progress=0.02,
-                step_progress=0.0,
-            )
+                novelty_results = self._provider.web_search_chat(
+                    file_ids=[paper_file_id],
+                    prompt=render_text(
+                        template_name="novelty_search/search_prompt.txt.j2",
+                        context={},
+                    ),
+                    system_message=render_text(
+                        template_name="novelty_search/system_prompt.txt.j2",
+                        context={},
+                    ),
+                    temperature=0.1,
+                    schema_class=NoveltySearchResults,
+                    max_searches=5,
+                )
 
-            extraction = self._provider.structured_chat(
-                file_ids=[paper_file_id],
-                prompt=render_text(
-                    template_name="context_extraction/extract_context.txt.j2",
-                    context={},
-                ),
-                system_message=render_text(
-                    template_name="context_extraction/system_prompt.txt.j2",
-                    context={},
-                ),
-                temperature=0.1,
-                schema_class=PaperContextExtraction,
-                usage=self._usage,
-            )
+            # Citation verification via web search
+            if self._skip_citation_check:
+                citation_check_results = None
+            else:
+                self._emit_progress(
+                    step="citation_check",
+                    substep="Verifying key citations...",
+                    progress=_PROGRESS_CITATION_START,
+                    step_progress=0.0,
+                )
 
-            s2_result = scan_for_related_papers(
-                title=extraction.title,
-                abstract=extraction.abstract,
-                max_results=3,
-            )
-            context = _format_context(
-                related_papers=s2_result.papers,
-                s2_message=s2_result.message,
-            )
+                citation_check_results = self._provider.web_search_chat(
+                    file_ids=[paper_file_id],
+                    prompt=render_text(
+                        template_name="citation_check/search_prompt.txt.j2",
+                        context={},
+                    ),
+                    system_message=render_text(
+                        template_name="citation_check/system_prompt.txt.j2",
+                        context={},
+                    ),
+                    temperature=0.1,
+                    schema_class=CitationCheckResults,
+                    max_searches=5,
+                )
+
+            # Missing references search via web search
+            if self._skip_missing_references:
+                missing_references_results = None
+            else:
+                self._emit_progress(
+                    step="missing_references",
+                    substep="Searching for missing references...",
+                    progress=_PROGRESS_MISSING_REFERENCES_START,
+                    step_progress=0.0,
+                )
+
+                missing_references_results = self._provider.web_search_chat(
+                    file_ids=[paper_file_id],
+                    prompt=render_text(
+                        template_name="missing_references/search_prompt.txt.j2",
+                        context={},
+                    ),
+                    system_message=render_text(
+                        template_name="missing_references/system_prompt.txt.j2",
+                        context={},
+                    ),
+                    temperature=0.1,
+                    schema_class=MissingReferencesResults,
+                    max_searches=5,
+                )
+
+            # Presentation check via structured LLM call
+            if self._skip_presentation_check:
+                presentation_check_results = None
+            else:
+                self._emit_progress(
+                    step="presentation_check",
+                    substep="Inspecting figures, tables, and notation...",
+                    progress=_PROGRESS_PRESENTATION_START,
+                    step_progress=0.0,
+                )
+
+                presentation_check_results = self._provider.structured_chat(
+                    file_ids=[paper_file_id],
+                    prompt=render_text(
+                        template_name="presentation_check/check_prompt.txt.j2",
+                        context={},
+                    ),
+                    system_message=render_text(
+                        template_name="presentation_check/system_prompt.txt.j2",
+                        context={},
+                    ),
+                    temperature=0.1,
+                    schema_class=PresentationCheckResults,
+                )
 
             # Build base prompt
-            fewshot_text = _build_fewshot_review_text(fewshot_examples=fewshot_examples)
+            rubric_template = (
+                _CONFERENCE_RUBRIC_TEMPLATES[self._conference] if self._provide_rubric else None
+            )
+            prompt_context: dict[str, Any] = {
+                "novelty_results": novelty_results,
+                "citation_check_results": citation_check_results,
+                "missing_references_results": missing_references_results,
+                "presentation_check_results": presentation_check_results,
+                "rubric_template": rubric_template,
+                "conference_rubric": self._conference.value,
+            }
+
             base_prompt = render_text(
-                template_name="llm_review/review_prompt.txt.j2",
-                context={
-                    "context": context,
-                    "fewshot_examples": fewshot_text,
-                },
+                template_name=self._review_prompt_template,
+                context=prompt_context,
             )
 
-            # Collect all file_ids for review calls
-            all_file_ids = [ex.file_id for ex in fewshot_examples] + [paper_file_id]
+            # File IDs for review calls
+            all_file_ids = [paper_file_id]
 
             self._emit_progress(
                 step="init",
-                substep="Starting paper review...",
-                progress=0.05,
+                substep="Synthesizing findings and drafting final review...",
+                progress=_PROGRESS_REVIEW_START,
                 step_progress=0.0,
             )
 
-            # Run ensemble reviews or single review
-            review = self._run_reviews(
-                base_prompt=base_prompt,
-                all_file_ids=all_file_ids,
-                num_reviews_ensemble=num_reviews_ensemble,
+            # Run single review
+            logger.info("Running single review")
+            review: ReviewModel = self._review_chat(
+                file_ids=all_file_ids,
+                prompt=base_prompt,
             )
 
             # Run reflections
@@ -186,15 +312,22 @@ class ReviewOrchestrator:
                     review=review,
                     all_file_ids=all_file_ids,
                     num_reflections=num_reflections,
+                    base_prompt=base_prompt,
                 )
 
             total_usage = self._usage.get_total()
             logger.info(
-                "Review complete (decision=%s, overall=%s, input_tokens=%d, output_tokens=%d)",
-                review.decision,
-                review.overall,
+                "Review complete (input_tokens=%d, cached=%d, cache_write=%d, output_tokens=%d)",
                 total_usage.input_tokens,
+                total_usage.cached_input_tokens,
+                total_usage.cache_write_input_tokens,
                 total_usage.output_tokens,
+            )
+            self._emit_progress(
+                step="complete",
+                substep="Review complete.",
+                progress=_PROGRESS_COMPLETE,
+                step_progress=1.0,
             )
 
             return ReviewResult(
@@ -219,149 +352,55 @@ class ReviewOrchestrator:
             )
         )
 
-    def _upload_fewshot_examples(self, num_fs_examples: int) -> list[FewshotExample]:
-        """Get or upload few-shot example PDFs.
-
-        Uses get_or_upload_fewshot() to cache fewshot files across calls.
-        Fewshot file_ids are NOT added to _uploaded_file_ids since they should
-        persist and be reused across review sessions.
-        """
-        if num_fs_examples <= 0:
-            return []
-
-        fewshot_files = [
-            ("132_automated_relational", "132_automated_relational"),
-            ("attention", "attention"),
-            ("2_carpe_diem", "2_carpe_diem"),
-        ]
-
-        files = importlib.resources.files("ae_paper_review.fewshot_examples")
-        examples: list[FewshotExample] = []
-
-        for paper_name, review_name in fewshot_files[:num_fs_examples]:
-            pdf_file = files.joinpath(f"{paper_name}.pdf")
-            json_file = files.joinpath(f"{review_name}.json")
-
-            with importlib.resources.as_file(pdf_file) as pdf_path:
-                file_id = self._provider.get_or_upload_fewshot(
-                    pdf_path=pdf_path,
-                    filename=f"{paper_name}.pdf",
-                )
-                # Note: NOT adding to _uploaded_file_ids - fewshot files are persistent
-
-            review_data = json.loads(json_file.read_text())
-            review_text = str(review_data["review"])
-            examples.append(FewshotExample(file_id=file_id, review_text=review_text))
-
-        logger.info("Loaded %d few-shot examples", len(examples))
-        return examples
-
-    def _run_reviews(
+    def _review_chat(
         self,
-        base_prompt: str,
-        all_file_ids: list[str],
-        num_reviews_ensemble: int,
-    ) -> ReviewResponseModel:
-        """Run ensemble reviews or single review."""
-        if num_reviews_ensemble > 1:
-            review = self._run_ensemble_reviews(
-                base_prompt=base_prompt,
-                all_file_ids=all_file_ids,
-                num_reviews_ensemble=num_reviews_ensemble,
+        file_ids: list[str],
+        prompt: str,
+    ) -> ReviewModel:
+        """Make a review chat call, using web search if the conference mentions reproducibility."""
+        schema_class = self._schema_class
+        if self._conference in REVIEW_RUBRIC_MENTIONS_REPRODUCIBILITY:
+            result = self._provider.web_search_chat(
+                file_ids=file_ids,
+                prompt=prompt,
+                system_message=self._system_prompt,
+                temperature=self._temperature,
+                schema_class=schema_class,
+                max_searches=_REVIEW_MAX_WEB_SEARCHES,
             )
-            if review is not None:
-                return review
-
-        # Fall back to single review
-        logger.info("Running single review")
-        return self._provider.structured_chat(
-            file_ids=all_file_ids,
-            prompt=base_prompt,
-            system_message=_reviewer_system_prompt_balanced,
-            temperature=self._temperature,
-            schema_class=ReviewResponseModel,
-            usage=self._usage,
-        )
-
-    def _run_ensemble_reviews(
-        self,
-        base_prompt: str,
-        all_file_ids: list[str],
-        num_reviews_ensemble: int,
-    ) -> ReviewResponseModel | None:
-        """Run ensemble reviews and aggregate."""
-        logger.info("Running ensemble reviews (%d reviews)", num_reviews_ensemble)
-        parsed_reviews: List[ReviewResponseModel] = []
-
-        for idx in range(num_reviews_ensemble):
-            try:
-                step_progress = idx / num_reviews_ensemble
-                self._emit_progress(
-                    step="ensemble",
-                    substep=f"Review {idx + 1} of {num_reviews_ensemble}",
-                    progress=0.05 + 0.65 * step_progress,
-                    step_progress=step_progress,
-                )
-
-                parsed = self._provider.structured_chat(
-                    file_ids=all_file_ids,
-                    prompt=base_prompt,
-                    system_message=_reviewer_system_prompt_balanced,
-                    temperature=self._temperature,
-                    schema_class=ReviewResponseModel,
-                    usage=self._usage,
-                )
-                parsed_reviews.append(parsed)
-            except Exception as exc:
-                logger.warning(
-                    "Ensemble review %d/%d failed: %s",
-                    idx + 1,
-                    num_reviews_ensemble,
-                    exc,
-                )
-
-        if not parsed_reviews:
-            return None
-
-        self._emit_progress(
-            step="meta_review",
-            substep="Generating meta-review...",
-            progress=0.70,
-            step_progress=0.0,
-        )
-
-        review = _get_meta_review(
-            provider=self._provider,
-            temperature=self._temperature,
-            reviews=parsed_reviews,
-            usage=self._usage,
-        )
-        if review is None:
-            return parsed_reviews[0]
-
-        _average_ensemble_scores(review=review, parsed_reviews=parsed_reviews)
-        return review
+        else:
+            result = self._provider.structured_chat(
+                file_ids=file_ids,
+                prompt=prompt,
+                system_message=self._system_prompt,
+                temperature=self._temperature,
+                schema_class=schema_class,
+            )
+        assert isinstance(result, (NeurIPSReviewModel, ICLRReviewModel, ICMLReviewModel))
+        return result
 
     def _run_reflections(
         self,
-        review: ReviewResponseModel,
+        review: ReviewModel,
         all_file_ids: list[str],
         num_reflections: int,
-    ) -> ReviewResponseModel:
+        base_prompt: str,
+    ) -> ReviewModel:
         """Run reflection rounds.
 
         Args:
             review: Initial review to reflect on
-            all_file_ids: File IDs for the paper and fewshot examples
+            all_file_ids: File IDs for the paper
             num_reflections: Number of reflection rounds (0 = none, 1 = one round, etc.)
+            base_prompt: Original review prompt (rubric + novelty context)
         """
         for reflection_round in range(num_reflections):
-            step_progress = reflection_round / num_reflections
+            step_progress_start = reflection_round / num_reflections
             self._emit_progress(
                 step="reflection",
                 substep=f"Reflection {reflection_round + 1} of {num_reflections}",
-                progress=0.85 + 0.15 * step_progress,
-                step_progress=step_progress,
+                progress=_PROGRESS_REFLECTION_START,
+                step_progress=step_progress_start,
             )
 
             reflection_prompt = render_text(
@@ -372,22 +411,25 @@ class ReviewOrchestrator:
                 },
             )
 
+            review_json = json.dumps(review.model_dump(by_alias=True), indent=2)
             full_prompt = (
-                f"Previous review:\n```json\n{json.dumps(review.model_dump(by_alias=True), indent=2)}\n```\n\n"
+                f"{base_prompt}\n\n"
+                f"Previous review:\n```json\n{review_json}\n```\n\n"
                 f"{reflection_prompt}"
             )
 
-            review = self._provider.structured_chat(
+            review = self._review_chat(
                 file_ids=all_file_ids,
                 prompt=full_prompt,
-                system_message=_reviewer_system_prompt_balanced,
-                temperature=self._temperature,
-                schema_class=ReviewResponseModel,
-                usage=self._usage,
             )
-
-            if not review.should_continue:
-                break
+            step_progress_end = (reflection_round + 1) / num_reflections
+            self._emit_progress(
+                step="reflection",
+                substep=f"Completed reflection {reflection_round + 1} of {num_reflections}",
+                progress=_PROGRESS_REFLECTION_START
+                + (_PROGRESS_COMPLETE - _PROGRESS_REFLECTION_START) * step_progress_end,
+                step_progress=step_progress_end,
+            )
 
         return review
 
@@ -401,119 +443,6 @@ class ReviewOrchestrator:
 
 
 # =============================================================================
-# Common utilities
-# =============================================================================
-
-
-def _build_fewshot_review_text(fewshot_examples: list[FewshotExample]) -> str:
-    """Build few-shot review text (without paper content - that's in the PDFs)."""
-    if not fewshot_examples:
-        return ""
-
-    intro = render_text(
-        template_name="llm_review/fewshot_intro.txt.j2",
-        context={},
-    )
-
-    parts = [intro]
-    for idx, example in enumerate(fewshot_examples, start=1):
-        ordinal = _ordinal(idx)
-        parts.append(
-            f"\nExample {idx} (see {ordinal} PDF document):\n"
-            f"Review:\n```\n{example.review_text}\n```\n"
-        )
-
-    return "\n".join(parts)
-
-
-def _ordinal(n: int) -> str:
-    """Convert integer to ordinal string (1st, 2nd, 3rd, etc.)."""
-    if 11 <= (n % 100) <= 13:
-        suffix = "th"
-    else:
-        suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
-    return f"{n}{suffix}"
-
-
-def _format_context(
-    related_papers: list,  # type: ignore[type-arg]
-    s2_message: str | None,
-) -> str:
-    """Format Semantic Scholar results into a string for the review prompt."""
-    if related_papers:
-        lines = ["Novelty Scan (Related Papers):"]
-        for paper in related_papers:
-            year_str = str(paper.year) if paper.year else "unknown year"
-            lines.append(
-                f"- {paper.title} ({year_str}, {paper.venue}) — "
-                f"citations: {paper.citation_count}; authors: {paper.authors}; "
-                f"abstract: {paper.abstract_snippet}"
-            )
-        return "\n".join(lines)
-    elif s2_message:
-        return f"Novelty Scan:\n{s2_message}"
-    return ""
-
-
-def _average_ensemble_scores(
-    review: ReviewResponseModel,
-    parsed_reviews: list[ReviewResponseModel],
-) -> None:
-    """Average scores from ensemble reviews into the review."""
-    parsed_dicts = [parsed.model_dump() for parsed in parsed_reviews]
-    for score, limits in [
-        ("Originality", (1, 4)),
-        ("Quality", (1, 4)),
-        ("Clarity", (1, 4)),
-        ("Significance", (1, 4)),
-        ("Soundness", (1, 4)),
-        ("Presentation", (1, 4)),
-        ("Contribution", (1, 4)),
-        ("Overall", (1, 10)),
-        ("Confidence", (1, 5)),
-    ]:
-        collected: List[float] = []
-        for parsed_dict in parsed_dicts:
-            value = parsed_dict.get(score)
-            if isinstance(value, (int, float)) and limits[0] <= value <= limits[1]:
-                collected.append(float(value))
-        if collected:
-            mean_value = round(sum(collected) / len(collected), 2)
-            setattr(review, score, float(mean_value))
-
-
-def _get_meta_review(
-    provider: NativePDFProvider,
-    temperature: float,
-    reviews: list[ReviewResponseModel],
-    usage: TokenUsage,
-) -> ReviewResponseModel | None:
-    """Aggregate multiple reviews into a meta-review."""
-    review_json_strings = [json.dumps(r.model_dump(by_alias=True)) for r in reviews]
-    base_prompt = render_text(
-        template_name="llm_review/meta_review_prompt.txt.j2",
-        context={"reviews": review_json_strings},
-    )
-    system_message = render_text(
-        template_name="llm_review/meta_reviewer_system_prompt.txt.j2",
-        context={"reviewer_count": len(reviews)},
-    )
-    try:
-        # Meta-review doesn't need PDF files, just aggregate text reviews
-        return provider.structured_chat(
-            file_ids=[],
-            prompt=base_prompt,
-            system_message=system_message,
-            temperature=temperature,
-            schema_class=ReviewResponseModel,
-            usage=usage,
-        )
-    except Exception:
-        logger.exception("Failed to generate meta-review.")
-        return None
-
-
-# =============================================================================
 # Main entry point
 # =============================================================================
 
@@ -521,99 +450,68 @@ def _get_meta_review(
 def perform_review(
     pdf_path: Path,
     *,
+    provider: Provider,
     model: str,
     temperature: float,
     event_callback: Callable[[ReviewProgressEvent], None],
     num_reflections: int,
-    num_fs_examples: int,
-    num_reviews_ensemble: int,
+    conference: Conference,
+    provide_rubric: bool,
+    skip_novelty_search: bool,
+    skip_citation_check: bool,
+    skip_missing_references: bool,
+    skip_presentation_check: bool,
+    is_vanilla_prompt: bool,
 ) -> ReviewResult:
     """Perform a paper review using LLM.
 
     Args:
         pdf_path: Path to the PDF file to review
-        model: Model in "provider:model" format (e.g., "anthropic:claude-sonnet-4-5")
+        provider: The LLM provider to use
+        model: Model name (e.g., "claude-sonnet-4-20250514")
         temperature: Sampling temperature
         event_callback: Callback for progress events
         num_reflections: Number of reflection rounds
-        num_fs_examples: Number of few-shot examples to include
-        num_reviews_ensemble: Number of ensemble reviews
+        conference: Conference to use for schema and system prompt
+        provide_rubric: Whether to include detailed rubric form instructions
+        skip_novelty_search: Whether to skip the novelty web search phase
+        skip_citation_check: Whether to skip the citation verification phase
+        skip_missing_references: Whether to skip the missing references search phase
+        skip_presentation_check: Whether to skip the presentation check phase
+        is_vanilla_prompt: Whether to use the minimal vanilla prompt
 
     Returns:
         ReviewResult containing the review and token usage
     """
     logger.info(
-        "Starting paper review (model=%s, ensemble=%d, reflections=%d)",
+        "Starting paper review (provider=%s, model=%s, reflections=%d, conference=%s, rubric=%s, vanilla=%s)",
+        provider.value,
         model,
-        num_reviews_ensemble,
         num_reflections,
+        conference.value,
+        provide_rubric,
+        is_vanilla_prompt,
     )
 
-    provider = get_provider(model=model)
     usage = TokenUsage()
+    llm_provider = get_provider(provider=provider, model=model, usage=usage)
 
     orchestrator = ReviewOrchestrator(
-        provider=provider,
+        provider=llm_provider,
         model=model,
         temperature=temperature,
         event_callback=event_callback,
         usage=usage,
+        conference=conference,
+        provide_rubric=provide_rubric,
+        skip_novelty_search=skip_novelty_search,
+        skip_citation_check=skip_citation_check,
+        skip_missing_references=skip_missing_references,
+        skip_presentation_check=skip_presentation_check,
+        is_vanilla_prompt=is_vanilla_prompt,
     )
 
     return orchestrator.run(
         pdf_path=pdf_path,
         num_reflections=num_reflections,
-        num_fs_examples=num_fs_examples,
-        num_reviews_ensemble=num_reviews_ensemble,
     )
-
-
-def extract_abstract_from_pdf(
-    pdf_path: Path,
-    model: str,
-) -> AbstractExtractionResult:
-    """Extract abstract from a PDF using native PDF provider.
-
-    Uses LLM-based extraction instead of regex parsing for more reliable results.
-
-    Args:
-        pdf_path: Path to the PDF file
-        model: Model in "provider:model" format (e.g., "anthropic:claude-sonnet-4-5")
-
-    Returns:
-        AbstractExtractionResult containing the abstract and token usage
-    """
-    provider = get_provider(model=model)
-    usage = TokenUsage()
-
-    try:
-        file_id = provider.upload_pdf(pdf_path=pdf_path, filename="paper.pdf")
-
-        try:
-            extraction = provider.structured_chat(
-                file_ids=[file_id],
-                prompt=render_text(
-                    template_name="context_extraction/extract_context.txt.j2",
-                    context={},
-                ),
-                system_message=render_text(
-                    template_name="context_extraction/system_prompt.txt.j2",
-                    context={},
-                ),
-                temperature=0.1,
-                schema_class=PaperContextExtraction,
-                usage=usage,
-            )
-            return AbstractExtractionResult(
-                abstract=extraction.abstract or "",
-                token_usage=usage,
-            )
-        finally:
-            try:
-                provider.delete_file(file_id=file_id)
-            except Exception as exc:
-                logger.warning("Failed to delete file %s: %s", file_id, exc)
-
-    except Exception as exc:
-        logger.warning("Failed to extract abstract from PDF: %s", exc)
-        return AbstractExtractionResult(abstract="", token_usage=usage)

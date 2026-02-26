@@ -36,6 +36,7 @@ writeup:
 review:
   model: openai:gpt-5.2
   temperature: 1.0  # Note: gpt-5.2 ignores temperature; this value is not used by the model.
+  conference: neurips_2025
 
 experiment:
   num_syn_datasets: 1
