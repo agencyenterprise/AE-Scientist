@@ -192,6 +192,7 @@ class TokenUsageEvent(BaseModel):
     model: str  # In "provider:model" format (e.g., "anthropic:claude-sonnet-4-20250514")
     input_tokens: int
     cached_input_tokens: int
+    cache_write_input_tokens: int
     output_tokens: int
 
 

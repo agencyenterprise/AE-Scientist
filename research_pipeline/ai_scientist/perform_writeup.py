@@ -11,14 +11,6 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable, Dict, List, NamedTuple, Optional, cast
 
-from ae_paper_review import (
-    detect_duplicate_figures,
-    extract_abstract_from_pdf,
-    generate_vlm_img_review,
-    perform_imgs_cap_ref_review,
-    perform_imgs_cap_ref_review_selection,
-)
-
 from ai_scientist.perform_citations import gather_citations
 from ai_scientist.prompts.render import render_text
 from ai_scientist.review_integration import publish_token_usage
@@ -27,6 +19,13 @@ from ai_scientist.treesearch.events import (
     BaseEvent,
     PaperGenerationProgressEvent,
     PaperGenerationStep,
+)
+from ai_scientist.vlm import (
+    detect_duplicate_figures,
+    extract_abstract_from_pdf,
+    generate_vlm_img_review,
+    perform_imgs_cap_ref_review,
+    perform_imgs_cap_ref_review_selection,
 )
 from ai_scientist.writeup_artifacts import (
     SUMMARY_KEYS_TO_STRIP,

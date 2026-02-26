@@ -4,46 +4,10 @@ import { useParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2, ArrowLeft, AlertCircle, Lock } from "lucide-react";
 import Link from "next/link";
-import { fetchPaperReview, type PaperReviewDetail } from "@/features/paper-review/api";
-import {
-  PaperReviewResult,
-  type PaperReviewResponse,
-} from "@/features/paper-review/components/PaperReviewResult";
+import { cn } from "@/shared/lib/utils";
+import { fetchPaperReview } from "@/features/paper-review/api";
+import { PaperReviewResult } from "@/features/paper-review/components/PaperReviewResult";
 import { PageCard } from "@/shared/components/PageCard";
-
-function transformToReviewResponse(data: PaperReviewDetail): PaperReviewResponse {
-  return {
-    id: data.id,
-    review: {
-      summary: data.summary || "",
-      strengths: data.strengths || [],
-      weaknesses: data.weaknesses || [],
-      questions: data.questions || [],
-      limitations: data.limitations || [],
-      ethical_concerns: data.ethical_concerns || false,
-      ethical_concerns_explanation: data.ethical_concerns_explanation || "",
-      originality: data.originality || 0,
-      quality: data.quality || 0,
-      clarity: data.clarity || 0,
-      significance: data.significance || 0,
-      soundness: data.soundness || 0,
-      presentation: data.presentation || 0,
-      contribution: data.contribution || 0,
-      overall: data.overall || 0,
-      confidence: data.confidence || 0,
-      decision: data.decision || "",
-    },
-    token_usage: data.token_usage || {
-      input_tokens: 0,
-      cached_input_tokens: 0,
-      output_tokens: 0,
-    },
-    cost_cents: data.cost_cents || 0,
-    original_filename: data.original_filename,
-    model: data.model,
-    created_at: data.created_at,
-  };
-}
 
 export default function PaperReviewDetailPage() {
   const params = useParams();
@@ -63,10 +27,7 @@ export default function PaperReviewDetailPage() {
 
   const isNotCompleted = reviewData && reviewData.status !== "completed";
   const isAccessRestricted = reviewData?.access_restricted === true;
-  const review =
-    reviewData && !isNotCompleted && !isAccessRestricted
-      ? transformToReviewResponse(reviewData)
-      : null;
+  const review = reviewData && !isNotCompleted && !isAccessRestricted ? reviewData : null;
 
   if (isLoading || isPending) {
     return (
@@ -92,11 +53,33 @@ export default function PaperReviewDetailPage() {
           </button>
 
           <div className="mb-4 sm:mb-6">
-            <h1 className="text-lg font-semibold text-white sm:text-xl">
-              {reviewData.original_filename}
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg font-semibold text-white sm:text-xl">
+                {reviewData.original_filename}
+              </h1>
+              {reviewData.tier && (
+                <span
+                  className={cn(
+                    "rounded px-1.5 py-0.5 text-[10px] font-medium",
+                    reviewData.tier === "premium"
+                      ? "bg-sky-500/10 text-sky-400"
+                      : "bg-amber-500/10 text-amber-400"
+                  )}
+                >
+                  {reviewData.tier === "premium" ? "Premium" : "Standard"}
+                </span>
+              )}
+              {reviewData.conference && (
+                <span className="rounded bg-slate-700/50 px-1.5 py-0.5 text-[10px] font-medium text-slate-300">
+                  {reviewData.conference === "neurips_2025"
+                    ? "NeurIPS 2025"
+                    : reviewData.conference === "iclr_2025"
+                      ? "ICLR 2025"
+                      : "ICML"}
+                </span>
+              )}
+            </div>
             <p className="mt-1 text-xs text-slate-400 sm:text-sm">
-              Reviewed with {reviewData.model.split("/").pop()} on{" "}
               {new Date(reviewData.created_at).toLocaleDateString(undefined, {
                 dateStyle: "long",
               })}
@@ -165,18 +148,38 @@ export default function PaperReviewDetailPage() {
         </button>
 
         <div className="mb-4 sm:mb-6">
-          <h1 className="text-lg font-semibold text-white sm:text-xl">
-            {review.original_filename}
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-lg font-semibold text-white sm:text-xl">
+              {review.original_filename}
+            </h1>
+            {review.tier && (
+              <span
+                className={cn(
+                  "rounded px-1.5 py-0.5 text-[10px] font-medium",
+                  review.tier === "premium"
+                    ? "bg-sky-500/10 text-sky-400"
+                    : "bg-amber-500/10 text-amber-400"
+                )}
+              >
+                {review.tier === "premium" ? "Premium" : "Standard"}
+              </span>
+            )}
+            <span className="rounded bg-slate-700/50 px-1.5 py-0.5 text-[10px] font-medium text-slate-300">
+              {review.conference === "neurips_2025"
+                ? "NeurIPS 2025"
+                : review.conference === "iclr_2025"
+                  ? "ICLR 2025"
+                  : "ICML"}
+            </span>
+          </div>
           <p className="mt-1 text-xs text-slate-400 sm:text-sm">
-            Reviewed with {review.model.split("/").pop()} on{" "}
             {new Date(review.created_at).toLocaleDateString(undefined, {
               dateStyle: "long",
             })}
           </p>
         </div>
 
-        <PaperReviewResult review={review} />
+        <PaperReviewResult data={review} />
       </div>
     </PageCard>
   );

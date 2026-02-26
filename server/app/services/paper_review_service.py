@@ -12,17 +12,34 @@ import asyncio
 import logging
 import tempfile
 import uuid
+from enum import Enum
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, NamedTuple, cast
 from urllib.parse import quote
 
-from ae_paper_review import ReviewProgressEvent, ReviewResult, perform_review
+from ae_paper_review import (
+    Conference,
+    ICLRReviewModel,
+    ICMLReviewModel,
+    NeurIPSReviewModel,
+    Provider,
+    ReviewModel,
+    ReviewProgressEvent,
+    ReviewResult,
+    perform_review,
+)
 from psycopg import AsyncConnection
 
 from app.config import settings
-from app.models.paper_review import PaperReviewDetail, TokenUsage
+from app.models.paper_review import AnyPaperReviewDetail, TokenUsage, build_review_detail
 from app.services.billing_guard import charge_cents, enforce_minimum_balance
 from app.services.database import PaperReviewStatus, get_database
+from app.services.database.paper_reviews import (
+    ICLRReviewContent,
+    ICMLReviewContent,
+    NeurIPSReviewContent,
+    ReviewContent,
+)
 from app.services.s3_service import S3Service
 
 logger = logging.getLogger(__name__)
@@ -35,11 +52,63 @@ _PAPER_REVIEW_RECOVERY_LOCK_KEY_2 = 991801
 _STALE_REVIEW_THRESHOLD_MINUTES = 15
 
 
+def _review_model_to_content(review: ReviewModel) -> ReviewContent:
+    if isinstance(review, NeurIPSReviewModel):
+        return NeurIPSReviewContent(
+            summary=review.summary,
+            strengths_and_weaknesses=review.strengths_and_weaknesses,
+            questions=list(review.questions),
+            limitations=review.limitations,
+            ethical_concerns=review.ethical_concerns,
+            ethical_concerns_explanation=review.ethical_concerns_explanation,
+            clarity_issues=[ci.model_dump() for ci in review.clarity_issues],
+            quality=review.quality,
+            clarity=review.clarity,
+            significance=review.significance,
+            originality=review.originality,
+            overall=review.overall,
+            confidence=review.confidence,
+            decision=review.decision,
+        )
+    if isinstance(review, ICLRReviewModel):
+        return ICLRReviewContent(
+            summary=review.summary,
+            strengths=list(review.strengths),
+            weaknesses=list(review.weaknesses),
+            questions=list(review.questions),
+            limitations=review.limitations,
+            ethical_concerns=review.ethical_concerns,
+            ethical_concerns_explanation=review.ethical_concerns_explanation,
+            clarity_issues=[ci.model_dump() for ci in review.clarity_issues],
+            soundness=review.soundness,
+            presentation=review.presentation,
+            contribution=review.contribution,
+            overall=review.overall,
+            confidence=review.confidence,
+            decision=review.decision,
+        )
+    if isinstance(review, ICMLReviewModel):
+        return ICMLReviewContent(
+            summary=review.summary,
+            claims_and_evidence=review.claims_and_evidence,
+            relation_to_prior_work=review.relation_to_prior_work,
+            other_aspects=review.other_aspects,
+            questions=list(review.questions),
+            ethical_issues=review.ethical_issues,
+            ethical_issues_explanation=review.ethical_issues_explanation,
+            clarity_issues=[ci.model_dump() for ci in review.clarity_issues],
+            overall=review.overall,
+            decision=review.decision,
+        )
+    raise ValueError(f"Unknown review model type: {type(review)}")
+
+
 def calculate_review_cost_cents(
     *,
     model: str,
     input_tokens: int,
     cached_input_tokens: int,
+    cache_write_input_tokens: int,
     output_tokens: int,
 ) -> int:
     """Calculate the cost for a review in cents based on token usage and model pricing.
@@ -48,8 +117,9 @@ def calculate_review_cost_cents(
 
     Args:
         model: Model in "provider:model" format (e.g., "openai:gpt-5.2")
-        input_tokens: Total input tokens used (non-cached)
+        input_tokens: Non-cached input tokens (all providers normalize to this convention)
         cached_input_tokens: Number of cached input tokens
+        cache_write_input_tokens: Number of cache-write input tokens
         output_tokens: Total output tokens used
 
     Returns:
@@ -58,26 +128,74 @@ def calculate_review_cost_cents(
     # Get prices in cents per 1M tokens
     input_price_cents = settings.llm_pricing.get_input_price(model)
     cached_input_price_cents = settings.llm_pricing.get_cached_input_price(model)
+    cache_write_input_price_cents = settings.llm_pricing.get_cache_write_input_price(model)
     output_price_cents = settings.llm_pricing.get_output_price(model)
 
-    # Calculate non-cached input tokens
-    non_cached_input_tokens = input_tokens - cached_input_tokens
-
-    # Calculate cost in cents
-    input_cost_cents = (non_cached_input_tokens / 1_000_000) * input_price_cents
+    # input_tokens already represents non-cached tokens: all providers (Anthropic, OpenAI,
+    # Google) normalize to store only fresh/non-cached tokens in this field.
+    input_cost_cents = (input_tokens / 1_000_000) * input_price_cents
     cached_cost_cents = (cached_input_tokens / 1_000_000) * cached_input_price_cents
+    cache_write_cost_cents = (cache_write_input_tokens / 1_000_000) * cache_write_input_price_cents
     output_cost_cents = (output_tokens / 1_000_000) * output_price_cents
-    total_cost_cents = input_cost_cents + cached_cost_cents + output_cost_cents
+    total_cost_cents = (
+        input_cost_cents + cached_cost_cents + cache_write_cost_cents + output_cost_cents
+    )
 
     return max(1, int(total_cost_cents + 0.5))  # Round to nearest, minimum 1 cent
 
 
+class ReviewTier(str, Enum):
+    """Available review tiers."""
+
+    STANDARD = "standard"
+    PREMIUM = "premium"
+
+
+class TierConfig(NamedTuple):
+    """Configuration for a review tier."""
+
+    model: str
+    is_vanilla_prompt: bool
+    skip_missing_references: bool
+    skip_presentation_check: bool
+    provide_rubric: bool
+    skip_novelty_search: bool
+    skip_citation_check: bool
+    num_reflections: int
+    temperature: float
+
+
+TIER_CONFIGS: dict[ReviewTier, TierConfig] = {
+    ReviewTier.STANDARD: TierConfig(
+        model="openai:gpt-5.2",
+        is_vanilla_prompt=True,
+        skip_missing_references=True,
+        skip_presentation_check=True,
+        provide_rubric=True,
+        skip_novelty_search=False,
+        skip_citation_check=False,
+        num_reflections=0,
+        temperature=1,
+    ),
+    ReviewTier.PREMIUM: TierConfig(
+        model="anthropic:claude-sonnet-4-6",
+        is_vanilla_prompt=False,
+        skip_missing_references=False,
+        skip_presentation_check=False,
+        provide_rubric=True,
+        skip_novelty_search=False,
+        skip_citation_check=False,
+        num_reflections=0,
+        temperature=1,
+    ),
+}
+
+
 def _run_review_sync(
     pdf_path: Path,
-    model: str,
-    num_reviews_ensemble: int,
-    num_reflections: int,
+    tier: ReviewTier,
     review_id: int,
+    conference: Conference,
 ) -> ReviewResult:
     """Run the paper review synchronously (called in thread pool).
 
@@ -86,11 +204,12 @@ def _run_review_sync(
 
     Args:
         pdf_path: Path to the PDF file to review
-        model: Model in "provider:model" format (e.g., "anthropic:claude-sonnet-4-20250514")
-        num_reviews_ensemble: Number of ensemble reviews
-        num_reflections: Number of reflection rounds
+        tier: Review tier (standard or premium)
         review_id: The paper review ID for progress tracking
+        conference: The conference to use for review schema
     """
+    config = TIER_CONFIGS[tier]
+    provider_str, model_name = config.model.split(":", 1)
     db = get_database()
 
     def on_progress(event: ReviewProgressEvent) -> None:
@@ -102,12 +221,18 @@ def _run_review_sync(
 
     return perform_review(
         pdf_path,
-        model=model,
-        temperature=1,
+        provider=Provider(provider_str),
+        model=model_name,
+        temperature=config.temperature,
         event_callback=on_progress,
-        num_reflections=num_reflections,
-        num_fs_examples=1,
-        num_reviews_ensemble=num_reviews_ensemble,
+        num_reflections=config.num_reflections,
+        conference=conference,
+        provide_rubric=config.provide_rubric,
+        skip_novelty_search=config.skip_novelty_search,
+        skip_citation_check=config.skip_citation_check,
+        skip_missing_references=config.skip_missing_references,
+        skip_presentation_check=config.skip_presentation_check,
+        is_vanilla_prompt=config.is_vanilla_prompt,
     )
 
 
@@ -161,15 +286,15 @@ class PaperReviewService:
         user_id: int,
         pdf_content: bytes,
         original_filename: str,
-        model: str,
-        num_reviews_ensemble: int,
-        num_reflections: int,
+        tier: ReviewTier,
+        conference: Conference,
     ) -> None:
         """Process a paper review in the background.
 
         This method runs the blocking LLM call in a thread pool and updates
         the database with the results.
         """
+        model = TIER_CONFIGS[tier].model
         db = get_database()
         tmp_path: Path | None = None
 
@@ -186,10 +311,9 @@ class PaperReviewService:
             result = await asyncio.to_thread(
                 _run_review_sync,
                 tmp_path,
-                model,
-                num_reviews_ensemble,
-                num_reflections,
+                tier,
                 review_id,
+                conference,
             )
 
             # Get token usage from result
@@ -201,31 +325,13 @@ class PaperReviewService:
                 model=model,
                 input_tokens=total_usage.input_tokens,
                 cached_input_tokens=total_usage.cached_input_tokens,
+                cache_write_input_tokens=total_usage.cache_write_input_tokens,
                 output_tokens=total_usage.output_tokens,
             )
 
-            # Store the review results
-            review = result.review
-            await db.complete_paper_review(
-                review_id=review_id,
-                summary=review.summary,
-                strengths=review.strengths,
-                weaknesses=review.weaknesses,
-                originality=review.originality,
-                quality=review.quality,
-                clarity=review.clarity,
-                significance=review.significance,
-                questions=review.questions,
-                limitations=review.limitations,
-                ethical_concerns=review.ethical_concerns,
-                ethical_concerns_explanation=review.ethical_concerns_explanation,
-                soundness=review.soundness,
-                presentation=review.presentation,
-                contribution=review.contribution,
-                overall=review.overall,
-                confidence=review.confidence,
-                decision=review.decision,
-            )
+            # Store the review results in the conference-specific table
+            content = _review_model_to_content(result.review)
+            await db.complete_paper_review(review_id=review_id, content=content)
 
             # Store token usages
             if token_usages:
@@ -244,6 +350,8 @@ class PaperReviewService:
                     "paper_review_id": review_id,
                     "model": model,
                     "input_tokens": total_usage.input_tokens,
+                    "cached_input_tokens": total_usage.cached_input_tokens,
+                    "cache_write_input_tokens": total_usage.cache_write_input_tokens,
                     "output_tokens": total_usage.output_tokens,
                 },
             )
@@ -289,9 +397,8 @@ class PaperReviewService:
         user_id: int,
         pdf_content: bytes,
         original_filename: str,
-        model: str,
-        num_reviews_ensemble: int,
-        num_reflections: int,
+        tier: ReviewTier,
+        conference: Conference,
     ) -> tuple[int, str]:
         """Start a paper review asynchronously.
 
@@ -302,9 +409,8 @@ class PaperReviewService:
             user_id: ID of the user requesting the review
             pdf_content: Raw PDF file content
             original_filename: Original filename of the uploaded PDF
-            model: LLM model to use for review
-            num_reviews_ensemble: Number of ensemble reviews
-            num_reflections: Number of reflection rounds
+            tier: Review tier (standard or premium)
+            conference: Conference to use for review schema
 
         Returns:
             Tuple of (review_id, status)
@@ -312,6 +418,7 @@ class PaperReviewService:
         Raises:
             HTTPException: If user has insufficient balance
         """
+        model = TIER_CONFIGS[tier].model
         db = get_database()
 
         # Check user has minimum balance
@@ -334,12 +441,15 @@ class PaperReviewService:
             original_filename=original_filename,
             s3_key=s3_key,
             model=model,
+            tier=tier.value,
+            conference=conference,
         )
 
         logger.info(
-            "Paper review started: review_id=%d, user_id=%d, model=%s",
+            "Paper review started: review_id=%d, user_id=%d, tier=%s, model=%s",
             review_id,
             user_id,
+            tier.value,
             model,
         )
 
@@ -350,15 +460,14 @@ class PaperReviewService:
                 user_id=user_id,
                 pdf_content=pdf_content,
                 original_filename=original_filename,
-                model=model,
-                num_reviews_ensemble=num_reviews_ensemble,
-                num_reflections=num_reflections,
+                tier=tier,
+                conference=conference,
             )
         )
 
         return (review_id, PaperReviewStatus.PENDING.value)
 
-    async def get_review(self, *, review_id: int, user_id: int) -> PaperReviewDetail | None:
+    async def get_review(self, *, review_id: int, user_id: int) -> AnyPaperReviewDetail | None:
         """Get a paper review by ID.
 
         Args:
@@ -366,38 +475,44 @@ class PaperReviewService:
             user_id: ID of the user (for authorization)
 
         Returns:
-            PaperReviewDetail if found and owned by user, None otherwise
+            Conference-specific review detail if found and owned by user, None otherwise
         """
         db = get_database()
-        review = await db.get_paper_review_by_id(review_id)
+        result = await db.get_paper_review_by_id(review_id)
 
-        if not review or review.user_id != user_id:
+        if not result:
+            return None
+
+        base, content = result
+        if base.user_id != user_id:
             return None
 
         token_usage_dict = await db.get_total_token_usage_by_review_id(review_id)
 
-        # Build TokenUsage if we have data
         token_usage: TokenUsage | None = None
         cost_cents = 0
         input_tokens = token_usage_dict.get("input_tokens", 0)
         output_tokens = token_usage_dict.get("output_tokens", 0)
         if input_tokens or output_tokens:
             cached_input_tokens = token_usage_dict.get("cached_input_tokens", 0)
+            cache_write_input_tokens = token_usage_dict.get("cache_write_input_tokens", 0)
             token_usage = TokenUsage(
                 input_tokens=input_tokens,
                 cached_input_tokens=cached_input_tokens,
+                cache_write_input_tokens=cache_write_input_tokens,
                 output_tokens=output_tokens,
             )
             cost_cents = calculate_review_cost_cents(
-                model=review.model,
+                model=base.model,
                 input_tokens=input_tokens,
                 cached_input_tokens=cached_input_tokens,
+                cache_write_input_tokens=cache_write_input_tokens,
                 output_tokens=output_tokens,
             )
 
-        # Progress is now stored in the database, so it comes from review directly
-        return PaperReviewDetail.from_review(
-            review=review,
+        return build_review_detail(
+            base=base,
+            content=content,
             token_usage=token_usage,
             cost_cents=cost_cents,
         )
@@ -420,6 +535,7 @@ class PaperReviewService:
                 "status": review.status,
                 "original_filename": review.original_filename,
                 "model": review.model,
+                "tier": review.tier,
                 "created_at": review.created_at.isoformat(),
             }
             for review in reviews
@@ -461,11 +577,13 @@ class PaperReviewService:
                     "decision": review.decision if not access_restricted else None,
                     "original_filename": review.original_filename,
                     "model": review.model,
+                    "tier": review.tier,
                     "created_at": review.created_at.isoformat(),
                     "has_enough_credits": review.has_enough_credits,
                     "access_restricted": access_restricted,
                     "progress": review.progress,
                     "progress_step": review.progress_step,
+                    "conference": review.conference,
                 }
             )
         return result
@@ -484,25 +602,29 @@ class PaperReviewService:
             Tuple of (download_url, filename) if found and owned by user, None otherwise
         """
         db = get_database()
-        review = await db.get_paper_review_by_id(review_id)
+        result = await db.get_paper_review_by_id(review_id)
 
-        if not review or review.user_id != user_id:
+        if not result:
+            return None
+
+        base, _ = result
+        if base.user_id != user_id:
             return None
 
         # Block download if access is restricted
-        if check_credits and review.has_enough_credits is False:
+        if check_credits and base.has_enough_credits is False:
             return None
 
-        if not review.s3_key:
+        if not base.s3_key:
             return None
 
         # Generate a temporary download URL (valid for 1 hour)
         download_url = self._s3_service.generate_download_url(
-            s3_key=review.s3_key,
+            s3_key=base.s3_key,
             expires_in=3600,
         )
 
-        return (download_url, review.original_filename or "paper.pdf")
+        return (download_url, base.original_filename or "paper.pdf")
 
 
 # Global service instance

@@ -220,6 +220,7 @@ class CodexCliRunner:
                             model=self._model,
                             input_tokens=int(input_tokens),
                             cached_input_tokens=int(cached_input_tokens or 0),
+                            cache_write_input_tokens=0,
                             output_tokens=int(output_tokens),
                         )
         except Exception:

@@ -37,6 +37,7 @@ writeup:
 review:
   model: anthropic:claude-haiku-4-5
   temperature: 1.0
+  conference: neurips_2025
 
 experiment:
   num_syn_datasets: 1

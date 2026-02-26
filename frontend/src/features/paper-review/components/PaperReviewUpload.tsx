@@ -2,21 +2,22 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FileUp, Loader2, AlertCircle, CheckCircle, Clock } from "lucide-react";
+import { cn } from "@/shared/lib/utils";
 import { config } from "@/shared/lib/config";
 import { withAuthHeaders } from "@/shared/lib/session-token";
 import {
   getInsufficientBalanceDetail,
   formatInsufficientBalanceMessage,
 } from "@/shared/utils/costs";
-import { ModelSelector } from "@/features/model-selector/components/ModelSelector";
-import { PromptTypes } from "@/shared/lib/prompt-types";
-import { PaperReviewResult, type PaperReviewResponse } from "./PaperReviewResult";
+import { TierSelector } from "./TierSelector";
+import { ConferenceSelector } from "./ConferenceSelector";
+import { PaperReviewResult, type AnyPaperReviewDetail } from "./PaperReviewResult";
 import type { components } from "@/types/api.gen";
 
 type UploadState = "idle" | "uploading" | "polling" | "complete" | "error";
 
 // Use generated types from OpenAPI schema
-type ReviewDetailResponse = components["schemas"]["PaperReviewDetail"];
+type ReviewDetailResponse = AnyPaperReviewDetail;
 type PendingReviewSummary = components["schemas"]["PendingReviewSummary"];
 type PaperReviewStartedResponse = components["schemas"]["PaperReviewStartedResponse"];
 
@@ -31,7 +32,7 @@ export function PaperReviewUpload({ onStartNewReview }: PaperReviewUploadProps) 
   const [uploadState, setUploadState] = useState<UploadState>("idle");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [reviewResult, setReviewResult] = useState<PaperReviewResponse | null>(null);
+  const [reviewResult, setReviewResult] = useState<ReviewDetailResponse | null>(null);
 
   // Track the current review being polled
   const [currentReviewId, setCurrentReviewId] = useState<number | null>(null);
@@ -41,21 +42,11 @@ export function PaperReviewUpload({ onStartNewReview }: PaperReviewUploadProps) 
   const [currentProgressStep, setCurrentProgressStep] = useState<string | null>(null);
   const pollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Model selection state
-  const [selectedModel, setSelectedModel] = useState<string>("");
-  const [selectedProvider, setSelectedProvider] = useState<string>("");
-  const [currentModel, setCurrentModel] = useState<string>("");
-  const [currentProvider, setCurrentProvider] = useState<string>("");
-
-  const handleModelChange = useCallback((model: string, provider: string) => {
-    setSelectedModel(model);
-    setSelectedProvider(provider);
-  }, []);
-
-  const handleDefaultsChange = useCallback((model: string, provider: string) => {
-    setCurrentModel(model);
-    setCurrentProvider(provider);
-  }, []);
+  // Tier and conference selection
+  const [selectedTier, setSelectedTier] = useState<"standard" | "premium">("standard");
+  const [selectedConference, setSelectedConference] = useState<"neurips_2025" | "iclr_2025">(
+    "neurips_2025"
+  );
 
   // Check for pending reviews on mount
   useEffect(() => {
@@ -126,39 +117,7 @@ export function PaperReviewUpload({ onStartNewReview }: PaperReviewUploadProps) 
             return;
           }
 
-          // Review is complete - transform to the format PaperReviewResult expects
-          const result: PaperReviewResponse = {
-            id: data.id,
-            review: {
-              summary: data.summary || "",
-              strengths: data.strengths || [],
-              weaknesses: data.weaknesses || [],
-              questions: data.questions || [],
-              limitations: data.limitations || [],
-              ethical_concerns: data.ethical_concerns || false,
-              ethical_concerns_explanation: data.ethical_concerns_explanation || "",
-              originality: data.originality || 0,
-              quality: data.quality || 0,
-              clarity: data.clarity || 0,
-              significance: data.significance || 0,
-              soundness: data.soundness || 0,
-              presentation: data.presentation || 0,
-              contribution: data.contribution || 0,
-              overall: data.overall || 0,
-              confidence: data.confidence || 0,
-              decision: data.decision || "",
-            },
-            token_usage: data.token_usage || {
-              input_tokens: 0,
-              cached_input_tokens: 0,
-              output_tokens: 0,
-            },
-            cost_cents: data.cost_cents || 0,
-            original_filename: data.original_filename,
-            model: data.model,
-            created_at: data.created_at,
-          };
-          setReviewResult(result);
+          setReviewResult(data);
           setUploadState("complete");
           setCurrentReviewId(null);
         } else if (data.status === "failed") {
@@ -218,18 +177,8 @@ export function PaperReviewUpload({ onStartNewReview }: PaperReviewUploadProps) 
       // Create FormData for file upload
       const formData = new FormData();
       formData.append("file", file);
-
-      // Use the selected model or fall back to current default
-      const effectiveModel = selectedModel || currentModel;
-      const effectiveProvider = selectedProvider || currentProvider;
-      if (effectiveModel && effectiveProvider) {
-        // Format as "provider:model" for LangChain's init_chat_model
-        formData.append("model", `${effectiveProvider}:${effectiveModel}`);
-      }
-
-      // Review parameters (hardcoded for now, user can't configure these yet)
-      formData.append("num_reviews_ensemble", "3");
-      formData.append("num_reflections", "1");
+      formData.append("tier", selectedTier);
+      formData.append("conference", selectedConference);
 
       // Use fetch directly for multipart form data
       const headers = withAuthHeaders(new Headers());
@@ -323,14 +272,31 @@ export function PaperReviewUpload({ onStartNewReview }: PaperReviewUploadProps) 
     return (
       <div className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2 text-emerald-400">
-            <CheckCircle className="h-5 w-5 shrink-0" />
-            <span className="font-medium">Review Complete</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <CheckCircle className="h-5 w-5 shrink-0 text-emerald-400" />
+            <span className="font-medium text-emerald-400">Review Complete</span>
             {(selectedFile || currentReviewFilename) && (
               <span className="truncate text-slate-400">
                 for {selectedFile?.name || currentReviewFilename}
               </span>
             )}
+            <span className="rounded bg-slate-700/50 px-1.5 py-0.5 text-[10px] font-medium text-slate-300">
+              {reviewResult.conference === "neurips_2025"
+                ? "NeurIPS 2025"
+                : reviewResult.conference === "iclr_2025"
+                  ? "ICLR 2025"
+                  : "ICML"}
+            </span>
+            <span
+              className={cn(
+                "rounded px-1.5 py-0.5 text-[10px] font-medium",
+                reviewResult.tier === "premium"
+                  ? "bg-sky-500/10 text-sky-400"
+                  : "bg-amber-500/10 text-amber-400"
+              )}
+            >
+              {reviewResult.tier === "premium" ? "Premium" : "Standard"}
+            </span>
           </div>
           <button
             onClick={handleReset}
@@ -339,7 +305,7 @@ export function PaperReviewUpload({ onStartNewReview }: PaperReviewUploadProps) 
             Upload Another Paper
           </button>
         </div>
-        <PaperReviewResult review={reviewResult} />
+        <PaperReviewResult data={reviewResult} />
       </div>
     );
   }
@@ -364,6 +330,25 @@ export function PaperReviewUpload({ onStartNewReview }: PaperReviewUploadProps) 
         <p className="mt-2 truncate text-sm text-slate-400">
           {selectedFile?.name || currentReviewFilename}
         </p>
+        <div className="mt-2 flex items-center gap-2">
+          <span className="rounded bg-slate-700/50 px-1.5 py-0.5 text-[10px] font-medium text-slate-300">
+            {selectedConference === "neurips_2025"
+              ? "NeurIPS 2025"
+              : selectedConference === "iclr_2025"
+                ? "ICLR 2025"
+                : "ICML"}
+          </span>
+          <span
+            className={cn(
+              "rounded px-1.5 py-0.5 text-[10px] font-medium",
+              selectedTier === "premium"
+                ? "bg-sky-500/10 text-sky-400"
+                : "bg-amber-500/10 text-amber-400"
+            )}
+          >
+            {selectedTier === "premium" ? "Premium" : "Standard"}
+          </span>
+        </div>
 
         {/* Progress bar */}
         {progressPercent !== null && (
@@ -411,23 +396,21 @@ export function PaperReviewUpload({ onStartNewReview }: PaperReviewUploadProps) 
 
   // Default upload state
   return (
-    <div>
-      {/* Model selector */}
-      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <span className="text-sm text-slate-400">Select AI model for review:</span>
-        <ModelSelector
-          promptType={PromptTypes.PAPER_REVIEW}
-          onModelChange={handleModelChange}
-          onDefaultsChange={handleDefaultsChange}
-          selectedModel={selectedModel}
-          selectedProvider={selectedProvider}
-          showMakeDefault={true}
-          showCapabilities={false}
+    <div className="space-y-4">
+      {/* Tier selector */}
+      <TierSelector selectedTier={selectedTier} onTierChange={setSelectedTier} />
+
+      {/* Conference selector */}
+      <div className="flex items-center gap-3">
+        <span className="text-sm text-slate-400">Conference:</span>
+        <ConferenceSelector
+          selectedConference={selectedConference}
+          onConferenceChange={setSelectedConference}
         />
       </div>
 
       {error && (
-        <div className="mb-4 flex items-center gap-2 rounded-lg bg-red-500/10 p-3 text-sm text-red-400">
+        <div className="flex items-center gap-2 rounded-lg bg-red-500/10 p-3 text-sm text-red-400">
           <AlertCircle className="h-4 w-4 shrink-0" />
           {error}
         </div>

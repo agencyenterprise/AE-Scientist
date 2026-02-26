@@ -4687,7 +4687,18 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PaperReviewDetail"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/NeurIPSPaperReviewDetail"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ICLRPaperReviewDetail"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ICMLPaperReviewDetail"
+                    }
+                  ],
+                  "title": "Response Get Paper Review Api Paper Reviews  Review Id  Get"
                 }
               }
             }
@@ -5247,32 +5258,31 @@
             "title": "File",
             "description": "PDF file to review"
           },
-          "model": {
+          "tier": {
             "type": "string",
-            "title": "Model",
-            "description": "LLM model to use for review (provider:model format)"
+            "enum": [
+              "standard",
+              "premium"
+            ],
+            "title": "Tier",
+            "description": "Review tier: standard or premium"
           },
-          "num_reviews_ensemble": {
-            "type": "integer",
-            "maximum": 5.0,
-            "minimum": 1.0,
-            "title": "Num Reviews Ensemble",
-            "description": "Number of ensemble reviews (1-5)"
-          },
-          "num_reflections": {
-            "type": "integer",
-            "maximum": 3.0,
-            "minimum": 0.0,
-            "title": "Num Reflections",
-            "description": "Number of reflection rounds (0-3)"
+          "conference": {
+            "type": "string",
+            "enum": [
+              "neurips_2025",
+              "iclr_2025",
+              "icml"
+            ],
+            "title": "Conference",
+            "description": "Conference schema to use (e.g. neurips_2025, iclr_2025)"
           }
         },
         "type": "object",
         "required": [
           "file",
-          "model",
-          "num_reviews_ensemble",
-          "num_reflections"
+          "tier",
+          "conference"
         ],
         "title": "Body_create_paper_review_api_paper_reviews_post"
       },
@@ -5668,6 +5678,27 @@
         ],
         "title": "ChildConversationInfo",
         "description": "Brief info about a child conversation seeded from a run."
+      },
+      "ClarityIssue": {
+        "properties": {
+          "location": {
+            "type": "string",
+            "title": "Location",
+            "description": "Where the issue occurs (e.g., 'Section 3.2', 'Figure 2')"
+          },
+          "issue": {
+            "type": "string",
+            "title": "Issue",
+            "description": "What is unclear, inconsistent, or misleading and why"
+          }
+        },
+        "type": "object",
+        "required": [
+          "location",
+          "issue"
+        ],
+        "title": "ClarityIssue",
+        "description": "A specific clarity issue identified in the paper."
       },
       "CodexEventItem": {
         "properties": {
@@ -7087,6 +7118,544 @@
         "type": "object",
         "title": "HardwareStatsPayload"
       },
+      "ICLRPaperReviewDetail": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Review status: pending, processing, completed, failed"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message",
+            "description": "Error message if status is failed"
+          },
+          "original_filename": {
+            "type": "string",
+            "title": "Original Filename",
+            "description": "Original PDF filename"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model",
+            "description": "Model used for review"
+          },
+          "tier": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "premium"
+            ],
+            "title": "Tier",
+            "description": "Review tier"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "ISO timestamp of review creation"
+          },
+          "has_enough_credits": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Has Enough Credits",
+            "description": "Whether user had positive balance when review completed. NULL if still running."
+          },
+          "access_restricted": {
+            "type": "boolean",
+            "title": "Access Restricted",
+            "description": "True if user cannot view full review details due to insufficient credits",
+            "default": false
+          },
+          "access_restricted_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Restricted Reason",
+            "description": "Message explaining why access is restricted"
+          },
+          "token_usage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TokenUsage"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Token usage (null if not completed or restricted)"
+          },
+          "cost_cents": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Cents",
+            "description": "Cost charged in cents (null if restricted)"
+          },
+          "progress": {
+            "type": "number",
+            "title": "Progress",
+            "description": "Review progress (0.0-1.0)"
+          },
+          "progress_step": {
+            "type": "string",
+            "title": "Progress Step",
+            "description": "Current step description (empty string when completed)"
+          },
+          "conference": {
+            "type": "string",
+            "enum": [
+              "iclr_2025"
+            ],
+            "const": "iclr_2025",
+            "title": "Conference"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "strengths": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strengths"
+          },
+          "weaknesses": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weaknesses"
+          },
+          "questions": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Questions"
+          },
+          "limitations": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limitations"
+          },
+          "ethical_concerns": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ethical Concerns"
+          },
+          "ethical_concerns_explanation": {
+            "type": "string",
+            "title": "Ethical Concerns Explanation",
+            "default": ""
+          },
+          "clarity_issues": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ClarityIssue"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clarity Issues"
+          },
+          "soundness": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Soundness"
+          },
+          "presentation": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Presentation"
+          },
+          "contribution": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contribution"
+          },
+          "overall": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "decision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "original_filename",
+          "model",
+          "tier",
+          "created_at",
+          "progress",
+          "progress_step",
+          "conference"
+        ],
+        "title": "ICLRPaperReviewDetail",
+        "description": "ICLR 2025 paper review response."
+      },
+      "ICMLPaperReviewDetail": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Review status: pending, processing, completed, failed"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message",
+            "description": "Error message if status is failed"
+          },
+          "original_filename": {
+            "type": "string",
+            "title": "Original Filename",
+            "description": "Original PDF filename"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model",
+            "description": "Model used for review"
+          },
+          "tier": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "premium"
+            ],
+            "title": "Tier",
+            "description": "Review tier"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "ISO timestamp of review creation"
+          },
+          "has_enough_credits": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Has Enough Credits",
+            "description": "Whether user had positive balance when review completed. NULL if still running."
+          },
+          "access_restricted": {
+            "type": "boolean",
+            "title": "Access Restricted",
+            "description": "True if user cannot view full review details due to insufficient credits",
+            "default": false
+          },
+          "access_restricted_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Restricted Reason",
+            "description": "Message explaining why access is restricted"
+          },
+          "token_usage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TokenUsage"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Token usage (null if not completed or restricted)"
+          },
+          "cost_cents": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Cents",
+            "description": "Cost charged in cents (null if restricted)"
+          },
+          "progress": {
+            "type": "number",
+            "title": "Progress",
+            "description": "Review progress (0.0-1.0)"
+          },
+          "progress_step": {
+            "type": "string",
+            "title": "Progress Step",
+            "description": "Current step description (empty string when completed)"
+          },
+          "conference": {
+            "type": "string",
+            "enum": [
+              "icml"
+            ],
+            "const": "icml",
+            "title": "Conference"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "claims_and_evidence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claims And Evidence"
+          },
+          "relation_to_prior_work": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relation To Prior Work"
+          },
+          "other_aspects": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Other Aspects"
+          },
+          "questions": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Questions"
+          },
+          "ethical_issues": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ethical Issues"
+          },
+          "ethical_issues_explanation": {
+            "type": "string",
+            "title": "Ethical Issues Explanation",
+            "default": ""
+          },
+          "clarity_issues": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ClarityIssue"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clarity Issues"
+          },
+          "overall": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall"
+          },
+          "decision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "original_filename",
+          "model",
+          "tier",
+          "created_at",
+          "progress",
+          "progress_step",
+          "conference"
+        ],
+        "title": "ICMLPaperReviewDetail",
+        "description": "ICML 2025 paper review response."
+      },
       "Idea": {
         "properties": {
           "idea_id": {
@@ -8349,6 +8918,294 @@
         "title": "MultipartUploadPartUrl",
         "description": "Presigned URL for uploading a single part."
       },
+      "NeurIPSPaperReviewDetail": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Review status: pending, processing, completed, failed"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message",
+            "description": "Error message if status is failed"
+          },
+          "original_filename": {
+            "type": "string",
+            "title": "Original Filename",
+            "description": "Original PDF filename"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model",
+            "description": "Model used for review"
+          },
+          "tier": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "premium"
+            ],
+            "title": "Tier",
+            "description": "Review tier"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "description": "ISO timestamp of review creation"
+          },
+          "has_enough_credits": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Has Enough Credits",
+            "description": "Whether user had positive balance when review completed. NULL if still running."
+          },
+          "access_restricted": {
+            "type": "boolean",
+            "title": "Access Restricted",
+            "description": "True if user cannot view full review details due to insufficient credits",
+            "default": false
+          },
+          "access_restricted_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Access Restricted Reason",
+            "description": "Message explaining why access is restricted"
+          },
+          "token_usage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TokenUsage"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Token usage (null if not completed or restricted)"
+          },
+          "cost_cents": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Cents",
+            "description": "Cost charged in cents (null if restricted)"
+          },
+          "progress": {
+            "type": "number",
+            "title": "Progress",
+            "description": "Review progress (0.0-1.0)"
+          },
+          "progress_step": {
+            "type": "string",
+            "title": "Progress Step",
+            "description": "Current step description (empty string when completed)"
+          },
+          "conference": {
+            "type": "string",
+            "enum": [
+              "neurips_2025"
+            ],
+            "const": "neurips_2025",
+            "title": "Conference"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "strengths_and_weaknesses": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strengths And Weaknesses"
+          },
+          "questions": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Questions"
+          },
+          "limitations": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limitations"
+          },
+          "ethical_concerns": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ethical Concerns"
+          },
+          "ethical_concerns_explanation": {
+            "type": "string",
+            "title": "Ethical Concerns Explanation",
+            "default": ""
+          },
+          "clarity_issues": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ClarityIssue"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clarity Issues"
+          },
+          "quality": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality"
+          },
+          "clarity": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clarity"
+          },
+          "significance": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Significance"
+          },
+          "originality": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Originality"
+          },
+          "overall": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "decision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "original_filename",
+          "model",
+          "tier",
+          "created_at",
+          "progress",
+          "progress_step",
+          "conference"
+        ],
+        "title": "NeurIPSPaperReviewDetail",
+        "description": "NeurIPS 2025 paper review response."
+      },
       "NodeExecutionCompletedEvent": {
         "properties": {
           "id": {
@@ -8885,317 +9742,6 @@
         "title": "PaperGenerationStepEvent",
         "description": "Emitted during Stage 5 (paper generation).\n\nEmission Criteria:\n- Triggered by paper_generation_progress events\n- Shows current step and progress within paper generation\n- Emitted for each major paper generation step\n\nFrequency: 4-6 per paper generation stage"
       },
-      "PaperReviewDetail": {
-        "properties": {
-          "id": {
-            "type": "integer",
-            "title": "Id"
-          },
-          "status": {
-            "type": "string",
-            "title": "Status",
-            "description": "Review status: pending, processing, completed, failed"
-          },
-          "error_message": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Error Message",
-            "description": "Error message if status is failed"
-          },
-          "original_filename": {
-            "type": "string",
-            "title": "Original Filename",
-            "description": "Original PDF filename"
-          },
-          "model": {
-            "type": "string",
-            "title": "Model",
-            "description": "Model used for review"
-          },
-          "created_at": {
-            "type": "string",
-            "title": "Created At",
-            "description": "ISO timestamp of review creation"
-          },
-          "has_enough_credits": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Has Enough Credits",
-            "description": "Whether user had positive balance when review completed. NULL if still running."
-          },
-          "access_restricted": {
-            "type": "boolean",
-            "title": "Access Restricted",
-            "description": "True if user cannot view full review details due to insufficient credits",
-            "default": false
-          },
-          "access_restricted_reason": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Access Restricted Reason",
-            "description": "Message explaining why access is restricted"
-          },
-          "summary": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Summary",
-            "description": "Paper summary (null if not completed or restricted)"
-          },
-          "strengths": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Strengths",
-            "description": "List of strengths (null if not completed or restricted)"
-          },
-          "weaknesses": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Weaknesses",
-            "description": "List of weaknesses (null if not completed or restricted)"
-          },
-          "originality": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Originality"
-          },
-          "quality": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Quality"
-          },
-          "clarity": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Clarity"
-          },
-          "significance": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Significance"
-          },
-          "questions": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Questions"
-          },
-          "limitations": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Limitations"
-          },
-          "ethical_concerns": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ethical Concerns"
-          },
-          "ethical_concerns_explanation": {
-            "type": "string",
-            "title": "Ethical Concerns Explanation",
-            "default": ""
-          },
-          "soundness": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Soundness"
-          },
-          "presentation": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Presentation"
-          },
-          "contribution": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Contribution"
-          },
-          "overall": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Overall"
-          },
-          "confidence": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Confidence"
-          },
-          "decision": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Decision"
-          },
-          "token_usage": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/TokenUsage"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Token usage (null if not completed or restricted)"
-          },
-          "cost_cents": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Cost Cents",
-            "description": "Cost charged in cents (null if restricted)"
-          },
-          "progress": {
-            "type": "number",
-            "title": "Progress",
-            "description": "Review progress (0.0-1.0)"
-          },
-          "progress_step": {
-            "type": "string",
-            "title": "Progress Step",
-            "description": "Current step description (empty string when completed)"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "status",
-          "original_filename",
-          "model",
-          "created_at",
-          "progress",
-          "progress_step"
-        ],
-        "title": "PaperReviewDetail",
-        "description": "Paper review with computed fields for API responses.\n\nThis is used both as the service return type and the API response model."
-      },
       "PaperReviewListResponse": {
         "properties": {
           "reviews": {
@@ -9231,12 +9777,22 @@
             "type": "string",
             "title": "Status",
             "description": "Review status (pending)"
+          },
+          "tier": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "premium"
+            ],
+            "title": "Tier",
+            "description": "Review tier"
           }
         },
         "type": "object",
         "required": [
           "review_id",
-          "status"
+          "status",
+          "tier"
         ],
         "title": "PaperReviewStartedResponse",
         "description": "Response when a paper review is started."
@@ -9299,6 +9855,15 @@
             "title": "Model",
             "description": "Model used for review"
           },
+          "tier": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "premium"
+            ],
+            "title": "Tier",
+            "description": "Review tier"
+          },
           "created_at": {
             "type": "string",
             "title": "Created At",
@@ -9322,6 +9887,23 @@
             "description": "True if user cannot view full review details due to insufficient credits",
             "default": false
           },
+          "conference": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "neurips_2025",
+                  "iclr_2025",
+                  "icml"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conference",
+            "description": "Conference schema used for review"
+          },
           "progress": {
             "type": "number",
             "title": "Progress",
@@ -9339,6 +9921,7 @@
           "status",
           "original_filename",
           "model",
+          "tier",
           "created_at",
           "progress",
           "progress_step"
@@ -9522,6 +10105,15 @@
             "title": "Model",
             "description": "Model used for review"
           },
+          "tier": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "premium"
+            ],
+            "title": "Tier",
+            "description": "Review tier"
+          },
           "created_at": {
             "type": "string",
             "title": "Created At",
@@ -9534,6 +10126,7 @@
           "status",
           "original_filename",
           "model",
+          "tier",
           "created_at"
         ],
         "title": "PendingReviewSummary",
@@ -13307,6 +13900,11 @@
             "title": "Cached Input Tokens",
             "description": "Cached input tokens"
           },
+          "cache_write_input_tokens": {
+            "type": "integer",
+            "title": "Cache Write Input Tokens",
+            "description": "Cache write input tokens"
+          },
           "output_tokens": {
             "type": "integer",
             "title": "Output Tokens",
@@ -13317,6 +13915,7 @@
         "required": [
           "input_tokens",
           "cached_input_tokens",
+          "cache_write_input_tokens",
           "output_tokens"
         ],
         "title": "TokenUsage",
@@ -13336,6 +13935,10 @@
             "type": "integer",
             "title": "Cached Input Tokens"
           },
+          "cache_write_input_tokens": {
+            "type": "integer",
+            "title": "Cache Write Input Tokens"
+          },
           "output_tokens": {
             "type": "integer",
             "title": "Output Tokens"
@@ -13346,6 +13949,7 @@
           "model",
           "input_tokens",
           "cached_input_tokens",
+          "cache_write_input_tokens",
           "output_tokens"
         ],
         "title": "TokenUsageEvent"

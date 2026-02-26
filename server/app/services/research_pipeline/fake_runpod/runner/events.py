@@ -889,6 +889,7 @@ class EventsMixin:
             model="openai:gpt-5.2",
             input_tokens=int((12000 + iteration_variance) * stage_multiplier),
             cached_input_tokens=int((8000 + iteration_variance * 0.5) * stage_multiplier),
+            cache_write_input_tokens=0,
             output_tokens=int((2500 + iteration * 200) * stage_multiplier),
         )
         try:
@@ -906,6 +907,7 @@ class EventsMixin:
             model="openai:gpt-5.2",
             input_tokens=int(4000 * stage_multiplier),
             cached_input_tokens=int(2000 * stage_multiplier),
+            cache_write_input_tokens=0,
             output_tokens=int(800 * stage_multiplier),
         )
         try:
@@ -929,6 +931,7 @@ class EventsMixin:
             model="openai:gpt-5.2",
             input_tokens=3000 + seed_idx * 200,
             cached_input_tokens=2000 + seed_idx * 100,
+            cache_write_input_tokens=0,
             output_tokens=500 + seed_idx * 50,
         )
         try:

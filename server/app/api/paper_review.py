@@ -8,13 +8,14 @@ Reviews are processed asynchronously in the background.
 import logging
 from typing import List, Optional
 
+from ae_paper_review import Conference
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
 
 from app.middleware.auth import get_current_user
 from app.models.billing import InsufficientBalanceError
-from app.models.paper_review import PaperReviewDetail
-from app.services.paper_review_service import get_paper_review_service
+from app.models.paper_review import AnyPaperReviewDetail, ConferenceLiteral, TierLiteral
+from app.services.paper_review_service import ReviewTier, get_paper_review_service
 
 router = APIRouter(prefix="/paper-reviews", tags=["paper-reviews"])
 
@@ -33,6 +34,7 @@ class PaperReviewStartedResponse(BaseModel):
 
     review_id: int = Field(..., description="Unique review ID")
     status: str = Field(..., description="Review status (pending)")
+    tier: TierLiteral = Field(..., description="Review tier")
 
 
 class PaperReviewSummary(BaseModel):
@@ -51,6 +53,7 @@ class PaperReviewSummary(BaseModel):
     )
     original_filename: str = Field(..., description="Original PDF filename")
     model: str = Field(..., description="Model used for review")
+    tier: TierLiteral = Field(..., description="Review tier")
     created_at: str = Field(..., description="ISO timestamp of review creation")
     has_enough_credits: Optional[bool] = Field(
         None,
@@ -59,6 +62,9 @@ class PaperReviewSummary(BaseModel):
     access_restricted: bool = Field(
         False,
         description="True if user cannot view full review details due to insufficient credits",
+    )
+    conference: Optional[ConferenceLiteral] = Field(
+        None, description="Conference schema used for review"
     )
     progress: float = Field(..., description="Review progress (0.0-1.0)")
     progress_step: str = Field(
@@ -87,6 +93,7 @@ class PendingReviewSummary(BaseModel):
     status: str = Field(..., description="Review status")
     original_filename: str = Field(..., description="Original PDF filename")
     model: str = Field(..., description="Model used for review")
+    tier: TierLiteral = Field(..., description="Review tier")
     created_at: str = Field(..., description="ISO timestamp of review creation")
 
 
@@ -111,11 +118,10 @@ class PendingReviewsResponse(BaseModel):
 async def create_paper_review(
     request: Request,
     file: UploadFile = File(..., description="PDF file to review"),
-    model: str = Form(..., description="LLM model to use for review (provider:model format)"),
-    num_reviews_ensemble: int = Form(
-        ..., ge=1, le=5, description="Number of ensemble reviews (1-5)"
+    tier: TierLiteral = Form(..., description="Review tier: standard or premium"),
+    conference: ConferenceLiteral = Form(
+        ..., description="Conference schema to use (e.g. neurips_2025, iclr_2025)"
     ),
-    num_reflections: int = Form(..., ge=0, le=3, description="Number of reflection rounds (0-3)"),
 ) -> PaperReviewStartedResponse:
     """
     Submit a paper for review.
@@ -127,6 +133,7 @@ async def create_paper_review(
     """
     # Get authenticated user
     current_user = get_current_user(request)
+    review_tier = ReviewTier(tier)
 
     # Validate file is a PDF
     if not file.filename:
@@ -154,14 +161,14 @@ async def create_paper_review(
             user_id=current_user.id,
             pdf_content=pdf_content,
             original_filename=file.filename,
-            model=model,
-            num_reviews_ensemble=num_reviews_ensemble,
-            num_reflections=num_reflections,
+            tier=review_tier,
+            conference=Conference(conference),
         )
 
         return PaperReviewStartedResponse(
             review_id=review_id,
             status=status,
+            tier=review_tier.value,
         )
 
     except HTTPException:
@@ -228,11 +235,11 @@ async def list_paper_reviews(
         raise HTTPException(status_code=500, detail="Failed to list reviews") from e
 
 
-@router.get("/{review_id}", response_model=PaperReviewDetail)
+@router.get("/{review_id}", response_model=AnyPaperReviewDetail)
 async def get_paper_review(
     review_id: int,
     request: Request,
-) -> PaperReviewDetail:
+) -> AnyPaperReviewDetail:
     """
     Get a specific paper review by ID.
 

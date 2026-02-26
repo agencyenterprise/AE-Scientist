@@ -2184,20 +2184,17 @@ export interface components {
              */
             file: string;
             /**
-             * Model
-             * @description LLM model to use for review (provider:model format)
+             * Tier
+             * @description Review tier: standard or premium
+             * @enum {string}
              */
-            model: string;
+            tier: "standard" | "premium";
             /**
-             * Num Reviews Ensemble
-             * @description Number of ensemble reviews (1-5)
+             * Conference
+             * @description Conference schema to use (e.g. neurips_2025, iclr_2025)
+             * @enum {string}
              */
-            num_reviews_ensemble: number;
-            /**
-             * Num Reflections
-             * @description Number of reflection rounds (0-3)
-             */
-            num_reflections: number;
+            conference: "neurips_2025" | "iclr_2025" | "icml";
         };
         /** Body_upload_file_api_conversations__conversation_id__files_post */
         Body_upload_file_api_conversations__conversation_id__files_post: {
@@ -2417,6 +2414,22 @@ export interface components {
              * @description Conversation status
              */
             status: string;
+        };
+        /**
+         * ClarityIssue
+         * @description A specific clarity issue identified in the paper.
+         */
+        ClarityIssue: {
+            /**
+             * Location
+             * @description Where the issue occurs (e.g., 'Section 3.2', 'Figure 2')
+             */
+            location: string;
+            /**
+             * Issue
+             * @description What is unclear, inconsistent, or misleading and why
+             */
+            issue: string;
         };
         /**
          * CodexEventItem
@@ -3058,6 +3071,216 @@ export interface components {
         HardwareStatsPayload: {
             /** Partitions */
             partitions?: components["schemas"]["HardwareStatsPartition"][];
+        };
+        /**
+         * ICLRPaperReviewDetail
+         * @description ICLR 2025 paper review response.
+         */
+        ICLRPaperReviewDetail: {
+            /** Id */
+            id: number;
+            /**
+             * Status
+             * @description Review status: pending, processing, completed, failed
+             */
+            status: string;
+            /**
+             * Error Message
+             * @description Error message if status is failed
+             */
+            error_message?: string | null;
+            /**
+             * Original Filename
+             * @description Original PDF filename
+             */
+            original_filename: string;
+            /**
+             * Model
+             * @description Model used for review
+             */
+            model: string;
+            /**
+             * Tier
+             * @description Review tier
+             * @enum {string}
+             */
+            tier: "standard" | "premium";
+            /**
+             * Created At
+             * @description ISO timestamp of review creation
+             */
+            created_at: string;
+            /**
+             * Has Enough Credits
+             * @description Whether user had positive balance when review completed. NULL if still running.
+             */
+            has_enough_credits?: boolean | null;
+            /**
+             * Access Restricted
+             * @description True if user cannot view full review details due to insufficient credits
+             * @default false
+             */
+            access_restricted: boolean;
+            /**
+             * Access Restricted Reason
+             * @description Message explaining why access is restricted
+             */
+            access_restricted_reason?: string | null;
+            /** @description Token usage (null if not completed or restricted) */
+            token_usage?: components["schemas"]["TokenUsage"] | null;
+            /**
+             * Cost Cents
+             * @description Cost charged in cents (null if restricted)
+             */
+            cost_cents?: number | null;
+            /**
+             * Progress
+             * @description Review progress (0.0-1.0)
+             */
+            progress: number;
+            /**
+             * Progress Step
+             * @description Current step description (empty string when completed)
+             */
+            progress_step: string;
+            /**
+             * Conference
+             * @constant
+             * @enum {string}
+             */
+            conference: "iclr_2025";
+            /** Summary */
+            summary?: string | null;
+            /** Strengths */
+            strengths?: string[] | null;
+            /** Weaknesses */
+            weaknesses?: string[] | null;
+            /** Questions */
+            questions?: string[] | null;
+            /** Limitations */
+            limitations?: string | null;
+            /** Ethical Concerns */
+            ethical_concerns?: boolean | null;
+            /**
+             * Ethical Concerns Explanation
+             * @default
+             */
+            ethical_concerns_explanation: string;
+            /** Clarity Issues */
+            clarity_issues?: components["schemas"]["ClarityIssue"][] | null;
+            /** Soundness */
+            soundness?: number | null;
+            /** Presentation */
+            presentation?: number | null;
+            /** Contribution */
+            contribution?: number | null;
+            /** Overall */
+            overall?: number | null;
+            /** Confidence */
+            confidence?: number | null;
+            /** Decision */
+            decision?: string | null;
+        };
+        /**
+         * ICMLPaperReviewDetail
+         * @description ICML 2025 paper review response.
+         */
+        ICMLPaperReviewDetail: {
+            /** Id */
+            id: number;
+            /**
+             * Status
+             * @description Review status: pending, processing, completed, failed
+             */
+            status: string;
+            /**
+             * Error Message
+             * @description Error message if status is failed
+             */
+            error_message?: string | null;
+            /**
+             * Original Filename
+             * @description Original PDF filename
+             */
+            original_filename: string;
+            /**
+             * Model
+             * @description Model used for review
+             */
+            model: string;
+            /**
+             * Tier
+             * @description Review tier
+             * @enum {string}
+             */
+            tier: "standard" | "premium";
+            /**
+             * Created At
+             * @description ISO timestamp of review creation
+             */
+            created_at: string;
+            /**
+             * Has Enough Credits
+             * @description Whether user had positive balance when review completed. NULL if still running.
+             */
+            has_enough_credits?: boolean | null;
+            /**
+             * Access Restricted
+             * @description True if user cannot view full review details due to insufficient credits
+             * @default false
+             */
+            access_restricted: boolean;
+            /**
+             * Access Restricted Reason
+             * @description Message explaining why access is restricted
+             */
+            access_restricted_reason?: string | null;
+            /** @description Token usage (null if not completed or restricted) */
+            token_usage?: components["schemas"]["TokenUsage"] | null;
+            /**
+             * Cost Cents
+             * @description Cost charged in cents (null if restricted)
+             */
+            cost_cents?: number | null;
+            /**
+             * Progress
+             * @description Review progress (0.0-1.0)
+             */
+            progress: number;
+            /**
+             * Progress Step
+             * @description Current step description (empty string when completed)
+             */
+            progress_step: string;
+            /**
+             * Conference
+             * @constant
+             * @enum {string}
+             */
+            conference: "icml";
+            /** Summary */
+            summary?: string | null;
+            /** Claims And Evidence */
+            claims_and_evidence?: string | null;
+            /** Relation To Prior Work */
+            relation_to_prior_work?: string | null;
+            /** Other Aspects */
+            other_aspects?: string | null;
+            /** Questions */
+            questions?: string[] | null;
+            /** Ethical Issues */
+            ethical_issues?: boolean | null;
+            /**
+             * Ethical Issues Explanation
+             * @default
+             */
+            ethical_issues_explanation: string;
+            /** Clarity Issues */
+            clarity_issues?: components["schemas"]["ClarityIssue"][] | null;
+            /** Overall */
+            overall?: number | null;
+            /** Decision */
+            decision?: string | null;
         };
         /**
          * Idea
@@ -3850,6 +4073,115 @@ export interface components {
             upload_url: string;
         };
         /**
+         * NeurIPSPaperReviewDetail
+         * @description NeurIPS 2025 paper review response.
+         */
+        NeurIPSPaperReviewDetail: {
+            /** Id */
+            id: number;
+            /**
+             * Status
+             * @description Review status: pending, processing, completed, failed
+             */
+            status: string;
+            /**
+             * Error Message
+             * @description Error message if status is failed
+             */
+            error_message?: string | null;
+            /**
+             * Original Filename
+             * @description Original PDF filename
+             */
+            original_filename: string;
+            /**
+             * Model
+             * @description Model used for review
+             */
+            model: string;
+            /**
+             * Tier
+             * @description Review tier
+             * @enum {string}
+             */
+            tier: "standard" | "premium";
+            /**
+             * Created At
+             * @description ISO timestamp of review creation
+             */
+            created_at: string;
+            /**
+             * Has Enough Credits
+             * @description Whether user had positive balance when review completed. NULL if still running.
+             */
+            has_enough_credits?: boolean | null;
+            /**
+             * Access Restricted
+             * @description True if user cannot view full review details due to insufficient credits
+             * @default false
+             */
+            access_restricted: boolean;
+            /**
+             * Access Restricted Reason
+             * @description Message explaining why access is restricted
+             */
+            access_restricted_reason?: string | null;
+            /** @description Token usage (null if not completed or restricted) */
+            token_usage?: components["schemas"]["TokenUsage"] | null;
+            /**
+             * Cost Cents
+             * @description Cost charged in cents (null if restricted)
+             */
+            cost_cents?: number | null;
+            /**
+             * Progress
+             * @description Review progress (0.0-1.0)
+             */
+            progress: number;
+            /**
+             * Progress Step
+             * @description Current step description (empty string when completed)
+             */
+            progress_step: string;
+            /**
+             * Conference
+             * @constant
+             * @enum {string}
+             */
+            conference: "neurips_2025";
+            /** Summary */
+            summary?: string | null;
+            /** Strengths And Weaknesses */
+            strengths_and_weaknesses?: string | null;
+            /** Questions */
+            questions?: string[] | null;
+            /** Limitations */
+            limitations?: string | null;
+            /** Ethical Concerns */
+            ethical_concerns?: boolean | null;
+            /**
+             * Ethical Concerns Explanation
+             * @default
+             */
+            ethical_concerns_explanation: string;
+            /** Clarity Issues */
+            clarity_issues?: components["schemas"]["ClarityIssue"][] | null;
+            /** Quality */
+            quality?: number | null;
+            /** Clarity */
+            clarity?: number | null;
+            /** Significance */
+            significance?: number | null;
+            /** Originality */
+            originality?: number | null;
+            /** Overall */
+            overall?: number | null;
+            /** Confidence */
+            confidence?: number | null;
+            /** Decision */
+            decision?: string | null;
+        };
+        /**
          * NodeExecutionCompletedEvent
          * @description Emitted when a node completes execution.
          *
@@ -4187,120 +4519,6 @@ export interface components {
             details?: Record<string, never> | null;
         };
         /**
-         * PaperReviewDetail
-         * @description Paper review with computed fields for API responses.
-         *
-         *     This is used both as the service return type and the API response model.
-         */
-        PaperReviewDetail: {
-            /** Id */
-            id: number;
-            /**
-             * Status
-             * @description Review status: pending, processing, completed, failed
-             */
-            status: string;
-            /**
-             * Error Message
-             * @description Error message if status is failed
-             */
-            error_message?: string | null;
-            /**
-             * Original Filename
-             * @description Original PDF filename
-             */
-            original_filename: string;
-            /**
-             * Model
-             * @description Model used for review
-             */
-            model: string;
-            /**
-             * Created At
-             * @description ISO timestamp of review creation
-             */
-            created_at: string;
-            /**
-             * Has Enough Credits
-             * @description Whether user had positive balance when review completed. NULL if still running.
-             */
-            has_enough_credits?: boolean | null;
-            /**
-             * Access Restricted
-             * @description True if user cannot view full review details due to insufficient credits
-             * @default false
-             */
-            access_restricted: boolean;
-            /**
-             * Access Restricted Reason
-             * @description Message explaining why access is restricted
-             */
-            access_restricted_reason?: string | null;
-            /**
-             * Summary
-             * @description Paper summary (null if not completed or restricted)
-             */
-            summary?: string | null;
-            /**
-             * Strengths
-             * @description List of strengths (null if not completed or restricted)
-             */
-            strengths?: string[] | null;
-            /**
-             * Weaknesses
-             * @description List of weaknesses (null if not completed or restricted)
-             */
-            weaknesses?: string[] | null;
-            /** Originality */
-            originality?: number | null;
-            /** Quality */
-            quality?: number | null;
-            /** Clarity */
-            clarity?: number | null;
-            /** Significance */
-            significance?: number | null;
-            /** Questions */
-            questions?: string[] | null;
-            /** Limitations */
-            limitations?: string[] | null;
-            /** Ethical Concerns */
-            ethical_concerns?: boolean | null;
-            /**
-             * Ethical Concerns Explanation
-             * @default
-             */
-            ethical_concerns_explanation: string;
-            /** Soundness */
-            soundness?: number | null;
-            /** Presentation */
-            presentation?: number | null;
-            /** Contribution */
-            contribution?: number | null;
-            /** Overall */
-            overall?: number | null;
-            /** Confidence */
-            confidence?: number | null;
-            /** Decision */
-            decision?: string | null;
-            /** @description Token usage (null if not completed or restricted) */
-            token_usage?: components["schemas"]["TokenUsage"] | null;
-            /**
-             * Cost Cents
-             * @description Cost charged in cents (null if restricted)
-             */
-            cost_cents?: number | null;
-            /**
-             * Progress
-             * @description Review progress (0.0-1.0)
-             */
-            progress: number;
-            /**
-             * Progress Step
-             * @description Current step description (empty string when completed)
-             */
-            progress_step: string;
-        };
-        /**
          * PaperReviewListResponse
          * @description Response for listing paper reviews.
          */
@@ -4331,6 +4549,12 @@ export interface components {
              * @description Review status (pending)
              */
             status: string;
+            /**
+             * Tier
+             * @description Review tier
+             * @enum {string}
+             */
+            tier: "standard" | "premium";
         };
         /**
          * PaperReviewSummary
@@ -4373,6 +4597,12 @@ export interface components {
              */
             model: string;
             /**
+             * Tier
+             * @description Review tier
+             * @enum {string}
+             */
+            tier: "standard" | "premium";
+            /**
              * Created At
              * @description ISO timestamp of review creation
              */
@@ -4388,6 +4618,11 @@ export interface components {
              * @default false
              */
             access_restricted: boolean;
+            /**
+             * Conference
+             * @description Conference schema used for review
+             */
+            conference?: ("neurips_2025" | "iclr_2025" | "icml") | null;
             /**
              * Progress
              * @description Review progress (0.0-1.0)
@@ -4479,6 +4714,12 @@ export interface components {
              * @description Model used for review
              */
             model: string;
+            /**
+             * Tier
+             * @description Review tier
+             * @enum {string}
+             */
+            tier: "standard" | "premium";
             /**
              * Created At
              * @description ISO timestamp of review creation
@@ -6337,6 +6578,11 @@ export interface components {
              */
             cached_input_tokens: number;
             /**
+             * Cache Write Input Tokens
+             * @description Cache write input tokens
+             */
+            cache_write_input_tokens: number;
+            /**
              * Output Tokens
              * @description Total output tokens used
              */
@@ -6350,6 +6596,8 @@ export interface components {
             input_tokens: number;
             /** Cached Input Tokens */
             cached_input_tokens: number;
+            /** Cache Write Input Tokens */
+            cache_write_input_tokens: number;
             /** Output Tokens */
             output_tokens: number;
         };
@@ -9549,7 +9797,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PaperReviewDetail"];
+                    "application/json": components["schemas"]["NeurIPSPaperReviewDetail"] | components["schemas"]["ICLRPaperReviewDetail"] | components["schemas"]["ICMLPaperReviewDetail"];
                 };
             };
             /** @description Validation Error */

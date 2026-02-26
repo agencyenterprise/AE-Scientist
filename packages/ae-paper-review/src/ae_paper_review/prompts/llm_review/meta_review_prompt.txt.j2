@@ -1,7 +1,0 @@
-{% include "llm_review/neurips_form.md.j2" %}
-{% for review in reviews %}
-Review {{ loop.index }}/{{ reviews|length }}:
-```
-{{ review }}
-```
-{% endfor %}

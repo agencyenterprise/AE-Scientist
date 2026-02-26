@@ -20,6 +20,7 @@ class PaperReviewTokenUsage(NamedTuple):
     model: str
     input_tokens: int
     cached_input_tokens: int
+    cache_write_input_tokens: int
     output_tokens: int
     created_at: datetime
 
@@ -35,6 +36,7 @@ class PaperReviewTokenUsagesMixin(ConnectionProvider):
         model: str,
         input_tokens: int,
         cached_input_tokens: int,
+        cache_write_input_tokens: int,
         output_tokens: int,
     ) -> int:
         """Insert a token usage record and return its ID."""
@@ -44,8 +46,8 @@ class PaperReviewTokenUsagesMixin(ConnectionProvider):
                     """
                     INSERT INTO paper_review_token_usages
                         (paper_review_id, provider, model, input_tokens,
-                         cached_input_tokens, output_tokens)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                         cached_input_tokens, cache_write_input_tokens, output_tokens)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
@@ -54,6 +56,7 @@ class PaperReviewTokenUsagesMixin(ConnectionProvider):
                         model,
                         input_tokens,
                         cached_input_tokens,
+                        cache_write_input_tokens,
                         output_tokens,
                     ),
                 )
@@ -72,8 +75,8 @@ class PaperReviewTokenUsagesMixin(ConnectionProvider):
 
         Args:
             paper_review_id: The paper review ID
-            usages: List of TokenUsageDetail with model (in "provider:model" format),
-                    input_tokens, cached_input_tokens, output_tokens
+            usages: List of TokenUsageDetail with provider, model, input_tokens,
+                    cached_input_tokens, cache_write_input_tokens, output_tokens
         """
         if not usages:
             return
@@ -81,26 +84,20 @@ class PaperReviewTokenUsagesMixin(ConnectionProvider):
         async with self.aget_connection() as conn:
             async with conn.cursor() as cursor:
                 for usage in usages:
-                    # Parse provider:model format (e.g., "openai:gpt-5.2")
-                    if ":" in usage.model:
-                        provider, model = usage.model.split(":", 1)
-                    else:
-                        provider = "unknown"
-                        model = usage.model
-
                     await cursor.execute(
                         """
                         INSERT INTO paper_review_token_usages
                             (paper_review_id, provider, model, input_tokens,
-                             cached_input_tokens, output_tokens)
-                        VALUES (%s, %s, %s, %s, %s, %s)
+                             cached_input_tokens, cache_write_input_tokens, output_tokens)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
                         """,
                         (
                             paper_review_id,
-                            provider,
-                            model,
+                            usage.provider,
+                            usage.model,
                             usage.input_tokens,
                             usage.cached_input_tokens,
+                            usage.cache_write_input_tokens,
                             usage.output_tokens,
                         ),
                     )
@@ -111,7 +108,7 @@ class PaperReviewTokenUsagesMixin(ConnectionProvider):
         """Get all token usages for a paper review."""
         query = """
             SELECT id, paper_review_id, provider, model, input_tokens,
-                   cached_input_tokens, output_tokens, created_at
+                   cached_input_tokens, cache_write_input_tokens, output_tokens, created_at
             FROM paper_review_token_usages
             WHERE paper_review_id = %s
             ORDER BY created_at ASC
@@ -128,6 +125,7 @@ class PaperReviewTokenUsagesMixin(ConnectionProvider):
             SELECT
                 SUM(input_tokens) as input_tokens,
                 SUM(cached_input_tokens) as cached_input_tokens,
+                SUM(cache_write_input_tokens) as cache_write_input_tokens,
                 SUM(output_tokens) as output_tokens
             FROM paper_review_token_usages
             WHERE paper_review_id = %s
@@ -137,9 +135,15 @@ class PaperReviewTokenUsagesMixin(ConnectionProvider):
                 await cursor.execute(query, (paper_review_id,))
                 row = await cursor.fetchone()
         if not row:
-            return {"input_tokens": 0, "cached_input_tokens": 0, "output_tokens": 0}
+            return {
+                "input_tokens": 0,
+                "cached_input_tokens": 0,
+                "cache_write_input_tokens": 0,
+                "output_tokens": 0,
+            }
         return {
             "input_tokens": row["input_tokens"] or 0,
             "cached_input_tokens": row["cached_input_tokens"] or 0,
+            "cache_write_input_tokens": row["cache_write_input_tokens"] or 0,
             "output_tokens": row["output_tokens"] or 0,
         }
