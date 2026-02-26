@@ -7,7 +7,7 @@ import {
   Brain,
   RefreshCw,
   BarChart3,
-  Layers,
+  Globe,
   Clock4,
   DollarSign,
 } from "lucide-react";
@@ -16,78 +16,34 @@ import { cn } from "@/shared/lib/utils";
 const FLOW_STEPS = [
   {
     icon: FileText,
-    title: "PDF Text Extraction",
+    title: "PDF Processing",
     detail:
-      "Your paper’s content is parsed to capture all text while preserving its structure and formatting.",
-  },
-  {
-    icon: Layers,
-    title: "Ensemble Review Generation",
-    detail:
-      "Multiple independent AI reviewers analyze your paper in parallel, each providing their own assessment. This ensemble approach reduces bias and improves reliability.",
+      "Your paper's content is parsed to capture all text while preserving its structure and formatting.",
   },
   {
     icon: Brain,
-    title: "Meta-Review Aggregation",
+    title: "Analysis & Scoring",
     detail:
-      "When using multiple reviewers, a meta-review synthesizes all perspectives into a coherent consensus, highlighting areas of agreement and divergence.",
+      "The AI reviewer analyzes your paper against the selected conference review form, producing structured scores and detailed feedback.",
+  },
+  {
+    icon: Globe,
+    title: "Web-Grounded Checks",
+    detail:
+      "Novelty is assessed by searching for related work, and citations are verified against Semantic Scholar. Premium tier also checks for missing references and presentation quality.",
   },
   {
     icon: RefreshCw,
     title: "Reflection & Refinement",
     detail:
-      "The AI performs multiple reflection rounds, reconsidering its initial assessment for accuracy, soundness, and clarity before finalizing the review.",
+      "The AI reconsiders its initial assessment for accuracy, soundness, and clarity before finalizing the review.",
   },
   {
     icon: BarChart3,
-    title: "Structured Scoring",
+    title: "Structured Output",
     detail:
-      "Final review includes NeurIPS-style scores (originality, quality, clarity, significance) plus an overall rating and accept/reject decision.",
+      "Final review includes conference-specific scores, strengths, weaknesses, questions, and an accept/reject decision.",
   },
-];
-
-// NeurIPS-style rating scales
-const SCALE_LOW_TO_HIGH = [
-  { value: "4", label: "Very high" },
-  { value: "3", label: "High" },
-  { value: "2", label: "Medium" },
-  { value: "1", label: "Low" },
-];
-
-const SCALE_POOR_TO_EXCELLENT = [
-  { value: "4", label: "Excellent" },
-  { value: "3", label: "Good" },
-  { value: "2", label: "Fair" },
-  { value: "1", label: "Poor" },
-];
-
-const SCALE_OVERALL = [
-  { value: "9-10", label: "Award level" },
-  { value: "7-8", label: "Strong Accept" },
-  { value: "6", label: "Solid Accept" },
-  { value: "4-5", label: "Borderline" },
-  { value: "1-3", label: "Reject" },
-];
-
-const SCALE_CONFIDENCE = [
-  { value: "5", label: "Absolutely certain" },
-  { value: "4", label: "Confident" },
-  { value: "3", label: "Fairly confident" },
-  { value: "2", label: "Uncertain" },
-  { value: "1", label: "Educated guess" },
-];
-
-// All review criteria with their scales (matching NeurIPS form)
-const REVIEW_CRITERIA = [
-  { name: "Originality", desc: "Novelty of ideas and approach", scores: SCALE_LOW_TO_HIGH },
-  { name: "Quality", desc: "Technical correctness and rigor", scores: SCALE_LOW_TO_HIGH },
-  { name: "Clarity", desc: "Writing and exposition quality", scores: SCALE_LOW_TO_HIGH },
-  { name: "Significance", desc: "Potential impact on the field", scores: SCALE_LOW_TO_HIGH },
-  { name: "Soundness", desc: "Methodological rigor", scores: SCALE_POOR_TO_EXCELLENT },
-  { name: "Presentation", desc: "Presentation quality", scores: SCALE_POOR_TO_EXCELLENT },
-  { name: "Contribution", desc: "Contribution level", scores: SCALE_POOR_TO_EXCELLENT },
-  { name: "Overall", desc: "Overall assessment", scores: SCALE_OVERALL },
-  { name: "Confidence", desc: "Reviewer confidence", scores: SCALE_CONFIDENCE },
 ];
 
 interface PaperReviewHowItWorksProps {
@@ -152,40 +108,6 @@ export function PaperReviewHowItWorks({ className }: PaperReviewHowItWorksProps)
             })}
           </div>
 
-          {/* Review Criteria - 3x3 Grid */}
-          <div className="mt-3 sm:mt-4">
-            <h4 className="mb-2 text-sm font-semibold text-white sm:mb-3">
-              Review Criteria (NeurIPS-style)
-            </h4>
-
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 sm:gap-3 lg:grid-cols-3">
-              {REVIEW_CRITERIA.map(criterion => (
-                <div
-                  key={criterion.name}
-                  className="rounded-lg border border-slate-800/60 bg-slate-900/40 p-2 sm:p-3"
-                >
-                  <h5 className="text-xs font-semibold text-sky-400 sm:text-sm">
-                    {criterion.name}
-                  </h5>
-                  <p className="mb-1.5 text-[10px] text-slate-500 sm:mb-2 sm:text-xs">
-                    {criterion.desc}
-                  </p>
-                  <div className="space-y-0.5">
-                    {criterion.scores.map(score => (
-                      <div
-                        key={score.value}
-                        className="flex items-center gap-1.5 text-[10px] sm:gap-2 sm:text-xs"
-                      >
-                        <span className="w-6 font-medium text-slate-400 sm:w-8">{score.value}</span>
-                        <span className="text-slate-500">{score.label}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
           {/* Cost & Duration Info */}
           <div className="mt-3 grid gap-2 sm:mt-4 sm:grid-cols-2 sm:gap-3">
             <div className="rounded-lg border border-slate-800/60 bg-slate-900/40 p-2.5 sm:p-3">
@@ -193,30 +115,38 @@ export function PaperReviewHowItWorks({ className }: PaperReviewHowItWorksProps)
                 <Clock4 className="h-3 w-3 text-sky-300 sm:h-3.5 sm:w-3.5" />
                 Duration
               </div>
-              <p className="mt-1 text-base font-semibold text-white sm:text-lg">2-5 minutes</p>
-              <p className="text-[10px] text-slate-500 sm:text-xs">
-                Varies based on paper length and model.
-              </p>
+              <div className="mt-1 flex items-baseline gap-3">
+                <div>
+                  <span className="text-base font-semibold text-white sm:text-lg">~2 min</span>
+                  <span className="ml-1 text-xs text-slate-500">Standard</span>
+                </div>
+                <div>
+                  <span className="text-base font-semibold text-white sm:text-lg">~5 min</span>
+                  <span className="ml-1 text-xs text-slate-500">Premium</span>
+                </div>
+              </div>
             </div>
             <div className="rounded-lg border border-slate-800/60 bg-slate-900/40 p-2.5 sm:p-3">
               <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-slate-400 sm:text-xs">
                 <DollarSign className="h-3 w-3 text-emerald-300 sm:h-3.5 sm:w-3.5" />
                 Cost
               </div>
-              <p className="mt-1 text-base font-semibold text-white sm:text-lg">&lt; $1</p>
-              <p className="text-[10px] text-slate-500 sm:text-xs">
-                Typically $0.30-$0.50 per review.
-              </p>
+              <div className="mt-1 flex items-baseline gap-3">
+                <div>
+                  <span className="text-base font-semibold text-white sm:text-lg">~$0.23</span>
+                  <span className="ml-1 text-xs text-slate-500">Standard</span>
+                </div>
+                <div>
+                  <span className="text-base font-semibold text-white sm:text-lg">~$3.45</span>
+                  <span className="ml-1 text-xs text-slate-500">Premium</span>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Configuration Note */}
           <p className="mt-3 text-xs text-slate-400 sm:mt-4 sm:text-sm">
-            Reviews use 3 ensemble reviewers with 2 reflection rounds by default.
-          </p>
-          <p className="mt-1.5 text-xs text-slate-400 sm:mt-2 sm:text-sm">
-            If your balance goes negative during the execution, review results are locked until you
-            add credits.
+            If your balance goes negative during execution, review results are locked until you add
+            credits.
           </p>
         </div>
       )}

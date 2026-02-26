@@ -100,19 +100,26 @@ class AuthUser(BaseModel):
     ] = False
 
 
+class Tier(StrEnum):
+    standard = "standard"
+    premium = "premium"
+
+
+class Conference(StrEnum):
+    neurips_2025 = "neurips_2025"
+    iclr_2025 = "iclr_2025"
+    icml = "icml"
+
+
 class BodyCreatePaperReviewApiPaperReviewsPost(BaseModel):
     file: Annotated[bytes, Field(description="PDF file to review", title="File")]
-    model: Annotated[
-        str,
-        Field(
-            description="LLM model to use for review (provider:model format)",
-            title="Model",
-        ),
+    tier: Annotated[
+        Tier, Field(description="Review tier: standard or premium", title="Tier")
     ]
     conference: Annotated[
-        str,
+        Conference,
         Field(
-            description="Conference schema to use (e.g. neurips_2025, iclr_2025, icml)",
+            description="Conference schema to use (e.g. neurips_2025, iclr_2025)",
             title="Conference",
         ),
     ]
@@ -997,12 +1004,7 @@ class PaperGenerationProgressPayload(BaseModel):
 class PaperReviewStartedResponse(BaseModel):
     review_id: Annotated[int, Field(description="Unique review ID", title="Review Id")]
     status: Annotated[str, Field(description="Review status (pending)", title="Status")]
-
-
-class Conference(StrEnum):
-    neurips_2025 = "neurips_2025"
-    iclr_2025 = "iclr_2025"
-    icml = "icml"
+    tier: Annotated[Tier, Field(description="Review tier", title="Tier")]
 
 
 class PaperReviewSummary(BaseModel):
@@ -1031,6 +1033,7 @@ class PaperReviewSummary(BaseModel):
         str, Field(description="Original PDF filename", title="Original Filename")
     ]
     model: Annotated[str, Field(description="Model used for review", title="Model")]
+    tier: Annotated[Tier, Field(description="Review tier", title="Tier")]
     created_at: Annotated[
         str, Field(description="ISO timestamp of review creation", title="Created At")
     ]
@@ -1103,6 +1106,7 @@ class PendingReviewSummary(BaseModel):
         str, Field(description="Original PDF filename", title="Original Filename")
     ]
     model: Annotated[str, Field(description="Model used for review", title="Model")]
+    tier: Annotated[Tier, Field(description="Review tier", title="Tier")]
     created_at: Annotated[
         str, Field(description="ISO timestamp of review creation", title="Created At")
     ]
@@ -2339,6 +2343,7 @@ class ICLRPaperReviewDetail(BaseModel):
         str, Field(description="Original PDF filename", title="Original Filename")
     ]
     model: Annotated[str, Field(description="Model used for review", title="Model")]
+    tier: Annotated[Tier, Field(description="Review tier", title="Tier")]
     created_at: Annotated[
         str, Field(description="ISO timestamp of review creation", title="Created At")
     ]
@@ -2421,6 +2426,7 @@ class ICMLPaperReviewDetail(BaseModel):
         str, Field(description="Original PDF filename", title="Original Filename")
     ]
     model: Annotated[str, Field(description="Model used for review", title="Model")]
+    tier: Annotated[Tier, Field(description="Review tier", title="Tier")]
     created_at: Annotated[
         str, Field(description="ISO timestamp of review creation", title="Created At")
     ]
@@ -2558,6 +2564,7 @@ class NeurIPSPaperReviewDetail(BaseModel):
         str, Field(description="Original PDF filename", title="Original Filename")
     ]
     model: Annotated[str, Field(description="Model used for review", title="Model")]
+    tier: Annotated[Tier, Field(description="Review tier", title="Tier")]
     created_at: Annotated[
         str, Field(description="ISO timestamp of review creation", title="Created At")
     ]

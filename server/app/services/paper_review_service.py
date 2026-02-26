@@ -12,8 +12,9 @@ import asyncio
 import logging
 import tempfile
 import uuid
+from enum import Enum
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, NamedTuple, cast
 from urllib.parse import quote
 
 from ae_paper_review import (
@@ -143,12 +144,56 @@ def calculate_review_cost_cents(
     return max(1, int(total_cost_cents + 0.5))  # Round to nearest, minimum 1 cent
 
 
-_NUM_REFLECTIONS = 1
+class ReviewTier(str, Enum):
+    """Available review tiers."""
+
+    STANDARD = "standard"
+    PREMIUM = "premium"
+
+
+class TierConfig(NamedTuple):
+    """Configuration for a review tier."""
+
+    model: str
+    is_vanilla_prompt: bool
+    skip_missing_references: bool
+    skip_presentation_check: bool
+    provide_rubric: bool
+    skip_novelty_search: bool
+    skip_citation_check: bool
+    num_reflections: int
+    temperature: float
+
+
+TIER_CONFIGS: dict[ReviewTier, TierConfig] = {
+    ReviewTier.STANDARD: TierConfig(
+        model="openai:gpt-5.2",
+        is_vanilla_prompt=True,
+        skip_missing_references=True,
+        skip_presentation_check=True,
+        provide_rubric=True,
+        skip_novelty_search=False,
+        skip_citation_check=False,
+        num_reflections=0,
+        temperature=1,
+    ),
+    ReviewTier.PREMIUM: TierConfig(
+        model="anthropic:claude-sonnet-4-6",
+        is_vanilla_prompt=False,
+        skip_missing_references=False,
+        skip_presentation_check=False,
+        provide_rubric=True,
+        skip_novelty_search=False,
+        skip_citation_check=False,
+        num_reflections=0,
+        temperature=1,
+    ),
+}
 
 
 def _run_review_sync(
     pdf_path: Path,
-    model: str,
+    tier: ReviewTier,
     review_id: int,
     conference: Conference,
 ) -> ReviewResult:
@@ -159,11 +204,12 @@ def _run_review_sync(
 
     Args:
         pdf_path: Path to the PDF file to review
-        model: Model in "provider:model" format (e.g., "anthropic:claude-sonnet-4-20250514")
+        tier: Review tier (standard or premium)
         review_id: The paper review ID for progress tracking
         conference: The conference to use for review schema
     """
-    provider_str, model_name = model.split(":", 1)
+    config = TIER_CONFIGS[tier]
+    provider_str, model_name = config.model.split(":", 1)
     db = get_database()
 
     def on_progress(event: ReviewProgressEvent) -> None:
@@ -177,16 +223,16 @@ def _run_review_sync(
         pdf_path,
         provider=Provider(provider_str),
         model=model_name,
-        temperature=1,
+        temperature=config.temperature,
         event_callback=on_progress,
-        num_reflections=_NUM_REFLECTIONS,
+        num_reflections=config.num_reflections,
         conference=conference,
-        provide_rubric=True,
-        skip_novelty_search=False,
-        skip_citation_check=False,
-        skip_missing_references=False,
-        skip_presentation_check=False,
-        is_vanilla_prompt=False,
+        provide_rubric=config.provide_rubric,
+        skip_novelty_search=config.skip_novelty_search,
+        skip_citation_check=config.skip_citation_check,
+        skip_missing_references=config.skip_missing_references,
+        skip_presentation_check=config.skip_presentation_check,
+        is_vanilla_prompt=config.is_vanilla_prompt,
     )
 
 
@@ -240,7 +286,7 @@ class PaperReviewService:
         user_id: int,
         pdf_content: bytes,
         original_filename: str,
-        model: str,
+        tier: ReviewTier,
         conference: Conference,
     ) -> None:
         """Process a paper review in the background.
@@ -248,6 +294,7 @@ class PaperReviewService:
         This method runs the blocking LLM call in a thread pool and updates
         the database with the results.
         """
+        model = TIER_CONFIGS[tier].model
         db = get_database()
         tmp_path: Path | None = None
 
@@ -264,7 +311,7 @@ class PaperReviewService:
             result = await asyncio.to_thread(
                 _run_review_sync,
                 tmp_path,
-                model,
+                tier,
                 review_id,
                 conference,
             )
@@ -350,7 +397,7 @@ class PaperReviewService:
         user_id: int,
         pdf_content: bytes,
         original_filename: str,
-        model: str,
+        tier: ReviewTier,
         conference: Conference,
     ) -> tuple[int, str]:
         """Start a paper review asynchronously.
@@ -362,7 +409,7 @@ class PaperReviewService:
             user_id: ID of the user requesting the review
             pdf_content: Raw PDF file content
             original_filename: Original filename of the uploaded PDF
-            model: LLM model in "provider:model" format
+            tier: Review tier (standard or premium)
             conference: Conference to use for review schema
 
         Returns:
@@ -371,6 +418,7 @@ class PaperReviewService:
         Raises:
             HTTPException: If user has insufficient balance
         """
+        model = TIER_CONFIGS[tier].model
         db = get_database()
 
         # Check user has minimum balance
@@ -393,13 +441,15 @@ class PaperReviewService:
             original_filename=original_filename,
             s3_key=s3_key,
             model=model,
-            conference=conference.value,
+            tier=tier.value,
+            conference=conference,
         )
 
         logger.info(
-            "Paper review started: review_id=%d, user_id=%d, model=%s",
+            "Paper review started: review_id=%d, user_id=%d, tier=%s, model=%s",
             review_id,
             user_id,
+            tier.value,
             model,
         )
 
@@ -410,7 +460,7 @@ class PaperReviewService:
                 user_id=user_id,
                 pdf_content=pdf_content,
                 original_filename=original_filename,
-                model=model,
+                tier=tier,
                 conference=conference,
             )
         )
@@ -485,6 +535,7 @@ class PaperReviewService:
                 "status": review.status,
                 "original_filename": review.original_filename,
                 "model": review.model,
+                "tier": review.tier,
                 "created_at": review.created_at.isoformat(),
             }
             for review in reviews
@@ -526,6 +577,7 @@ class PaperReviewService:
                     "decision": review.decision if not access_restricted else None,
                     "original_filename": review.original_filename,
                     "model": review.model,
+                    "tier": review.tier,
                     "created_at": review.created_at.isoformat(),
                     "has_enough_credits": review.has_enough_credits,
                     "access_restricted": access_restricted,

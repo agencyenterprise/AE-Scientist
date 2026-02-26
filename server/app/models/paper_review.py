@@ -6,6 +6,7 @@ These are the Pydantic models used for API responses and service layer returns.
 
 from typing import List, Literal, Optional, Union
 
+from ae_paper_review import Conference
 from pydantic import BaseModel, Field
 
 from app.services.database.paper_reviews import (
@@ -15,6 +16,9 @@ from app.services.database.paper_reviews import (
     PaperReviewBase,
     ReviewContent,
 )
+
+TierLiteral = Literal["standard", "premium"]
+ConferenceLiteral = Literal[Conference.NEURIPS_2025, Conference.ICLR_2025, Conference.ICML]
 
 
 class TokenUsage(BaseModel):
@@ -43,6 +47,7 @@ class _ReviewBase(BaseModel):
     error_message: Optional[str] = Field(None, description="Error message if status is failed")
     original_filename: str = Field(..., description="Original PDF filename")
     model: str = Field(..., description="Model used for review")
+    tier: TierLiteral = Field(..., description="Review tier")
     created_at: str = Field(..., description="ISO timestamp of review creation")
     has_enough_credits: Optional[bool] = Field(
         None,
@@ -71,7 +76,7 @@ class _ReviewBase(BaseModel):
 class NeurIPSPaperReviewDetail(_ReviewBase):
     """NeurIPS 2025 paper review response."""
 
-    conference: Literal["neurips_2025"]
+    conference: Literal[Conference.NEURIPS_2025]
     summary: Optional[str] = None
     strengths_and_weaknesses: Optional[str] = None
     questions: Optional[List[str]] = None
@@ -91,7 +96,7 @@ class NeurIPSPaperReviewDetail(_ReviewBase):
 class ICLRPaperReviewDetail(_ReviewBase):
     """ICLR 2025 paper review response."""
 
-    conference: Literal["iclr_2025"]
+    conference: Literal[Conference.ICLR_2025]
     summary: Optional[str] = None
     strengths: Optional[List[str]] = None
     weaknesses: Optional[List[str]] = None
@@ -111,7 +116,7 @@ class ICLRPaperReviewDetail(_ReviewBase):
 class ICMLPaperReviewDetail(_ReviewBase):
     """ICML 2025 paper review response."""
 
-    conference: Literal["icml"]
+    conference: Literal[Conference.ICML]
     summary: Optional[str] = None
     claims_and_evidence: Optional[str] = None
     relation_to_prior_work: Optional[str] = None
@@ -137,6 +142,7 @@ def _common_kwargs(base: PaperReviewBase, token_usage: TokenUsage | None, cost_c
         "error_message": base.error_message,
         "original_filename": base.original_filename,
         "model": base.model,
+        "tier": base.tier,
         "created_at": base.created_at.isoformat(),
         "has_enough_credits": base.has_enough_credits,
         "access_restricted": access_restricted,
@@ -158,7 +164,7 @@ def _build_neurips_detail(
     visible = content if not common["access_restricted"] else None
     return NeurIPSPaperReviewDetail(
         **common,
-        conference="neurips_2025",
+        conference=Conference.NEURIPS_2025,
         summary=visible.summary if visible is not None else None,
         strengths_and_weaknesses=visible.strengths_and_weaknesses if visible is not None else None,
         questions=list(visible.questions) if visible is not None else None,
@@ -190,7 +196,7 @@ def _build_iclr_detail(
     visible = content if not common["access_restricted"] else None
     return ICLRPaperReviewDetail(
         **common,
-        conference="iclr_2025",
+        conference=Conference.ICLR_2025,
         summary=visible.summary if visible is not None else None,
         strengths=list(visible.strengths) if visible is not None else None,
         weaknesses=list(visible.weaknesses) if visible is not None else None,
@@ -222,7 +228,7 @@ def _build_icml_detail(
     visible = content if not common["access_restricted"] else None
     return ICMLPaperReviewDetail(
         **common,
-        conference="icml",
+        conference=Conference.ICML,
         summary=visible.summary if visible is not None else None,
         claims_and_evidence=visible.claims_and_evidence if visible is not None else None,
         relation_to_prior_work=visible.relation_to_prior_work if visible is not None else None,
@@ -250,13 +256,13 @@ def build_review_detail(
 
     Returns None if the conference is unknown.
     """
-    if base.conference == "neurips_2025":
+    if base.conference == Conference.NEURIPS_2025:
         neurips_content = content if isinstance(content, NeurIPSReviewContent) else None
         return _build_neurips_detail(base, neurips_content, token_usage, cost_cents)
-    if base.conference == "iclr_2025":
+    if base.conference == Conference.ICLR_2025:
         iclr_content = content if isinstance(content, ICLRReviewContent) else None
         return _build_iclr_detail(base, iclr_content, token_usage, cost_cents)
-    if base.conference == "icml":
+    if base.conference == Conference.ICML:
         icml_content = content if isinstance(content, ICMLReviewContent) else None
         return _build_icml_detail(base, icml_content, token_usage, cost_cents)
     return None

@@ -5258,21 +5258,30 @@
             "title": "File",
             "description": "PDF file to review"
           },
-          "model": {
+          "tier": {
             "type": "string",
-            "title": "Model",
-            "description": "LLM model to use for review (provider:model format)"
+            "enum": [
+              "standard",
+              "premium"
+            ],
+            "title": "Tier",
+            "description": "Review tier: standard or premium"
           },
           "conference": {
             "type": "string",
+            "enum": [
+              "neurips_2025",
+              "iclr_2025",
+              "icml"
+            ],
             "title": "Conference",
-            "description": "Conference schema to use (e.g. neurips_2025, iclr_2025, icml)"
+            "description": "Conference schema to use (e.g. neurips_2025, iclr_2025)"
           }
         },
         "type": "object",
         "required": [
           "file",
-          "model",
+          "tier",
           "conference"
         ],
         "title": "Body_create_paper_review_api_paper_reviews_post"
@@ -7142,6 +7151,15 @@
             "title": "Model",
             "description": "Model used for review"
           },
+          "tier": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "premium"
+            ],
+            "title": "Tier",
+            "description": "Review tier"
+          },
           "created_at": {
             "type": "string",
             "title": "Created At",
@@ -7385,6 +7403,7 @@
           "status",
           "original_filename",
           "model",
+          "tier",
           "created_at",
           "progress",
           "progress_step",
@@ -7425,6 +7444,15 @@
             "type": "string",
             "title": "Model",
             "description": "Model used for review"
+          },
+          "tier": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "premium"
+            ],
+            "title": "Tier",
+            "description": "Review tier"
           },
           "created_at": {
             "type": "string",
@@ -7619,6 +7647,7 @@
           "status",
           "original_filename",
           "model",
+          "tier",
           "created_at",
           "progress",
           "progress_step",
@@ -8922,6 +8951,15 @@
             "title": "Model",
             "description": "Model used for review"
           },
+          "tier": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "premium"
+            ],
+            "title": "Tier",
+            "description": "Review tier"
+          },
           "created_at": {
             "type": "string",
             "title": "Created At",
@@ -9159,6 +9197,7 @@
           "status",
           "original_filename",
           "model",
+          "tier",
           "created_at",
           "progress",
           "progress_step",
@@ -9738,12 +9777,22 @@
             "type": "string",
             "title": "Status",
             "description": "Review status (pending)"
+          },
+          "tier": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "premium"
+            ],
+            "title": "Tier",
+            "description": "Review tier"
           }
         },
         "type": "object",
         "required": [
           "review_id",
-          "status"
+          "status",
+          "tier"
         ],
         "title": "PaperReviewStartedResponse",
         "description": "Response when a paper review is started."
@@ -9806,6 +9855,15 @@
             "title": "Model",
             "description": "Model used for review"
           },
+          "tier": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "premium"
+            ],
+            "title": "Tier",
+            "description": "Review tier"
+          },
           "created_at": {
             "type": "string",
             "title": "Created At",
@@ -9863,6 +9921,7 @@
           "status",
           "original_filename",
           "model",
+          "tier",
           "created_at",
           "progress",
           "progress_step"
@@ -10046,6 +10105,15 @@
             "title": "Model",
             "description": "Model used for review"
           },
+          "tier": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "premium"
+            ],
+            "title": "Tier",
+            "description": "Review tier"
+          },
           "created_at": {
             "type": "string",
             "title": "Created At",
@@ -10058,6 +10126,7 @@
           "status",
           "original_filename",
           "model",
+          "tier",
           "created_at"
         ],
         "title": "PendingReviewSummary",

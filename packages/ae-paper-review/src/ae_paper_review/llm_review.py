@@ -53,7 +53,7 @@ _REVIEW_MAX_WEB_SEARCHES = 3
 logger = logging.getLogger(__name__)
 
 # Progress milestones tuned for current standalone review flow.
-# We assume num_reflections=1 in production, so most wall-clock time sits in the
+# We assume num_reflections=0 in production, so most wall-clock time sits in the
 # pre-review analysis stages and the main review call.
 _PROGRESS_UPLOAD_START = 0.0
 _PROGRESS_NOVELTY_START = 0.01
@@ -160,7 +160,7 @@ class ReviewOrchestrator:
             # Upload files
             self._emit_progress(
                 step="upload",
-                substep="Uploading files...",
+                substep="Sending paper to LLM provider...",
                 progress=_PROGRESS_UPLOAD_START,
                 step_progress=0.0,
             )

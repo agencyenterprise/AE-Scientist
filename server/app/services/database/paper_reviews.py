@@ -4,8 +4,9 @@ Database helpers for standalone paper reviews.
 
 from datetime import datetime
 from enum import Enum
-from typing import List, NamedTuple, Optional
+from typing import NamedTuple
 
+from ae_paper_review import Conference
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
@@ -27,15 +28,16 @@ class PaperReviewBase(NamedTuple):
     id: int
     user_id: int
     original_filename: str
-    s3_key: Optional[str]
+    s3_key: str | None
     model: str
+    tier: str
     status: str
-    error_message: Optional[str]
+    error_message: str | None
     created_at: datetime
     progress: float
     progress_step: str
-    conference: Optional[str]
-    has_enough_credits: Optional[bool] = None
+    conference: str | None
+    has_enough_credits: bool | None = None
 
 
 class NeurIPSReviewContent(NamedTuple):
@@ -101,15 +103,16 @@ class PaperReviewListItem(NamedTuple):
     user_id: int
     original_filename: str
     model: str
+    tier: str
     status: str
     created_at: datetime
-    has_enough_credits: Optional[bool]
+    has_enough_credits: bool | None
     progress: float
     progress_step: str
-    conference: Optional[str]
-    summary: Optional[str]
-    overall: Optional[int]
-    decision: Optional[str]
+    conference: str | None
+    summary: str | None
+    overall: int | None
+    decision: str | None
 
 
 _NEURIPS_CONTENT_COLUMNS = """
@@ -131,7 +134,7 @@ _ICML_CONTENT_COLUMNS = """
 """
 
 _BASE_COLUMNS = """
-    pr.id, pr.user_id, pr.original_filename, pr.s3_key, pr.model, pr.status,
+    pr.id, pr.user_id, pr.original_filename, pr.s3_key, pr.model, pr.tier, pr.status,
     pr.error_message, pr.created_at, pr.progress, pr.progress_step, pr.conference,
     pr.has_enough_credits
 """
@@ -144,6 +147,7 @@ def _row_to_base(row: dict) -> PaperReviewBase:
         original_filename=row["original_filename"],
         s3_key=row["s3_key"],
         model=row["model"],
+        tier=row["tier"],
         status=row["status"],
         error_message=row["error_message"],
         created_at=row["created_at"],
@@ -207,12 +211,12 @@ def _row_to_icml_content(row: dict) -> ICMLReviewContent:
     )
 
 
-def _row_to_content(row: dict, conference: str) -> ReviewContent:
-    if conference == "neurips_2025":
+def _row_to_content(row: dict, conference: Conference) -> ReviewContent:
+    if conference == Conference.NEURIPS_2025:
         return _row_to_neurips_content(row)
-    if conference == "iclr_2025":
+    if conference == Conference.ICLR_2025:
         return _row_to_iclr_content(row)
-    if conference == "icml":
+    if conference == Conference.ICML:
         return _row_to_icml_content(row)
     raise ValueError(f"Unknown conference: {conference}")
 
@@ -227,7 +231,8 @@ class PaperReviewsMixin(ConnectionProvider):
         original_filename: str,
         s3_key: str,
         model: str,
-        conference: str,
+        tier: str,
+        conference: Conference,
     ) -> int:
         """Create a pending paper review and return its ID."""
         async with self.aget_connection() as conn:
@@ -235,9 +240,9 @@ class PaperReviewsMixin(ConnectionProvider):
                 await cursor.execute(
                     """
                     INSERT INTO paper_reviews
-                        (user_id, original_filename, s3_key, model, status,
+                        (user_id, original_filename, s3_key, model, tier, status,
                          progress, progress_step, conference)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
@@ -245,10 +250,11 @@ class PaperReviewsMixin(ConnectionProvider):
                         original_filename,
                         s3_key,
                         model,
+                        tier,
                         PaperReviewStatus.PENDING.value,
                         0.0,
                         "",
-                        conference,
+                        conference.value,
                     ),
                 )
                 result = await cursor.fetchone()
@@ -260,7 +266,7 @@ class PaperReviewsMixin(ConnectionProvider):
         self,
         review_id: int,
         status: PaperReviewStatus,
-        error_message: Optional[str] = None,
+        error_message: str | None = None,
     ) -> None:
         """Update the status of a paper review."""
         async with self.aget_connection() as conn:
@@ -371,7 +377,7 @@ class PaperReviewsMixin(ConnectionProvider):
                     (PaperReviewStatus.COMPLETED.value, review_id),
                 )
 
-    async def get_pending_reviews_by_user(self, user_id: int) -> List[PaperReviewBase]:
+    async def get_pending_reviews_by_user(self, user_id: int) -> list[PaperReviewBase]:
         """Get all pending or processing reviews for a user."""
         async with self.aget_connection() as conn:
             async with conn.cursor(row_factory=dict_row) as cursor:
@@ -411,19 +417,19 @@ class PaperReviewsMixin(ConnectionProvider):
         if base.status != PaperReviewStatus.COMPLETED.value or not base.conference:
             return (base, None)
 
-        content = await self._fetch_review_content(review_id, base.conference)
+        content = await self._fetch_review_content(review_id, Conference(base.conference))
         return (base, content)
 
-    async def _fetch_review_content(self, review_id: int, conference: str) -> ReviewContent | None:
+    async def _fetch_review_content(
+        self, review_id: int, conference: Conference
+    ) -> ReviewContent | None:
         """Fetch conference-specific content for a completed review."""
-        if conference == "neurips_2025":
+        if conference == Conference.NEURIPS_2025:
             query = f"SELECT {_NEURIPS_CONTENT_COLUMNS} FROM paper_review_neurips n WHERE n.paper_review_id = %s"
-        elif conference == "iclr_2025":
+        elif conference == Conference.ICLR_2025:
             query = f"SELECT {_ICLR_CONTENT_COLUMNS} FROM paper_review_iclr i WHERE i.paper_review_id = %s"
-        elif conference == "icml":
+        elif conference == Conference.ICML:
             query = f"SELECT {_ICML_CONTENT_COLUMNS} FROM paper_review_icml m WHERE m.paper_review_id = %s"
-        else:
-            return None
 
         async with self.aget_connection() as conn:
             async with conn.cursor(row_factory=dict_row) as cursor:
@@ -436,14 +442,14 @@ class PaperReviewsMixin(ConnectionProvider):
 
     async def list_paper_reviews_by_user(
         self, user_id: int, *, limit: int = 20, offset: int = 0
-    ) -> List[PaperReviewListItem]:
+    ) -> list[PaperReviewListItem]:
         """List paper reviews for a user with summary fields from conference tables."""
         async with self.aget_connection() as conn:
             async with conn.cursor(row_factory=dict_row) as cursor:
                 await cursor.execute(
                     """
                     SELECT
-                        pr.id, pr.user_id, pr.original_filename, pr.model, pr.status,
+                        pr.id, pr.user_id, pr.original_filename, pr.model, pr.tier, pr.status,
                         pr.created_at, pr.has_enough_credits, pr.progress,
                         pr.progress_step, pr.conference,
                         COALESCE(n.summary, i.summary, m.summary) AS summary,

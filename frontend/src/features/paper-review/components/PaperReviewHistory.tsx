@@ -18,6 +18,7 @@ import {
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import { config } from "@/shared/lib/config";
+import { cn } from "@/shared/lib/utils";
 import { withAuthHeaders } from "@/shared/lib/session-token";
 import { PaperReviewResult, type AnyPaperReviewDetail } from "./PaperReviewResult";
 import type { components } from "@/types/api.gen";
@@ -306,7 +307,25 @@ export function PaperReviewHistory({ refreshKey }: PaperReviewHistoryProps) {
                       </span>
                     </span>
                   )}
-                  <span className="hidden sm:inline">{review.model.split("/").pop()}</span>
+                  {review.conference && (
+                    <span className="rounded bg-slate-700/50 px-1.5 py-0.5 text-[10px] font-medium text-slate-300">
+                      {review.conference === "neurips_2025"
+                        ? "NeurIPS 2025"
+                        : review.conference === "iclr_2025"
+                          ? "ICLR 2025"
+                          : "ICML"}
+                    </span>
+                  )}
+                  <span
+                    className={cn(
+                      "rounded px-1.5 py-0.5 text-[10px] font-medium",
+                      review.tier === "premium"
+                        ? "bg-sky-500/10 text-sky-400"
+                        : "bg-amber-500/10 text-amber-400"
+                    )}
+                  >
+                    {review.tier === "premium" ? "Premium" : "Standard"}
+                  </span>
                   <span>
                     {formatDistanceToNow(new Date(review.created_at), { addSuffix: true })}
                   </span>

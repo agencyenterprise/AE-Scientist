@@ -2184,15 +2184,17 @@ export interface components {
              */
             file: string;
             /**
-             * Model
-             * @description LLM model to use for review (provider:model format)
+             * Tier
+             * @description Review tier: standard or premium
+             * @enum {string}
              */
-            model: string;
+            tier: "standard" | "premium";
             /**
              * Conference
-             * @description Conference schema to use (e.g. neurips_2025, iclr_2025, icml)
+             * @description Conference schema to use (e.g. neurips_2025, iclr_2025)
+             * @enum {string}
              */
-            conference: string;
+            conference: "neurips_2025" | "iclr_2025" | "icml";
         };
         /** Body_upload_file_api_conversations__conversation_id__files_post */
         Body_upload_file_api_conversations__conversation_id__files_post: {
@@ -3098,6 +3100,12 @@ export interface components {
              */
             model: string;
             /**
+             * Tier
+             * @description Review tier
+             * @enum {string}
+             */
+            tier: "standard" | "premium";
+            /**
              * Created At
              * @description ISO timestamp of review creation
              */
@@ -3200,6 +3208,12 @@ export interface components {
              * @description Model used for review
              */
             model: string;
+            /**
+             * Tier
+             * @description Review tier
+             * @enum {string}
+             */
+            tier: "standard" | "premium";
             /**
              * Created At
              * @description ISO timestamp of review creation
@@ -4086,6 +4100,12 @@ export interface components {
              */
             model: string;
             /**
+             * Tier
+             * @description Review tier
+             * @enum {string}
+             */
+            tier: "standard" | "premium";
+            /**
              * Created At
              * @description ISO timestamp of review creation
              */
@@ -4529,6 +4549,12 @@ export interface components {
              * @description Review status (pending)
              */
             status: string;
+            /**
+             * Tier
+             * @description Review tier
+             * @enum {string}
+             */
+            tier: "standard" | "premium";
         };
         /**
          * PaperReviewSummary
@@ -4570,6 +4596,12 @@ export interface components {
              * @description Model used for review
              */
             model: string;
+            /**
+             * Tier
+             * @description Review tier
+             * @enum {string}
+             */
+            tier: "standard" | "premium";
             /**
              * Created At
              * @description ISO timestamp of review creation
@@ -4682,6 +4714,12 @@ export interface components {
              * @description Model used for review
              */
             model: string;
+            /**
+             * Tier
+             * @description Review tier
+             * @enum {string}
+             */
+            tier: "standard" | "premium";
             /**
              * Created At
              * @description ISO timestamp of review creation
