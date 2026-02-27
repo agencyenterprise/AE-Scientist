@@ -18,6 +18,10 @@ from typing import Any, NamedTuple, cast
 from urllib.parse import quote
 
 from ae_paper_review import (
+    BaselineICLRReviewModel,
+    BaselineICMLReviewModel,
+    BaselineNeurIPSReviewModel,
+    BaselineReviewModel,
     Conference,
     ICLRReviewModel,
     ICMLReviewModel,
@@ -26,6 +30,7 @@ from ae_paper_review import (
     ReviewModel,
     ReviewProgressEvent,
     ReviewResult,
+    perform_baseline_review,
     perform_review,
 )
 from psycopg import AsyncConnection
@@ -101,6 +106,61 @@ def _review_model_to_content(review: ReviewModel) -> ReviewContent:
             decision=review.decision,
         )
     raise ValueError(f"Unknown review model type: {type(review)}")
+
+
+def _baseline_review_model_to_content(review: BaselineReviewModel) -> ReviewContent:
+    """Convert a baseline review model to ReviewContent for database storage.
+
+    Baseline models lack clarity_issues, so an empty list is used.
+    """
+    if isinstance(review, BaselineNeurIPSReviewModel):
+        return NeurIPSReviewContent(
+            summary=review.summary,
+            strengths_and_weaknesses=review.strengths_and_weaknesses,
+            questions=list(review.questions),
+            limitations=review.limitations,
+            ethical_concerns=review.ethical_concerns,
+            ethical_concerns_explanation=review.ethical_concerns_explanation,
+            clarity_issues=[],
+            quality=review.quality,
+            clarity=review.clarity,
+            significance=review.significance,
+            originality=review.originality,
+            overall=review.overall,
+            confidence=review.confidence,
+            decision=review.decision,
+        )
+    if isinstance(review, BaselineICLRReviewModel):
+        return ICLRReviewContent(
+            summary=review.summary,
+            strengths=list(review.strengths),
+            weaknesses=list(review.weaknesses),
+            questions=list(review.questions),
+            limitations=review.limitations,
+            ethical_concerns=review.ethical_concerns,
+            ethical_concerns_explanation=review.ethical_concerns_explanation,
+            clarity_issues=[],
+            soundness=review.soundness,
+            presentation=review.presentation,
+            contribution=review.contribution,
+            overall=review.overall,
+            confidence=review.confidence,
+            decision=review.decision,
+        )
+    if isinstance(review, BaselineICMLReviewModel):
+        return ICMLReviewContent(
+            summary=review.summary,
+            claims_and_evidence=review.claims_and_evidence,
+            relation_to_prior_work=review.relation_to_prior_work,
+            other_aspects=review.other_aspects,
+            questions=list(review.questions),
+            ethical_issues=review.ethical_issues,
+            ethical_issues_explanation=review.ethical_issues_explanation,
+            clarity_issues=[],
+            overall=review.overall,
+            decision=review.decision,
+        )
+    raise ValueError(f"Unknown baseline review model type: {type(review)}")
 
 
 def calculate_review_cost_cents(
@@ -202,6 +262,9 @@ def _run_review_sync(
     This function is designed to be called via asyncio.to_thread() to avoid
     blocking the main event loop.
 
+    Standard tier uses the baseline (pre-prompt-tuning) pipeline.
+    Premium tier uses the tuned pipeline with all enhancements.
+
     Args:
         pdf_path: Path to the PDF file to review
         tier: Review tier (standard or premium)
@@ -217,6 +280,21 @@ def _run_review_sync(
             review_id=review_id,
             progress=event.progress,
             progress_step=event.substep,
+        )
+
+    if tier == ReviewTier.STANDARD:
+        return perform_baseline_review(
+            pdf_path,
+            provider=Provider(provider_str),
+            model=model_name,
+            temperature=config.temperature,
+            event_callback=on_progress,
+            num_reflections=config.num_reflections,
+            conference=conference,
+            provide_rubric=config.provide_rubric,
+            skip_novelty_search=config.skip_novelty_search,
+            skip_citation_check=config.skip_citation_check,
+            is_vanilla_prompt=config.is_vanilla_prompt,
         )
 
     return perform_review(
@@ -330,7 +408,19 @@ class PaperReviewService:
             )
 
             # Store the review results in the conference-specific table
-            content = _review_model_to_content(result.review)
+            review_model = result.review
+            if tier == ReviewTier.STANDARD:
+                assert isinstance(
+                    review_model,
+                    (BaselineNeurIPSReviewModel, BaselineICLRReviewModel, BaselineICMLReviewModel),
+                )
+                content = _baseline_review_model_to_content(review_model)
+            else:
+                assert isinstance(
+                    review_model,
+                    (NeurIPSReviewModel, ICLRReviewModel, ICMLReviewModel),
+                )
+                content = _review_model_to_content(review_model)
             await db.complete_paper_review(review_id=review_id, content=content)
 
             # Store token usages

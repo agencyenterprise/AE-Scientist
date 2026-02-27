@@ -5,7 +5,9 @@ from pathlib import Path
 
 from ae_paper_review import (
     AEScientistReviewModel,
+    BaselineReviewModel,
     ICLRReviewModel,
+    ICMLReviewModel,
     NeurIPSReviewModel,
     ReviewModel,
 )
@@ -23,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 def _to_review_completed_event(
     *,
-    review: ReviewModel,
+    review: ReviewModel | BaselineReviewModel,
     source_path: str | None,
     created_at: str,
 ) -> ReviewCompletedEvent:
@@ -93,28 +95,29 @@ def _to_review_completed_event(
             source_path=source_path,
             created_at=created_at,
         )
-    # ICMLReviewModel
-    return ReviewCompletedEvent(
-        summary=review.summary,
-        strengths=[review.claims_and_evidence],
-        weaknesses=[review.other_aspects],
-        originality=0,
-        quality=0,
-        clarity=0,
-        significance=0,
-        questions=review.questions,
-        limitations=[],
-        ethical_concerns=review.ethical_issues,
-        ethical_concerns_explanation=review.ethical_issues_explanation,
-        soundness=0,
-        presentation=0,
-        contribution=0,
-        overall=review.overall,
-        confidence=0,
-        decision=review.decision,
-        source_path=source_path,
-        created_at=created_at,
-    )
+    if isinstance(review, ICMLReviewModel):
+        return ReviewCompletedEvent(
+            summary=review.summary,
+            strengths=[review.claims_and_evidence],
+            weaknesses=[review.other_aspects],
+            originality=0,
+            quality=0,
+            clarity=0,
+            significance=0,
+            questions=review.questions,
+            limitations=[],
+            ethical_concerns=review.ethical_issues,
+            ethical_concerns_explanation=review.ethical_issues_explanation,
+            soundness=0,
+            presentation=0,
+            contribution=0,
+            overall=review.overall,
+            confidence=0,
+            decision=review.decision,
+            source_path=source_path,
+            created_at=created_at,
+        )
+    raise ValueError(f"Unsupported review model type: {type(review)}")
 
 
 @dataclass
@@ -133,7 +136,9 @@ class ReviewResponseRecorder:
     ) -> "ReviewResponseRecorder":
         return cls(_run_id=run_id, _webhook_client=webhook_client)
 
-    def insert_review(self, *, review: ReviewModel, source_path: Path | None) -> None:
+    def insert_review(
+        self, *, review: ReviewModel | BaselineReviewModel, source_path: Path | None
+    ) -> None:
         """Publish review via webhook. Database persistence handled by server."""
         source_value = str(source_path) if source_path is not None else None
         created_at = datetime.now(timezone.utc).isoformat()

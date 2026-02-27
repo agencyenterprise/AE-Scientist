@@ -1,0 +1,36 @@
+## Review Form (ICML 2025)
+Below is a description of the questions you will be asked on the review form for each paper. This follows ICML 2025 main track review guidelines.
+
+1. **Summary**: Briefly summarize the paper (including the main findings, main results, main algorithmic/conceptual ideas, etc. that the paper claims to contribute). This summary should not be used to critique the paper. A well-written summary should not be disputed by the authors of the paper or other readers.
+
+2. **Claims and Evidence**: Assess whether the paper's claims are supported:
+   - Are the claims made in the submission supported by clear and convincing evidence? If not, which claims are problematic and why?
+   - Do proposed methods and/or evaluation criteria (e.g., benchmark datasets) make sense for the problem or application at hand?
+   - Did you check the correctness of any proofs for theoretical claims? Please specify which ones, and discuss any issues.
+   - Did you check the soundness/validity of any experimental designs or analyses? Please specify which ones, and discuss any issues.
+   - Did you review the supplementary material? Which parts?
+
+3. **Relation to Prior Work**: Assess the paper's relationship to existing literature:
+   - How are the key contributions of the paper related to the broader scientific literature? Be specific in terms of prior related findings/results/ideas/etc.
+   - Are there related works that are essential to understanding the (context for) key contributions of the paper, but are not currently cited/discussed in the paper? Be specific in terms of prior related findings/results/ideas/etc. (Example: "The key contribution is a linear-time algorithm, and only cites a quadratic-time algorithm for the same problem as prior work, but there was also an O(n log n) time algorithm for this problem discovered last year.")
+   - How well-versed are you with the literature related to this paper?
+
+4. **Other Aspects**: Provide additional comments on:
+   - Other strengths and weaknesses of the paper, such as those concerning originality, significance, and clarity. We encourage you to be open-minded in terms of potential strengths. For example, originality may arise from creative combinations of existing ideas, removing restrictive assumptions from prior theoretical results, or application to a real-world use case.
+   - Visually inspect figures, tables, and mathematical notation: are figures legible with clear labels and captions? Are tables well-aligned and consistently formatted? Is mathematical notation correct, consistent, and unambiguous? Factor these into your overall assessment.
+   - Any other comments or suggestions (e.g., a list of typos).
+
+5. **Questions**: If you have any important questions for the authors, please carefully formulate them here. Please reserve your questions for cases where the response would likely change your evaluation of the paper, clarify a point in the paper that you found confusing, or address a critical limitation you identified. Please number your questions so authors can easily refer to them in the response, and explain how possible responses would change your evaluation of the paper.
+
+6. **Ethical Issues**: If you believe there are ethical issues with this paper, please flag the paper for an ethics review and explain the specific concerns.
+
+7. **Overall**: Please provide an "overall recommendation" using ICML's 5-point scale:
+    - 5: Strong accept
+    - 4: Accept
+    - 3: Weak accept (i.e., leaning towards accept, but could also be rejected)
+    - 2: Weak reject (i.e., leaning towards reject, but could also be accepted)
+    - 1: Reject
+
+8. **Decision**: Output only `Accept` or `Reject`. Borderline cases must pick one side.
+
+{% include "llm_review/template_instructions.txt.j2" %}

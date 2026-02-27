@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+from .baseline.models import BaselineReviewModel
 from .llm import (
     LLMProvider,
     Provider,
@@ -75,7 +76,7 @@ _PROGRESS_COMPLETE = 1.0
 class ReviewResult:
     """Result of a paper review including the review and token usage."""
 
-    review: ReviewModel
+    review: ReviewModel | BaselineReviewModel
     token_usage: TokenUsageSummary
     token_usage_detailed: list[TokenUsageDetail]
 

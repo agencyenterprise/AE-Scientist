@@ -1,0 +1,39 @@
+{% if rubric_template %}
+{% include rubric_template %}
+
+{% endif %}
+{% if novelty_results %}
+## Novelty Scan (Related Work from Web Search)
+
+{% if novelty_results.results %}
+{% for item in novelty_results.results %}
+- **{{ item.title }}**
+  URL: {{ item.url }}
+  {{ item.snippet }}
+
+{% endfor %}
+{% endif %}
+{% if novelty_results.summary %}
+**Summary:** {{ novelty_results.summary }}
+
+{% endif %}
+{% if novelty_results.search_queries_used %}
+*Search queries used: {{ novelty_results.search_queries_used | join(', ') }}*
+
+{% endif %}
+{% endif %}
+{% if citation_check_results %}
+## Citation Verification (Spot-Check)
+
+{% for item in citation_check_results.checks %}
+- **{{ item.cited_text }}**
+  Found: {{ "Yes" if item.found else "No" }}{% if item.url %} | {{ item.url }}{% endif %}
+  {{ item.assessment }}
+
+{% endfor %}
+{% if citation_check_results.summary %}
+**Summary:** {{ citation_check_results.summary }}
+
+{% endif %}
+{% endif %}
+Review the paper provided in the PDF document.

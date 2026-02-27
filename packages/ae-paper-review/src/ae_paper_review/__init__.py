@@ -10,6 +10,13 @@ Each conference model matches the official review form structure:
 
 """
 
+from .baseline import (
+    BaselineICLRReviewModel,
+    BaselineICMLReviewModel,
+    BaselineNeurIPSReviewModel,
+    BaselineReviewModel,
+    perform_baseline_review,
+)
 from .llm.base import Provider
 from .llm.token_tracking import TokenUsage, TokenUsageDetail, TokenUsageSummary
 from .llm_review import (
@@ -38,12 +45,17 @@ __all__ = [
     "__version__",
     # Provider
     "Provider",
-    # Review models
+    # Review models (post-tuning)
     "AEScientistReviewModel",
     "ClarityIssue",
     "NeurIPSReviewModel",
     "ICLRReviewModel",
     "ICMLReviewModel",
+    # Baseline review models (pre-tuning)
+    "BaselineNeurIPSReviewModel",
+    "BaselineICLRReviewModel",
+    "BaselineICMLReviewModel",
+    "BaselineReviewModel",
     # Pipeline result models
     "MissingReferencesResults",
     "PresentationCheckResults",
@@ -53,6 +65,7 @@ __all__ = [
     # LLM Review
     "REVIEW_RUBRIC_MENTIONS_REPRODUCIBILITY",
     "perform_review",
+    "perform_baseline_review",
     "perform_ae_scientist_review",
     "ReviewResult",
     "ReviewProgressEvent",
