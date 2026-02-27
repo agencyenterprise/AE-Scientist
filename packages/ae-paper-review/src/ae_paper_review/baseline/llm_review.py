@@ -225,6 +225,10 @@ class BaselineReviewOrchestrator:
                 review=review,
                 token_usage=total_usage,
                 token_usage_detailed=self._usage.get_detailed(),
+                novelty_search=novelty_results,
+                citation_check=citation_check_results,
+                missing_references=None,
+                presentation_check=None,
             )
 
         finally:

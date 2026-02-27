@@ -11,14 +11,22 @@ interface TierSelectorProps {
 }
 
 const FEATURE_LIST = [
-  { label: "Structured feedback", standard: true, premium: true },
-  { label: "Conference-specific scoring", standard: true, premium: true },
-  { label: "Novelty assessment", standard: true, premium: true },
-  { label: "Citation verification", standard: true, premium: true },
-  { label: "Missing reference detection", standard: false, premium: true },
-  { label: "Presentation quality analysis", standard: false, premium: true },
+  {
+    label: "Structured feedback across multiple weakness categories",
+    standard: true,
+    premium: true,
+  },
+  { label: "Conference-specific scoring (NeurIPS, ICLR)", standard: true, premium: true },
+  { label: "Web-grounded novelty assessment", standard: true, premium: true },
+  { label: "Key citation verification", standard: true, premium: true },
+  { label: "Missing key reference detection", standard: false, premium: true },
+  {
+    label: "Presentation quality analysis (figures, tables, formatting)",
+    standard: false,
+    premium: true,
+  },
   { label: "Enhanced depth of analyses", standard: false, premium: true },
-  { label: "Accept/reject calibration", standard: false, premium: true },
+  { label: "Best accept/reject calibration", standard: false, premium: true },
 ] as const;
 
 const TIERS = [

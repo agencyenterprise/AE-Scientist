@@ -79,6 +79,10 @@ class ReviewResult:
     review: ReviewModel | BaselineReviewModel
     token_usage: TokenUsageSummary
     token_usage_detailed: list[TokenUsageDetail]
+    novelty_search: NoveltySearchResults | None
+    citation_check: CitationCheckResults | None
+    missing_references: MissingReferencesResults | None
+    presentation_check: PresentationCheckResults | None
 
 
 @dataclass
@@ -326,6 +330,10 @@ class ReviewOrchestrator:
                 review=review,
                 token_usage=total_usage,
                 token_usage_detailed=self._usage.get_detailed(),
+                novelty_search=novelty_results,
+                citation_check=citation_check_results,
+                missing_references=missing_references_results,
+                presentation_check=presentation_check_results,
             )
 
         finally:

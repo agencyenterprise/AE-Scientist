@@ -216,6 +216,40 @@ class ChildConversationInfo(BaseModel):
     status: Annotated[str, Field(description="Conversation status", title="Status")]
 
 
+class CitationCheckItemResponse(BaseModel):
+    cited_text: Annotated[
+        str, Field(description="The citation claim being verified", title="Cited Text")
+    ]
+    found: Annotated[
+        bool, Field(description="Whether the cited work was found", title="Found")
+    ]
+    url: Annotated[
+        str, Field(description="URL of the found work, or empty string", title="Url")
+    ]
+    assessment: Annotated[
+        str,
+        Field(
+            description="Assessment of whether the citation supports the claim",
+            title="Assessment",
+        ),
+    ]
+
+
+class CitationCheckResponse(BaseModel):
+    search_queries_used: Annotated[
+        list[str],
+        Field(description="Search queries executed", title="Search Queries Used"),
+    ]
+    checks: Annotated[
+        list[CitationCheckItemResponse],
+        Field(description="Verification results", title="Checks"),
+    ]
+    summary: Annotated[
+        str,
+        Field(description="Summary of citation verification findings", title="Summary"),
+    ]
+
+
 class ClarityIssue(BaseModel):
     location: Annotated[
         str,
@@ -920,6 +954,43 @@ class MetricInterpretation(BaseModel):
     ] = None
 
 
+class MissingReferenceItemResponse(BaseModel):
+    topic: Annotated[
+        str,
+        Field(description="Topic area where references may be missing", title="Topic"),
+    ]
+    missing_work: Annotated[
+        str,
+        Field(
+            description="Title and authors of the missing reference",
+            title="Missing Work",
+        ),
+    ]
+    url: Annotated[str, Field(description="URL where the work was found", title="Url")]
+    relevance: Annotated[
+        str,
+        Field(description="Why this work should have been cited", title="Relevance"),
+    ]
+
+
+class MissingReferencesResponse(BaseModel):
+    search_queries_used: Annotated[
+        list[str],
+        Field(description="Search queries executed", title="Search Queries Used"),
+    ]
+    missing_references: Annotated[
+        list[MissingReferenceItemResponse],
+        Field(
+            description="Potentially important uncited works",
+            title="Missing References",
+        ),
+    ]
+    summary: Annotated[
+        str,
+        Field(description="Summary of gaps in related work coverage", title="Summary"),
+    ]
+
+
 class ModelCost(BaseModel):
     model: Annotated[str, Field(title="Model")]
     cost: Annotated[float, Field(title="Cost")]
@@ -968,6 +1039,16 @@ class Outcome(StrEnum):
     success = "success"
     failure = "failure"
     partial = "partial"
+
+
+class NoveltySearchResultItem(BaseModel):
+    title: Annotated[
+        str, Field(description="Title of the search result", title="Title")
+    ]
+    url: Annotated[str, Field(description="URL of the search result", title="Url")]
+    snippet: Annotated[
+        str, Field(description="Brief snippet from the search result", title="Snippet")
+    ]
 
 
 class PaperDownloadResponse(BaseModel):
@@ -1118,6 +1199,22 @@ class PendingReviewsResponse(BaseModel):
         Field(description="List of pending reviews", title="Reviews"),
     ]
     count: Annotated[int, Field(description="Number of pending reviews", title="Count")]
+
+
+class PresentationIssueResponse(BaseModel):
+    location: Annotated[
+        str, Field(description="Where the issue occurs", title="Location")
+    ]
+    issue_type: Annotated[
+        str,
+        Field(
+            description="Category: figure, table, notation, formatting, layout",
+            title="Issue Type",
+        ),
+    ]
+    description: Annotated[
+        str, Field(description="What the problem is", title="Description")
+    ]
 
 
 class PresignedUploadUrlRequest(BaseModel):
@@ -2326,172 +2423,6 @@ class HTTPValidationError(BaseModel):
     detail: Annotated[list[ValidationError] | None, Field(title="Detail")] = None
 
 
-class ICLRPaperReviewDetail(BaseModel):
-    id: Annotated[int, Field(title="Id")]
-    status: Annotated[
-        str,
-        Field(
-            description="Review status: pending, processing, completed, failed",
-            title="Status",
-        ),
-    ]
-    error_message: Annotated[
-        str | None,
-        Field(description="Error message if status is failed", title="Error Message"),
-    ] = None
-    original_filename: Annotated[
-        str, Field(description="Original PDF filename", title="Original Filename")
-    ]
-    model: Annotated[str, Field(description="Model used for review", title="Model")]
-    tier: Annotated[Tier, Field(description="Review tier", title="Tier")]
-    created_at: Annotated[
-        str, Field(description="ISO timestamp of review creation", title="Created At")
-    ]
-    has_enough_credits: Annotated[
-        bool | None,
-        Field(
-            description="Whether user had positive balance when review completed. NULL if still running.",
-            title="Has Enough Credits",
-        ),
-    ] = None
-    access_restricted: Annotated[
-        bool | None,
-        Field(
-            description="True if user cannot view full review details due to insufficient credits",
-            title="Access Restricted",
-        ),
-    ] = False
-    access_restricted_reason: Annotated[
-        str | None,
-        Field(
-            description="Message explaining why access is restricted",
-            title="Access Restricted Reason",
-        ),
-    ] = None
-    token_usage: Annotated[
-        TokenUsage | None,
-        Field(description="Token usage (null if not completed or restricted)"),
-    ] = None
-    cost_cents: Annotated[
-        int | None,
-        Field(
-            description="Cost charged in cents (null if restricted)", title="Cost Cents"
-        ),
-    ] = None
-    progress: Annotated[
-        float, Field(description="Review progress (0.0-1.0)", title="Progress")
-    ]
-    progress_step: Annotated[
-        str,
-        Field(
-            description="Current step description (empty string when completed)",
-            title="Progress Step",
-        ),
-    ]
-    conference: Annotated[Literal["iclr_2025"], Field(title="Conference")]
-    summary: Annotated[str | None, Field(title="Summary")] = None
-    strengths: Annotated[list[str] | None, Field(title="Strengths")] = None
-    weaknesses: Annotated[list[str] | None, Field(title="Weaknesses")] = None
-    questions: Annotated[list[str] | None, Field(title="Questions")] = None
-    limitations: Annotated[str | None, Field(title="Limitations")] = None
-    ethical_concerns: Annotated[bool | None, Field(title="Ethical Concerns")] = None
-    ethical_concerns_explanation: Annotated[
-        str | None, Field(title="Ethical Concerns Explanation")
-    ] = ""
-    clarity_issues: Annotated[
-        list[ClarityIssue] | None, Field(title="Clarity Issues")
-    ] = None
-    soundness: Annotated[int | None, Field(title="Soundness")] = None
-    presentation: Annotated[int | None, Field(title="Presentation")] = None
-    contribution: Annotated[int | None, Field(title="Contribution")] = None
-    overall: Annotated[int | None, Field(title="Overall")] = None
-    confidence: Annotated[int | None, Field(title="Confidence")] = None
-    decision: Annotated[str | None, Field(title="Decision")] = None
-
-
-class ICMLPaperReviewDetail(BaseModel):
-    id: Annotated[int, Field(title="Id")]
-    status: Annotated[
-        str,
-        Field(
-            description="Review status: pending, processing, completed, failed",
-            title="Status",
-        ),
-    ]
-    error_message: Annotated[
-        str | None,
-        Field(description="Error message if status is failed", title="Error Message"),
-    ] = None
-    original_filename: Annotated[
-        str, Field(description="Original PDF filename", title="Original Filename")
-    ]
-    model: Annotated[str, Field(description="Model used for review", title="Model")]
-    tier: Annotated[Tier, Field(description="Review tier", title="Tier")]
-    created_at: Annotated[
-        str, Field(description="ISO timestamp of review creation", title="Created At")
-    ]
-    has_enough_credits: Annotated[
-        bool | None,
-        Field(
-            description="Whether user had positive balance when review completed. NULL if still running.",
-            title="Has Enough Credits",
-        ),
-    ] = None
-    access_restricted: Annotated[
-        bool | None,
-        Field(
-            description="True if user cannot view full review details due to insufficient credits",
-            title="Access Restricted",
-        ),
-    ] = False
-    access_restricted_reason: Annotated[
-        str | None,
-        Field(
-            description="Message explaining why access is restricted",
-            title="Access Restricted Reason",
-        ),
-    ] = None
-    token_usage: Annotated[
-        TokenUsage | None,
-        Field(description="Token usage (null if not completed or restricted)"),
-    ] = None
-    cost_cents: Annotated[
-        int | None,
-        Field(
-            description="Cost charged in cents (null if restricted)", title="Cost Cents"
-        ),
-    ] = None
-    progress: Annotated[
-        float, Field(description="Review progress (0.0-1.0)", title="Progress")
-    ]
-    progress_step: Annotated[
-        str,
-        Field(
-            description="Current step description (empty string when completed)",
-            title="Progress Step",
-        ),
-    ]
-    conference: Annotated[Literal["icml"], Field(title="Conference")]
-    summary: Annotated[str | None, Field(title="Summary")] = None
-    claims_and_evidence: Annotated[str | None, Field(title="Claims And Evidence")] = (
-        None
-    )
-    relation_to_prior_work: Annotated[
-        str | None, Field(title="Relation To Prior Work")
-    ] = None
-    other_aspects: Annotated[str | None, Field(title="Other Aspects")] = None
-    questions: Annotated[list[str] | None, Field(title="Questions")] = None
-    ethical_issues: Annotated[bool | None, Field(title="Ethical Issues")] = None
-    ethical_issues_explanation: Annotated[
-        str | None, Field(title="Ethical Issues Explanation")
-    ] = ""
-    clarity_issues: Annotated[
-        list[ClarityIssue] | None, Field(title="Clarity Issues")
-    ] = None
-    overall: Annotated[int | None, Field(title="Overall")] = None
-    decision: Annotated[str | None, Field(title="Decision")] = None
-
-
 class Idea(BaseModel):
     idea_id: Annotated[int, Field(description="Idea ID", title="Idea Id")]
     conversation_id: Annotated[
@@ -2545,91 +2476,6 @@ class MultipartUploadInitResponse(BaseModel):
     s3_key: Annotated[str, Field(title="S3 Key")]
     part_urls: Annotated[list[MultipartUploadPartUrl], Field(title="Part Urls")]
     expires_in: Annotated[int, Field(title="Expires In")]
-
-
-class NeurIPSPaperReviewDetail(BaseModel):
-    id: Annotated[int, Field(title="Id")]
-    status: Annotated[
-        str,
-        Field(
-            description="Review status: pending, processing, completed, failed",
-            title="Status",
-        ),
-    ]
-    error_message: Annotated[
-        str | None,
-        Field(description="Error message if status is failed", title="Error Message"),
-    ] = None
-    original_filename: Annotated[
-        str, Field(description="Original PDF filename", title="Original Filename")
-    ]
-    model: Annotated[str, Field(description="Model used for review", title="Model")]
-    tier: Annotated[Tier, Field(description="Review tier", title="Tier")]
-    created_at: Annotated[
-        str, Field(description="ISO timestamp of review creation", title="Created At")
-    ]
-    has_enough_credits: Annotated[
-        bool | None,
-        Field(
-            description="Whether user had positive balance when review completed. NULL if still running.",
-            title="Has Enough Credits",
-        ),
-    ] = None
-    access_restricted: Annotated[
-        bool | None,
-        Field(
-            description="True if user cannot view full review details due to insufficient credits",
-            title="Access Restricted",
-        ),
-    ] = False
-    access_restricted_reason: Annotated[
-        str | None,
-        Field(
-            description="Message explaining why access is restricted",
-            title="Access Restricted Reason",
-        ),
-    ] = None
-    token_usage: Annotated[
-        TokenUsage | None,
-        Field(description="Token usage (null if not completed or restricted)"),
-    ] = None
-    cost_cents: Annotated[
-        int | None,
-        Field(
-            description="Cost charged in cents (null if restricted)", title="Cost Cents"
-        ),
-    ] = None
-    progress: Annotated[
-        float, Field(description="Review progress (0.0-1.0)", title="Progress")
-    ]
-    progress_step: Annotated[
-        str,
-        Field(
-            description="Current step description (empty string when completed)",
-            title="Progress Step",
-        ),
-    ]
-    conference: Annotated[Literal["neurips_2025"], Field(title="Conference")]
-    summary: Annotated[str | None, Field(title="Summary")] = None
-    strengths_and_weaknesses: Annotated[
-        str | None, Field(title="Strengths And Weaknesses")
-    ] = None
-    questions: Annotated[list[str] | None, Field(title="Questions")] = None
-    limitations: Annotated[str | None, Field(title="Limitations")] = None
-    ethical_concerns: Annotated[bool | None, Field(title="Ethical Concerns")] = None
-    ethical_concerns_explanation: Annotated[
-        str | None, Field(title="Ethical Concerns Explanation")
-    ] = ""
-    clarity_issues: Annotated[
-        list[ClarityIssue] | None, Field(title="Clarity Issues")
-    ] = None
-    quality: Annotated[int | None, Field(title="Quality")] = None
-    clarity: Annotated[int | None, Field(title="Clarity")] = None
-    significance: Annotated[int | None, Field(title="Significance")] = None
-    originality: Annotated[int | None, Field(title="Originality")] = None
-    overall: Annotated[int | None, Field(title="Overall")] = None
-    confidence: Annotated[int | None, Field(title="Confidence")] = None
-    decision: Annotated[str | None, Field(title="Decision")] = None
 
 
 class NodeExecutionCompletedEvent(BaseModel):
@@ -2774,6 +2620,20 @@ class NodeResultEvent(BaseModel):
     ] = None
 
 
+class NoveltySearchResponse(BaseModel):
+    search_queries_used: Annotated[
+        list[str],
+        Field(description="Search queries executed", title="Search Queries Used"),
+    ]
+    results: Annotated[
+        list[NoveltySearchResultItem],
+        Field(description="Relevant search results", title="Results"),
+    ]
+    summary: Annotated[
+        str, Field(description="Summary of prior work found", title="Summary")
+    ]
+
+
 class PaperGenerationStepEvent(BaseModel):
     id: Annotated[str, Field(description="Unique event ID (UUID)", title="Id")]
     timestamp: Annotated[
@@ -2822,6 +2682,19 @@ class PaperReviewListResponse(BaseModel):
     ]
     count: Annotated[
         int, Field(description="Number of reviews returned", title="Count")
+    ]
+
+
+class PresentationCheckResponse(BaseModel):
+    issues: Annotated[
+        list[PresentationIssueResponse],
+        Field(description="Presentation issues found", title="Issues"),
+    ]
+    summary: Annotated[
+        str,
+        Field(
+            description="Overall assessment of presentation quality", title="Summary"
+        ),
     ]
 
 
@@ -3287,6 +3160,329 @@ class ConversationImportStreamEvent(
             title="ConversationImportStreamEvent",
         ),
     ]
+
+
+class ICLRPaperReviewDetail(BaseModel):
+    id: Annotated[int, Field(title="Id")]
+    status: Annotated[
+        str,
+        Field(
+            description="Review status: pending, processing, completed, failed",
+            title="Status",
+        ),
+    ]
+    error_message: Annotated[
+        str | None,
+        Field(description="Error message if status is failed", title="Error Message"),
+    ] = None
+    original_filename: Annotated[
+        str, Field(description="Original PDF filename", title="Original Filename")
+    ]
+    model: Annotated[str, Field(description="Model used for review", title="Model")]
+    tier: Annotated[Tier, Field(description="Review tier", title="Tier")]
+    created_at: Annotated[
+        str, Field(description="ISO timestamp of review creation", title="Created At")
+    ]
+    has_enough_credits: Annotated[
+        bool | None,
+        Field(
+            description="Whether user had positive balance when review completed. NULL if still running.",
+            title="Has Enough Credits",
+        ),
+    ] = None
+    access_restricted: Annotated[
+        bool | None,
+        Field(
+            description="True if user cannot view full review details due to insufficient credits",
+            title="Access Restricted",
+        ),
+    ] = False
+    access_restricted_reason: Annotated[
+        str | None,
+        Field(
+            description="Message explaining why access is restricted",
+            title="Access Restricted Reason",
+        ),
+    ] = None
+    token_usage: Annotated[
+        TokenUsage | None,
+        Field(description="Token usage (null if not completed or restricted)"),
+    ] = None
+    cost_cents: Annotated[
+        int | None,
+        Field(
+            description="Cost charged in cents (null if restricted)", title="Cost Cents"
+        ),
+    ] = None
+    progress: Annotated[
+        float, Field(description="Review progress (0.0-1.0)", title="Progress")
+    ]
+    progress_step: Annotated[
+        str,
+        Field(
+            description="Current step description (empty string when completed)",
+            title="Progress Step",
+        ),
+    ]
+    novelty_search: Annotated[
+        NoveltySearchResponse | None,
+        Field(
+            description="Novelty search results (null if restricted or not available)"
+        ),
+    ] = None
+    citation_check: Annotated[
+        CitationCheckResponse | None,
+        Field(
+            description="Citation verification results (null if restricted or not available)"
+        ),
+    ] = None
+    missing_references: Annotated[
+        MissingReferencesResponse | None,
+        Field(
+            description="Missing references results (null if restricted, not available, or standard tier)"
+        ),
+    ] = None
+    presentation_check: Annotated[
+        PresentationCheckResponse | None,
+        Field(
+            description="Presentation check results (null if restricted, not available, or standard tier)"
+        ),
+    ] = None
+    conference: Annotated[Literal["iclr_2025"], Field(title="Conference")]
+    summary: Annotated[str | None, Field(title="Summary")] = None
+    strengths: Annotated[list[str] | None, Field(title="Strengths")] = None
+    weaknesses: Annotated[list[str] | None, Field(title="Weaknesses")] = None
+    questions: Annotated[list[str] | None, Field(title="Questions")] = None
+    limitations: Annotated[str | None, Field(title="Limitations")] = None
+    ethical_concerns: Annotated[bool | None, Field(title="Ethical Concerns")] = None
+    ethical_concerns_explanation: Annotated[
+        str | None, Field(title="Ethical Concerns Explanation")
+    ] = ""
+    clarity_issues: Annotated[
+        list[ClarityIssue] | None, Field(title="Clarity Issues")
+    ] = None
+    soundness: Annotated[int | None, Field(title="Soundness")] = None
+    presentation: Annotated[int | None, Field(title="Presentation")] = None
+    contribution: Annotated[int | None, Field(title="Contribution")] = None
+    overall: Annotated[int | None, Field(title="Overall")] = None
+    confidence: Annotated[int | None, Field(title="Confidence")] = None
+    decision: Annotated[str | None, Field(title="Decision")] = None
+
+
+class ICMLPaperReviewDetail(BaseModel):
+    id: Annotated[int, Field(title="Id")]
+    status: Annotated[
+        str,
+        Field(
+            description="Review status: pending, processing, completed, failed",
+            title="Status",
+        ),
+    ]
+    error_message: Annotated[
+        str | None,
+        Field(description="Error message if status is failed", title="Error Message"),
+    ] = None
+    original_filename: Annotated[
+        str, Field(description="Original PDF filename", title="Original Filename")
+    ]
+    model: Annotated[str, Field(description="Model used for review", title="Model")]
+    tier: Annotated[Tier, Field(description="Review tier", title="Tier")]
+    created_at: Annotated[
+        str, Field(description="ISO timestamp of review creation", title="Created At")
+    ]
+    has_enough_credits: Annotated[
+        bool | None,
+        Field(
+            description="Whether user had positive balance when review completed. NULL if still running.",
+            title="Has Enough Credits",
+        ),
+    ] = None
+    access_restricted: Annotated[
+        bool | None,
+        Field(
+            description="True if user cannot view full review details due to insufficient credits",
+            title="Access Restricted",
+        ),
+    ] = False
+    access_restricted_reason: Annotated[
+        str | None,
+        Field(
+            description="Message explaining why access is restricted",
+            title="Access Restricted Reason",
+        ),
+    ] = None
+    token_usage: Annotated[
+        TokenUsage | None,
+        Field(description="Token usage (null if not completed or restricted)"),
+    ] = None
+    cost_cents: Annotated[
+        int | None,
+        Field(
+            description="Cost charged in cents (null if restricted)", title="Cost Cents"
+        ),
+    ] = None
+    progress: Annotated[
+        float, Field(description="Review progress (0.0-1.0)", title="Progress")
+    ]
+    progress_step: Annotated[
+        str,
+        Field(
+            description="Current step description (empty string when completed)",
+            title="Progress Step",
+        ),
+    ]
+    novelty_search: Annotated[
+        NoveltySearchResponse | None,
+        Field(
+            description="Novelty search results (null if restricted or not available)"
+        ),
+    ] = None
+    citation_check: Annotated[
+        CitationCheckResponse | None,
+        Field(
+            description="Citation verification results (null if restricted or not available)"
+        ),
+    ] = None
+    missing_references: Annotated[
+        MissingReferencesResponse | None,
+        Field(
+            description="Missing references results (null if restricted, not available, or standard tier)"
+        ),
+    ] = None
+    presentation_check: Annotated[
+        PresentationCheckResponse | None,
+        Field(
+            description="Presentation check results (null if restricted, not available, or standard tier)"
+        ),
+    ] = None
+    conference: Annotated[Literal["icml"], Field(title="Conference")]
+    summary: Annotated[str | None, Field(title="Summary")] = None
+    claims_and_evidence: Annotated[str | None, Field(title="Claims And Evidence")] = (
+        None
+    )
+    relation_to_prior_work: Annotated[
+        str | None, Field(title="Relation To Prior Work")
+    ] = None
+    other_aspects: Annotated[str | None, Field(title="Other Aspects")] = None
+    questions: Annotated[list[str] | None, Field(title="Questions")] = None
+    ethical_issues: Annotated[bool | None, Field(title="Ethical Issues")] = None
+    ethical_issues_explanation: Annotated[
+        str | None, Field(title="Ethical Issues Explanation")
+    ] = ""
+    clarity_issues: Annotated[
+        list[ClarityIssue] | None, Field(title="Clarity Issues")
+    ] = None
+    overall: Annotated[int | None, Field(title="Overall")] = None
+    decision: Annotated[str | None, Field(title="Decision")] = None
+
+
+class NeurIPSPaperReviewDetail(BaseModel):
+    id: Annotated[int, Field(title="Id")]
+    status: Annotated[
+        str,
+        Field(
+            description="Review status: pending, processing, completed, failed",
+            title="Status",
+        ),
+    ]
+    error_message: Annotated[
+        str | None,
+        Field(description="Error message if status is failed", title="Error Message"),
+    ] = None
+    original_filename: Annotated[
+        str, Field(description="Original PDF filename", title="Original Filename")
+    ]
+    model: Annotated[str, Field(description="Model used for review", title="Model")]
+    tier: Annotated[Tier, Field(description="Review tier", title="Tier")]
+    created_at: Annotated[
+        str, Field(description="ISO timestamp of review creation", title="Created At")
+    ]
+    has_enough_credits: Annotated[
+        bool | None,
+        Field(
+            description="Whether user had positive balance when review completed. NULL if still running.",
+            title="Has Enough Credits",
+        ),
+    ] = None
+    access_restricted: Annotated[
+        bool | None,
+        Field(
+            description="True if user cannot view full review details due to insufficient credits",
+            title="Access Restricted",
+        ),
+    ] = False
+    access_restricted_reason: Annotated[
+        str | None,
+        Field(
+            description="Message explaining why access is restricted",
+            title="Access Restricted Reason",
+        ),
+    ] = None
+    token_usage: Annotated[
+        TokenUsage | None,
+        Field(description="Token usage (null if not completed or restricted)"),
+    ] = None
+    cost_cents: Annotated[
+        int | None,
+        Field(
+            description="Cost charged in cents (null if restricted)", title="Cost Cents"
+        ),
+    ] = None
+    progress: Annotated[
+        float, Field(description="Review progress (0.0-1.0)", title="Progress")
+    ]
+    progress_step: Annotated[
+        str,
+        Field(
+            description="Current step description (empty string when completed)",
+            title="Progress Step",
+        ),
+    ]
+    novelty_search: Annotated[
+        NoveltySearchResponse | None,
+        Field(
+            description="Novelty search results (null if restricted or not available)"
+        ),
+    ] = None
+    citation_check: Annotated[
+        CitationCheckResponse | None,
+        Field(
+            description="Citation verification results (null if restricted or not available)"
+        ),
+    ] = None
+    missing_references: Annotated[
+        MissingReferencesResponse | None,
+        Field(
+            description="Missing references results (null if restricted, not available, or standard tier)"
+        ),
+    ] = None
+    presentation_check: Annotated[
+        PresentationCheckResponse | None,
+        Field(
+            description="Presentation check results (null if restricted, not available, or standard tier)"
+        ),
+    ] = None
+    conference: Annotated[Literal["neurips_2025"], Field(title="Conference")]
+    summary: Annotated[str | None, Field(title="Summary")] = None
+    strengths_and_weaknesses: Annotated[
+        str | None, Field(title="Strengths And Weaknesses")
+    ] = None
+    questions: Annotated[list[str] | None, Field(title="Questions")] = None
+    limitations: Annotated[str | None, Field(title="Limitations")] = None
+    ethical_concerns: Annotated[bool | None, Field(title="Ethical Concerns")] = None
+    ethical_concerns_explanation: Annotated[
+        str | None, Field(title="Ethical Concerns Explanation")
+    ] = ""
+    clarity_issues: Annotated[
+        list[ClarityIssue] | None, Field(title="Clarity Issues")
+    ] = None
+    quality: Annotated[int | None, Field(title="Quality")] = None
+    clarity: Annotated[int | None, Field(title="Clarity")] = None
+    significance: Annotated[int | None, Field(title="Significance")] = None
+    originality: Annotated[int | None, Field(title="Originality")] = None
+    overall: Annotated[int | None, Field(title="Overall")] = None
+    confidence: Annotated[int | None, Field(title="Confidence")] = None
+    decision: Annotated[str | None, Field(title="Decision")] = None
 
 
 class ResearchRunDetailsResponse(BaseModel):

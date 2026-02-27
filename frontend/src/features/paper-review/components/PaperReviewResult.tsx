@@ -13,6 +13,11 @@ import {
   Download,
   Loader2,
   Eye,
+  Search,
+  BookOpen,
+  FileWarning,
+  Layout,
+  ExternalLink,
 } from "lucide-react";
 import { config } from "@/shared/lib/config";
 import { withAuthHeaders } from "@/shared/lib/session-token";
@@ -414,6 +419,137 @@ export function PaperReviewResult({ data }: PaperReviewResultProps) {
               </li>
             ))}
           </ul>
+        </CollapsibleSection>
+      )}
+
+      {/* Novelty Search Results */}
+      {data.novelty_search && (
+        <CollapsibleSection
+          title={`Novelty Search (${data.novelty_search.results.length} results)`}
+          icon={<Search className="h-5 w-5 text-sky-400" />}
+          defaultOpen={false}
+        >
+          <div className="space-y-3">
+            <p className="text-sm leading-relaxed text-slate-300">{data.novelty_search.summary}</p>
+            {data.novelty_search.results.length > 0 && (
+              <ul className="space-y-2">
+                {data.novelty_search.results.map((result, i) => (
+                  <li
+                    key={i}
+                    className="rounded border border-slate-700 bg-slate-800/80 p-2 text-sm"
+                  >
+                    <a
+                      href={result.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 font-medium text-sky-400 hover:text-sky-300"
+                    >
+                      {result.title}
+                      <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                    </a>
+                    <p className="mt-1 text-slate-400">{result.snippet}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </CollapsibleSection>
+      )}
+
+      {/* Citation Check Results */}
+      {data.citation_check && data.citation_check.checks.length > 0 && (
+        <CollapsibleSection
+          title={`Citation Check (${data.citation_check.checks.length} citations)`}
+          icon={<BookOpen className="h-5 w-5 text-amber-400" />}
+          defaultOpen={false}
+        >
+          <div className="space-y-3">
+            <p className="text-sm leading-relaxed text-slate-300">{data.citation_check.summary}</p>
+            <ul className="space-y-2">
+              {data.citation_check.checks.map((check, i) => (
+                <li key={i} className="rounded border border-slate-700 bg-slate-800/80 p-2 text-sm">
+                  <div className="flex items-start gap-2">
+                    {check.found ? (
+                      <CheckCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-emerald-400" />
+                    ) : (
+                      <XCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-400" />
+                    )}
+                    <div>
+                      <p className="text-slate-300">{check.cited_text}</p>
+                      <p className="mt-1 text-slate-400">{check.assessment}</p>
+                      {check.found && check.url && (
+                        <a
+                          href={check.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-1 inline-flex items-center gap-1 text-sky-400 hover:text-sky-300"
+                        >
+                          Source <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </CollapsibleSection>
+      )}
+
+      {/* Missing References Results */}
+      {data.missing_references && data.missing_references.missing_references.length > 0 && (
+        <CollapsibleSection
+          title={`Missing References (${data.missing_references.missing_references.length})`}
+          icon={<FileWarning className="h-5 w-5 text-orange-400" />}
+          defaultOpen={false}
+        >
+          <div className="space-y-3">
+            <p className="text-sm leading-relaxed text-slate-300">
+              {data.missing_references.summary}
+            </p>
+            <ul className="space-y-2">
+              {data.missing_references.missing_references.map((ref, i) => (
+                <li key={i} className="rounded border border-slate-700 bg-slate-800/80 p-2 text-sm">
+                  <div className="flex items-center gap-1">
+                    <span className="font-medium text-orange-400">{ref.topic}</span>
+                  </div>
+                  <a
+                    href={ref.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-1 inline-flex items-center gap-1 text-sky-400 hover:text-sky-300"
+                  >
+                    {ref.missing_work} <ExternalLink className="h-3 w-3" />
+                  </a>
+                  <p className="mt-1 text-slate-400">{ref.relevance}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </CollapsibleSection>
+      )}
+
+      {/* Presentation Check Results */}
+      {data.presentation_check && data.presentation_check.issues.length > 0 && (
+        <CollapsibleSection
+          title={`Presentation Issues (${data.presentation_check.issues.length})`}
+          icon={<Layout className="h-5 w-5 text-violet-400" />}
+          defaultOpen={false}
+        >
+          <div className="space-y-3">
+            <p className="text-sm leading-relaxed text-slate-300">
+              {data.presentation_check.summary}
+            </p>
+            <ul className="space-y-2">
+              {data.presentation_check.issues.map((issue, i) => (
+                <li key={i} className="text-sm text-slate-300">
+                  <span className="font-medium text-violet-400">{issue.location}</span>
+                  <span className="mx-1 text-slate-500">({issue.issue_type})</span>
+                  <span>{issue.description}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
         </CollapsibleSection>
       )}
 

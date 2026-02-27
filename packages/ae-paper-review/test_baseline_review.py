@@ -55,17 +55,18 @@ def run_test(pdf_path: Path, conference: Conference) -> None:
     print(f"Conference: {conference.value}")
     print("=" * 60)
 
+    # Match server TIER_CONFIGS[ReviewTier.STANDARD] exactly
     result = perform_baseline_review(
         pdf_path=pdf_path,
         provider=PROVIDER,
         model=MODEL,
-        temperature=1.0,
+        temperature=1,
         event_callback=progress_callback,
-        num_reflections=1,
+        num_reflections=0,
         conference=conference,
         provide_rubric=True,
-        skip_novelty_search=True,
-        skip_citation_check=True,
+        skip_novelty_search=False,
+        skip_citation_check=False,
         is_vanilla_prompt=True,
     )
 

@@ -96,6 +96,15 @@ class ICMLReviewContent(NamedTuple):
 ReviewContent = NeurIPSReviewContent | ICLRReviewContent | ICMLReviewContent
 
 
+class PreReviewAnalysis(NamedTuple):
+    """Pre-review analysis results (novelty search, citation check, etc.)."""
+
+    novelty_search: dict | None
+    citation_check: dict | None
+    missing_references: dict | None
+    presentation_check: dict | None
+
+
 class PaperReviewListItem(NamedTuple):
     """Base fields plus summary/overall/decision for list views."""
 
@@ -376,6 +385,57 @@ class PaperReviewsMixin(ConnectionProvider):
                     "UPDATE paper_reviews SET status = %s WHERE id = %s",
                     (PaperReviewStatus.COMPLETED.value, review_id),
                 )
+
+    async def insert_pre_review_analysis(
+        self,
+        *,
+        review_id: int,
+        novelty_search: dict | None,
+        citation_check: dict | None,
+        missing_references: dict | None,
+        presentation_check: dict | None,
+    ) -> None:
+        """Insert pre-review analysis results for a paper review."""
+        async with self.aget_connection() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
+                    """
+                    INSERT INTO paper_review_analysis
+                        (paper_review_id, novelty_search, citation_check,
+                         missing_references, presentation_check)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (
+                        review_id,
+                        Jsonb(novelty_search) if novelty_search is not None else None,
+                        Jsonb(citation_check) if citation_check is not None else None,
+                        Jsonb(missing_references) if missing_references is not None else None,
+                        Jsonb(presentation_check) if presentation_check is not None else None,
+                    ),
+                )
+
+    async def get_pre_review_analysis(self, review_id: int) -> PreReviewAnalysis | None:
+        """Fetch pre-review analysis results for a paper review."""
+        async with self.aget_connection() as conn:
+            async with conn.cursor(row_factory=dict_row) as cursor:
+                await cursor.execute(
+                    """
+                    SELECT novelty_search, citation_check, missing_references, presentation_check
+                    FROM paper_review_analysis
+                    WHERE paper_review_id = %s
+                    """,
+                    (review_id,),
+                )
+                row = await cursor.fetchone()
+
+        if not row:
+            return None
+        return PreReviewAnalysis(
+            novelty_search=row["novelty_search"],
+            citation_check=row["citation_check"],
+            missing_references=row["missing_references"],
+            presentation_check=row["presentation_check"],
+        )
 
     async def get_pending_reviews_by_user(self, user_id: int) -> list[PaperReviewBase]:
         """Get all pending or processing reviews for a user."""

@@ -2416,6 +2416,53 @@ export interface components {
             status: string;
         };
         /**
+         * CitationCheckItemResponse
+         * @description A single citation verification result.
+         */
+        CitationCheckItemResponse: {
+            /**
+             * Cited Text
+             * @description The citation claim being verified
+             */
+            cited_text: string;
+            /**
+             * Found
+             * @description Whether the cited work was found
+             */
+            found: boolean;
+            /**
+             * Url
+             * @description URL of the found work, or empty string
+             */
+            url: string;
+            /**
+             * Assessment
+             * @description Assessment of whether the citation supports the claim
+             */
+            assessment: string;
+        };
+        /**
+         * CitationCheckResponse
+         * @description Results from citation verification web searches.
+         */
+        CitationCheckResponse: {
+            /**
+             * Search Queries Used
+             * @description Search queries executed
+             */
+            search_queries_used: string[];
+            /**
+             * Checks
+             * @description Verification results
+             */
+            checks: components["schemas"]["CitationCheckItemResponse"][];
+            /**
+             * Summary
+             * @description Summary of citation verification findings
+             */
+            summary: string;
+        };
+        /**
          * ClarityIssue
          * @description A specific clarity issue identified in the paper.
          */
@@ -3143,6 +3190,14 @@ export interface components {
              * @description Current step description (empty string when completed)
              */
             progress_step: string;
+            /** @description Novelty search results (null if restricted or not available) */
+            novelty_search?: components["schemas"]["NoveltySearchResponse"] | null;
+            /** @description Citation verification results (null if restricted or not available) */
+            citation_check?: components["schemas"]["CitationCheckResponse"] | null;
+            /** @description Missing references results (null if restricted, not available, or standard tier) */
+            missing_references?: components["schemas"]["MissingReferencesResponse"] | null;
+            /** @description Presentation check results (null if restricted, not available, or standard tier) */
+            presentation_check?: components["schemas"]["PresentationCheckResponse"] | null;
             /**
              * Conference
              * @constant
@@ -3252,6 +3307,14 @@ export interface components {
              * @description Current step description (empty string when completed)
              */
             progress_step: string;
+            /** @description Novelty search results (null if restricted or not available) */
+            novelty_search?: components["schemas"]["NoveltySearchResponse"] | null;
+            /** @description Citation verification results (null if restricted or not available) */
+            citation_check?: components["schemas"]["CitationCheckResponse"] | null;
+            /** @description Missing references results (null if restricted, not available, or standard tier) */
+            missing_references?: components["schemas"]["MissingReferencesResponse"] | null;
+            /** @description Presentation check results (null if restricted, not available, or standard tier) */
+            presentation_check?: components["schemas"]["PresentationCheckResponse"] | null;
             /**
              * Conference
              * @constant
@@ -3965,6 +4028,53 @@ export interface components {
              */
             comparison?: Record<string, never> | null;
         };
+        /**
+         * MissingReferenceItemResponse
+         * @description A potentially missing reference identified via web search.
+         */
+        MissingReferenceItemResponse: {
+            /**
+             * Topic
+             * @description Topic area where references may be missing
+             */
+            topic: string;
+            /**
+             * Missing Work
+             * @description Title and authors of the missing reference
+             */
+            missing_work: string;
+            /**
+             * Url
+             * @description URL where the work was found
+             */
+            url: string;
+            /**
+             * Relevance
+             * @description Why this work should have been cited
+             */
+            relevance: string;
+        };
+        /**
+         * MissingReferencesResponse
+         * @description Results from searching for important uncited related work.
+         */
+        MissingReferencesResponse: {
+            /**
+             * Search Queries Used
+             * @description Search queries executed
+             */
+            search_queries_used: string[];
+            /**
+             * Missing References
+             * @description Potentially important uncited works
+             */
+            missing_references: components["schemas"]["MissingReferenceItemResponse"][];
+            /**
+             * Summary
+             * @description Summary of gaps in related work coverage
+             */
+            summary: string;
+        };
         /** ModelCost */
         ModelCost: {
             /** Model */
@@ -4143,6 +4253,14 @@ export interface components {
              * @description Current step description (empty string when completed)
              */
             progress_step: string;
+            /** @description Novelty search results (null if restricted or not available) */
+            novelty_search?: components["schemas"]["NoveltySearchResponse"] | null;
+            /** @description Citation verification results (null if restricted or not available) */
+            citation_check?: components["schemas"]["CitationCheckResponse"] | null;
+            /** @description Missing references results (null if restricted, not available, or standard tier) */
+            missing_references?: components["schemas"]["MissingReferencesResponse"] | null;
+            /** @description Presentation check results (null if restricted, not available, or standard tier) */
+            presentation_check?: components["schemas"]["PresentationCheckResponse"] | null;
             /**
              * Conference
              * @constant
@@ -4409,6 +4527,48 @@ export interface components {
              * @description Execution time in seconds
              */
             exec_time?: number | null;
+        };
+        /**
+         * NoveltySearchResponse
+         * @description Results from novelty-focused web searches.
+         */
+        NoveltySearchResponse: {
+            /**
+             * Search Queries Used
+             * @description Search queries executed
+             */
+            search_queries_used: string[];
+            /**
+             * Results
+             * @description Relevant search results
+             */
+            results: components["schemas"]["NoveltySearchResultItem"][];
+            /**
+             * Summary
+             * @description Summary of prior work found
+             */
+            summary: string;
+        };
+        /**
+         * NoveltySearchResultItem
+         * @description A single web search result from novelty search.
+         */
+        NoveltySearchResultItem: {
+            /**
+             * Title
+             * @description Title of the search result
+             */
+            title: string;
+            /**
+             * Url
+             * @description URL of the search result
+             */
+            url: string;
+            /**
+             * Snippet
+             * @description Brief snippet from the search result
+             */
+            snippet: string;
         };
         /**
          * PaperDownloadResponse
@@ -4741,6 +4901,43 @@ export interface components {
              * @description Number of pending reviews
              */
             count: number;
+        };
+        /**
+         * PresentationCheckResponse
+         * @description Results from visual inspection of figures, tables, and notation.
+         */
+        PresentationCheckResponse: {
+            /**
+             * Issues
+             * @description Presentation issues found
+             */
+            issues: components["schemas"]["PresentationIssueResponse"][];
+            /**
+             * Summary
+             * @description Overall assessment of presentation quality
+             */
+            summary: string;
+        };
+        /**
+         * PresentationIssueResponse
+         * @description A specific presentation issue found in the paper.
+         */
+        PresentationIssueResponse: {
+            /**
+             * Location
+             * @description Where the issue occurs
+             */
+            location: string;
+            /**
+             * Issue Type
+             * @description Category: figure, table, notation, formatting, layout
+             */
+            issue_type: string;
+            /**
+             * Description
+             * @description What the problem is
+             */
+            description: string;
         };
         /** PresignedUploadUrlRequest */
         PresignedUploadUrlRequest: {

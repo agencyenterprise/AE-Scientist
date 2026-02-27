@@ -5679,6 +5679,72 @@
         "title": "ChildConversationInfo",
         "description": "Brief info about a child conversation seeded from a run."
       },
+      "CitationCheckItemResponse": {
+        "properties": {
+          "cited_text": {
+            "type": "string",
+            "title": "Cited Text",
+            "description": "The citation claim being verified"
+          },
+          "found": {
+            "type": "boolean",
+            "title": "Found",
+            "description": "Whether the cited work was found"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url",
+            "description": "URL of the found work, or empty string"
+          },
+          "assessment": {
+            "type": "string",
+            "title": "Assessment",
+            "description": "Assessment of whether the citation supports the claim"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cited_text",
+          "found",
+          "url",
+          "assessment"
+        ],
+        "title": "CitationCheckItemResponse",
+        "description": "A single citation verification result."
+      },
+      "CitationCheckResponse": {
+        "properties": {
+          "search_queries_used": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Search Queries Used",
+            "description": "Search queries executed"
+          },
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/CitationCheckItemResponse"
+            },
+            "type": "array",
+            "title": "Checks",
+            "description": "Verification results"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary",
+            "description": "Summary of citation verification findings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "search_queries_used",
+          "checks",
+          "summary"
+        ],
+        "title": "CitationCheckResponse",
+        "description": "Results from citation verification web searches."
+      },
       "ClarityIssue": {
         "properties": {
           "location": {
@@ -7228,6 +7294,50 @@
             "title": "Progress Step",
             "description": "Current step description (empty string when completed)"
           },
+          "novelty_search": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NoveltySearchResponse"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Novelty search results (null if restricted or not available)"
+          },
+          "citation_check": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CitationCheckResponse"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Citation verification results (null if restricted or not available)"
+          },
+          "missing_references": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MissingReferencesResponse"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Missing references results (null if restricted, not available, or standard tier)"
+          },
+          "presentation_check": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PresentationCheckResponse"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Presentation check results (null if restricted, not available, or standard tier)"
+          },
           "conference": {
             "type": "string",
             "enum": [
@@ -7521,6 +7631,50 @@
             "type": "string",
             "title": "Progress Step",
             "description": "Current step description (empty string when completed)"
+          },
+          "novelty_search": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NoveltySearchResponse"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Novelty search results (null if restricted or not available)"
+          },
+          "citation_check": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CitationCheckResponse"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Citation verification results (null if restricted or not available)"
+          },
+          "missing_references": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MissingReferencesResponse"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Missing references results (null if restricted, not available, or standard tier)"
+          },
+          "presentation_check": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PresentationCheckResponse"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Presentation check results (null if restricted, not available, or standard tier)"
           },
           "conference": {
             "type": "string",
@@ -8692,6 +8846,72 @@
         "title": "MetricInterpretation",
         "description": "Interpreted metric with human-readable context.\n\nTransforms raw metric (0.8234567) into meaningful information:\n- Formatted: \"82.3%\"\n- Interpretation: \"5.2% above baseline\""
       },
+      "MissingReferenceItemResponse": {
+        "properties": {
+          "topic": {
+            "type": "string",
+            "title": "Topic",
+            "description": "Topic area where references may be missing"
+          },
+          "missing_work": {
+            "type": "string",
+            "title": "Missing Work",
+            "description": "Title and authors of the missing reference"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url",
+            "description": "URL where the work was found"
+          },
+          "relevance": {
+            "type": "string",
+            "title": "Relevance",
+            "description": "Why this work should have been cited"
+          }
+        },
+        "type": "object",
+        "required": [
+          "topic",
+          "missing_work",
+          "url",
+          "relevance"
+        ],
+        "title": "MissingReferenceItemResponse",
+        "description": "A potentially missing reference identified via web search."
+      },
+      "MissingReferencesResponse": {
+        "properties": {
+          "search_queries_used": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Search Queries Used",
+            "description": "Search queries executed"
+          },
+          "missing_references": {
+            "items": {
+              "$ref": "#/components/schemas/MissingReferenceItemResponse"
+            },
+            "type": "array",
+            "title": "Missing References",
+            "description": "Potentially important uncited works"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary",
+            "description": "Summary of gaps in related work coverage"
+          }
+        },
+        "type": "object",
+        "required": [
+          "search_queries_used",
+          "missing_references",
+          "summary"
+        ],
+        "title": "MissingReferencesResponse",
+        "description": "Results from searching for important uncited related work."
+      },
       "ModelCost": {
         "properties": {
           "model": {
@@ -9027,6 +9247,50 @@
             "type": "string",
             "title": "Progress Step",
             "description": "Current step description (empty string when completed)"
+          },
+          "novelty_search": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NoveltySearchResponse"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Novelty search results (null if restricted or not available)"
+          },
+          "citation_check": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CitationCheckResponse"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Citation verification results (null if restricted or not available)"
+          },
+          "missing_references": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MissingReferencesResponse"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Missing references results (null if restricted, not available, or standard tier)"
+          },
+          "presentation_check": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PresentationCheckResponse"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Presentation check results (null if restricted, not available, or standard tier)"
           },
           "conference": {
             "type": "string",
@@ -9543,6 +9807,66 @@
         ],
         "title": "NodeResultEvent",
         "description": "Emitted when a node completes execution.\n\nEmission Criteria:\n- Triggered when stage_event arrives with node completion\n- Includes metrics from corresponding stage_progress event\n- Emitted for each node that completes (success or failure)\n\nFrequency: 10-50 per stage (varies by stage complexity)"
+      },
+      "NoveltySearchResponse": {
+        "properties": {
+          "search_queries_used": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Search Queries Used",
+            "description": "Search queries executed"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/NoveltySearchResultItem"
+            },
+            "type": "array",
+            "title": "Results",
+            "description": "Relevant search results"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary",
+            "description": "Summary of prior work found"
+          }
+        },
+        "type": "object",
+        "required": [
+          "search_queries_used",
+          "results",
+          "summary"
+        ],
+        "title": "NoveltySearchResponse",
+        "description": "Results from novelty-focused web searches."
+      },
+      "NoveltySearchResultItem": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "Title of the search result"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url",
+            "description": "URL of the search result"
+          },
+          "snippet": {
+            "type": "string",
+            "title": "Snippet",
+            "description": "Brief snippet from the search result"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "url",
+          "snippet"
+        ],
+        "title": "NoveltySearchResultItem",
+        "description": "A single web search result from novelty search."
       },
       "PaperDownloadResponse": {
         "properties": {
@@ -10155,6 +10479,57 @@
         ],
         "title": "PendingReviewsResponse",
         "description": "Response for listing pending reviews."
+      },
+      "PresentationCheckResponse": {
+        "properties": {
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/PresentationIssueResponse"
+            },
+            "type": "array",
+            "title": "Issues",
+            "description": "Presentation issues found"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary",
+            "description": "Overall assessment of presentation quality"
+          }
+        },
+        "type": "object",
+        "required": [
+          "issues",
+          "summary"
+        ],
+        "title": "PresentationCheckResponse",
+        "description": "Results from visual inspection of figures, tables, and notation."
+      },
+      "PresentationIssueResponse": {
+        "properties": {
+          "location": {
+            "type": "string",
+            "title": "Location",
+            "description": "Where the issue occurs"
+          },
+          "issue_type": {
+            "type": "string",
+            "title": "Issue Type",
+            "description": "Category: figure, table, notation, formatting, layout"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "What the problem is"
+          }
+        },
+        "type": "object",
+        "required": [
+          "location",
+          "issue_type",
+          "description"
+        ],
+        "title": "PresentationIssueResponse",
+        "description": "A specific presentation issue found in the paper."
       },
       "PresignedUploadUrlRequest": {
         "properties": {

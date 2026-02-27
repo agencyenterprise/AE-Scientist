@@ -28,12 +28,14 @@ from .llm_review import (
 )
 from .models import (
     AEScientistReviewModel,
+    CitationCheckResults,
     ClarityIssue,
     Conference,
     ICLRReviewModel,
     ICMLReviewModel,
     MissingReferencesResults,
     NeurIPSReviewModel,
+    NoveltySearchResults,
     PresentationCheckResults,
     ReviewModel,
 )
@@ -57,6 +59,8 @@ __all__ = [
     "BaselineICMLReviewModel",
     "BaselineReviewModel",
     # Pipeline result models
+    "NoveltySearchResults",
+    "CitationCheckResults",
     "MissingReferencesResults",
     "PresentationCheckResults",
     # Review

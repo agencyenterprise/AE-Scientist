@@ -423,6 +423,31 @@ class PaperReviewService:
                 content = _review_model_to_content(review_model)
             await db.complete_paper_review(review_id=review_id, content=content)
 
+            # Store pre-review analysis results
+            await db.insert_pre_review_analysis(
+                review_id=review_id,
+                novelty_search=(
+                    result.novelty_search.model_dump()
+                    if result.novelty_search is not None
+                    else None
+                ),
+                citation_check=(
+                    result.citation_check.model_dump()
+                    if result.citation_check is not None
+                    else None
+                ),
+                missing_references=(
+                    result.missing_references.model_dump()
+                    if result.missing_references is not None
+                    else None
+                ),
+                presentation_check=(
+                    result.presentation_check.model_dump()
+                    if result.presentation_check is not None
+                    else None
+                ),
+            )
+
             # Store token usages
             if token_usages:
                 await db.insert_paper_review_token_usages_batch(
@@ -578,6 +603,7 @@ class PaperReviewService:
             return None
 
         token_usage_dict = await db.get_total_token_usage_by_review_id(review_id)
+        analysis = await db.get_pre_review_analysis(review_id)
 
         token_usage: TokenUsage | None = None
         cost_cents = 0
@@ -605,6 +631,7 @@ class PaperReviewService:
             content=content,
             token_usage=token_usage,
             cost_cents=cost_cents,
+            analysis=analysis,
         )
 
     async def get_pending_reviews(self, *, user_id: int) -> list[dict[str, Any]]:
