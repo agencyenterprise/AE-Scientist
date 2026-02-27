@@ -309,8 +309,128 @@ class ICMLReviewModel(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
 
+# =============================================================================
+# AE-Scientist Unified Review Model
+# =============================================================================
+
+
+class AEScientistReviewModel(BaseModel):
+    """Unified review model for the AE-Scientist pipeline.
+
+    Contains ALL review dimensions (originality, quality, clarity, significance,
+    soundness, presentation, contribution) and uses a 1-10 overall scale.
+    Maps 1:1 to the rp_llm_reviews database table.
+    """
+
+    summary: str = Field(
+        ...,
+        alias="Summary",
+        description="Faithful summary of the paper and its contributions.",
+    )
+    strengths: List[str] = Field(
+        ...,
+        alias="Strengths",
+        description="Bullet-style strengths highlighting novelty, rigor, clarity, etc.",
+    )
+    weaknesses: List[str] = Field(
+        ...,
+        alias="Weaknesses",
+        description="Specific weaknesses or missing evidence.",
+    )
+    originality: int = Field(
+        ...,
+        alias="Originality",
+        description="Rating 1-4 (low to very high) for originality/novelty.",
+        ge=1,
+        le=4,
+    )
+    quality: int = Field(
+        ...,
+        alias="Quality",
+        description="Rating 1-4 for technical quality and correctness.",
+        ge=1,
+        le=4,
+    )
+    clarity: int = Field(
+        ...,
+        alias="Clarity",
+        description="Rating 1-4 for clarity and exposition quality.",
+        ge=1,
+        le=4,
+    )
+    significance: int = Field(
+        ...,
+        alias="Significance",
+        description="Rating 1-4 for potential impact/significance.",
+        ge=1,
+        le=4,
+    )
+    questions: List[str] = Field(
+        ...,
+        alias="Questions",
+        description="Clarifying questions for the authors.",
+    )
+    limitations: List[str] = Field(
+        ...,
+        alias="Limitations",
+        description="Limitation notes or identified risks.",
+    )
+    ethical_concerns: bool = Field(
+        ...,
+        alias="Ethical_Concerns",
+        description="True if ethical concerns exist, False otherwise.",
+    )
+    ethical_concerns_explanation: str = Field(
+        ...,
+        alias="Ethical_Concerns_Explanation",
+        description="Explanation of ethical concerns if ethical_concerns is True. Empty string if none.",
+    )
+    soundness: int = Field(
+        ...,
+        alias="Soundness",
+        description="Rating 1-4 for methodological soundness.",
+        ge=1,
+        le=4,
+    )
+    presentation: int = Field(
+        ...,
+        alias="Presentation",
+        description="Rating 1-4 for presentation quality.",
+        ge=1,
+        le=4,
+    )
+    contribution: int = Field(
+        ...,
+        alias="Contribution",
+        description="Rating 1-4 for contribution level.",
+        ge=1,
+        le=4,
+    )
+    overall: int = Field(
+        ...,
+        alias="Overall",
+        description="Overall rating 1-10 (1=strong reject, 10=award quality).",
+        ge=1,
+        le=10,
+    )
+    confidence: int = Field(
+        ...,
+        alias="Confidence",
+        description="Confidence rating 1-5 (1=educated guess, 5=absolutely certain).",
+        ge=1,
+        le=5,
+    )
+    decision: Literal["Accept", "Reject"] = Field(
+        ...,
+        alias="Decision",
+        description='Final decision: "Accept" or "Reject".',
+    )
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+
 # Union type for all review models
-ReviewModel = Union[NeurIPSReviewModel, ICLRReviewModel, ICMLReviewModel]
+ReviewModel = Union[NeurIPSReviewModel, ICLRReviewModel, ICMLReviewModel, AEScientistReviewModel]
 
 
 # =============================================================================

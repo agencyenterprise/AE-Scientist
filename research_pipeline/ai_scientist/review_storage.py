@@ -3,7 +3,12 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ae_paper_review import ICLRReviewModel, NeurIPSReviewModel, ReviewModel
+from ae_paper_review import (
+    AEScientistReviewModel,
+    ICLRReviewModel,
+    NeurIPSReviewModel,
+    ReviewModel,
+)
 
 from ai_scientist.api_types import (
     FigureReviewEvent,
@@ -22,6 +27,28 @@ def _to_review_completed_event(
     source_path: str | None,
     created_at: str,
 ) -> ReviewCompletedEvent:
+    if isinstance(review, AEScientistReviewModel):
+        return ReviewCompletedEvent(
+            summary=review.summary,
+            strengths=review.strengths,
+            weaknesses=review.weaknesses,
+            originality=review.originality,
+            quality=review.quality,
+            clarity=review.clarity,
+            significance=review.significance,
+            questions=review.questions,
+            limitations=review.limitations,
+            ethical_concerns=review.ethical_concerns,
+            ethical_concerns_explanation=review.ethical_concerns_explanation,
+            soundness=review.soundness,
+            presentation=review.presentation,
+            contribution=review.contribution,
+            overall=review.overall,
+            confidence=review.confidence,
+            decision=review.decision,
+            source_path=source_path,
+            created_at=created_at,
+        )
     if isinstance(review, NeurIPSReviewModel):
         return ReviewCompletedEvent(
             summary=review.summary,
@@ -95,18 +122,18 @@ class ReviewResponseRecorder:
     """Publishes structured LLM review outputs via webhooks."""
 
     _run_id: str
-    _webhook_client: WebhookClient | None = None
+    _webhook_client: WebhookClient | None
 
     @classmethod
     def from_webhook_client(
         cls,
         *,
         run_id: str,
-        webhook_client: WebhookClient | None = None,
+        webhook_client: WebhookClient | None,
     ) -> "ReviewResponseRecorder":
-        return cls(run_id, webhook_client)
+        return cls(_run_id=run_id, _webhook_client=webhook_client)
 
-    def insert_review(self, *, review: ReviewModel, source_path: Path | None = None) -> None:
+    def insert_review(self, *, review: ReviewModel, source_path: Path | None) -> None:
         """Publish review via webhook. Database persistence handled by server."""
         source_value = str(source_path) if source_path is not None else None
         created_at = datetime.now(timezone.utc).isoformat()
@@ -134,16 +161,16 @@ class FigureReviewRecorder:
     """Publishes structured VLM figure reviews via webhooks."""
 
     _run_id: str
-    _webhook_client: WebhookClient | None = None
+    _webhook_client: WebhookClient | None
 
     @classmethod
     def from_webhook_client(
-        cls, *, run_id: str, webhook_client: WebhookClient | None = None
+        cls, *, run_id: str, webhook_client: WebhookClient | None
     ) -> "FigureReviewRecorder":
-        return cls(run_id, webhook_client)
+        return cls(_run_id=run_id, _webhook_client=webhook_client)
 
     def insert_reviews(
-        self, *, reviews: list[FigureImageCaptionRefReview], source_path: Path | None = None
+        self, *, reviews: list[FigureImageCaptionRefReview], source_path: Path | None
     ) -> None:
         """Publish reviews via webhook. Database persistence handled by server."""
         if not reviews:

@@ -10,7 +10,7 @@ import pymupdf
 from ae_paper_review import Provider, TokenUsage
 from ae_paper_review.llm import get_provider
 from ae_paper_review.prompts import render_text as ae_render_text
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from .client import get_response_from_vlm, get_structured_response_from_vlm
 from .models import (
@@ -73,8 +73,7 @@ class _PaperContextExtraction(BaseModel):
         description="The paper abstract. Set to null if not present.",
     )
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
 
 def _parse_provider_model(*, full_model: str) -> tuple[Provider, str]:

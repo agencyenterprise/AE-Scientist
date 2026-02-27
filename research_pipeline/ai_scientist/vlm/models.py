@@ -1,6 +1,6 @@
 """Pydantic models for VLM-based figure review."""
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ImageCaptionRefReview(BaseModel):
@@ -27,8 +27,7 @@ class ImageCaptionRefReview(BaseModel):
         description="Evaluation of how the main text references integrate this figure.",
     )
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
 
 class ImageSelectionReview(ImageCaptionRefReview):
@@ -65,8 +64,7 @@ class ImageReview(BaseModel):
         description="Critique or suggestions for improving the figure.",
     )
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
 
 class FigureImageCaptionRefReview(BaseModel):

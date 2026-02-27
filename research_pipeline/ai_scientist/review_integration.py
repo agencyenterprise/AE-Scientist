@@ -10,14 +10,13 @@ from pathlib import Path
 from typing import Callable
 
 from ae_paper_review import (
-    Conference,
     Provider,
     ReviewProgressEvent,
     ReviewResult,
     TokenUsage,
     TokenUsageDetail,
 )
-from ae_paper_review import perform_review as _perform_review
+from ae_paper_review import perform_ae_scientist_review as _perform_ae_scientist_review
 
 from ai_scientist.api_types import TokenUsageEvent
 from ai_scientist.telemetry.event_persistence import WebhookClient
@@ -75,7 +74,10 @@ def publish_token_usage(usage: TokenUsage) -> None:
         usage: TokenUsage accumulator containing usage records to publish
     """
     webhook_client = _get_webhook_client()
-    _publish_token_usage(webhook_client, usage.get_detailed())
+    _publish_token_usage(
+        webhook_client=webhook_client,
+        token_usage_detailed=usage.get_detailed(),
+    )
 
 
 def make_event_callback_adapter(
@@ -122,46 +124,31 @@ def perform_review(
     event_callback: Callable[[BaseEvent], None],
     run_id: str,
     num_reflections: int,
-    conference: Conference,
 ) -> ReviewResult:
     """Perform paper review with research_pipeline integration.
 
-    This wraps the ae-paper-review perform_review function with:
+    Uses the AE-Scientist unified review schema (separate strengths/weaknesses,
+    soundness/presentation/contribution, overall 1-10).
+
+    Wraps ae-paper-review's perform_ae_scientist_review with:
     - Automatic webhook-based token usage publishing when telemetry is configured
     - Event callback adaptation for PaperGenerationProgressEvent
-
-    Args:
-        pdf_path: Path to the PDF file to review
-        provider: LLM provider enum
-        model: Model name (e.g., "claude-sonnet-4-20250514")
-        temperature: Sampling temperature
-        event_callback: Callback for progress events (expects BaseEvent)
-        run_id: Run ID for events
-        num_reflections: Number of reflection rounds
-        conference: Target conference for the review
-
-    Returns:
-        ReviewResult containing review and token usage
     """
     adapted_callback = make_event_callback_adapter(run_id, event_callback)
 
-    result = _perform_review(
+    result = _perform_ae_scientist_review(
         pdf_path=pdf_path,
         provider=provider,
         model=model,
         temperature=temperature,
         event_callback=adapted_callback,
         num_reflections=num_reflections,
-        conference=conference,
-        provide_rubric=True,
-        skip_novelty_search=False,
-        skip_citation_check=False,
-        skip_missing_references=False,
-        skip_presentation_check=False,
-        is_vanilla_prompt=False,
     )
 
     webhook_client = _get_webhook_client()
-    _publish_token_usage(webhook_client, result.token_usage_detailed)
+    _publish_token_usage(
+        webhook_client=webhook_client,
+        token_usage_detailed=result.token_usage_detailed,
+    )
 
     return result

@@ -15,6 +15,7 @@ from .llm import (
     get_provider,
 )
 from .models import (
+    AEScientistReviewModel,
     CitationCheckResults,
     Conference,
     ICLRReviewModel,
@@ -28,7 +29,12 @@ from .models import (
 from .prompts import render_text
 
 # Type alias for schema classes
-_SchemaClass = type[NeurIPSReviewModel] | type[ICLRReviewModel] | type[ICMLReviewModel]
+_SchemaClass = (
+    type[NeurIPSReviewModel]
+    | type[ICLRReviewModel]
+    | type[ICMLReviewModel]
+    | type[AEScientistReviewModel]
+)
 
 # Mapping from Conference to rubric template name
 _CONFERENCE_RUBRIC_TEMPLATES: dict[Conference, str] = {
@@ -74,29 +80,14 @@ class ReviewResult:
     token_usage_detailed: list[TokenUsageDetail]
 
 
+@dataclass
 class ReviewProgressEvent:
     """Simple progress event for review callbacks."""
 
-    def __init__(
-        self,
-        *,
-        step: str,
-        substep: str,
-        progress: float,
-        step_progress: float,
-    ) -> None:
-        self.step = step
-        self.substep = substep
-        self.progress = progress
-        self.step_progress = step_progress
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "step": self.step,
-            "substep": self.substep,
-            "progress": self.progress,
-            "step_progress": self.step_progress,
-        }
+    step: str
+    substep: str
+    progress: float
+    step_progress: float
 
 
 # =============================================================================
@@ -114,8 +105,10 @@ class ReviewOrchestrator:
         temperature: float,
         event_callback: Callable[[ReviewProgressEvent], None],
         usage: TokenUsage,
-        conference: Conference,
-        provide_rubric: bool,
+        schema_class: _SchemaClass,
+        rubric_template: str | None,
+        conference_rubric: str,
+        use_web_search_for_review: bool,
         skip_novelty_search: bool,
         skip_citation_check: bool,
         skip_missing_references: bool,
@@ -127,8 +120,10 @@ class ReviewOrchestrator:
         self._temperature = temperature
         self._event_callback = event_callback
         self._usage = usage
-        self._conference = conference
-        self._provide_rubric = provide_rubric
+        self._schema_class = schema_class
+        self._rubric_template = rubric_template
+        self._conference_rubric = conference_rubric
+        self._use_web_search_for_review = use_web_search_for_review
         self._skip_novelty_search = skip_novelty_search
         self._skip_citation_check = skip_citation_check
         self._skip_missing_references = skip_missing_references
@@ -145,10 +140,9 @@ class ReviewOrchestrator:
         self._system_prompt = render_text(
             template_name=system_template,
             context={
-                "conference_rubric": conference.value,
+                "conference_rubric": conference_rubric,
             },
         )
-        self._schema_class: _SchemaClass = _CONFERENCE_SCHEMAS[conference]
 
     def run(
         self,
@@ -272,16 +266,13 @@ class ReviewOrchestrator:
                 )
 
             # Build base prompt
-            rubric_template = (
-                _CONFERENCE_RUBRIC_TEMPLATES[self._conference] if self._provide_rubric else None
-            )
             prompt_context: dict[str, Any] = {
                 "novelty_results": novelty_results,
                 "citation_check_results": citation_check_results,
                 "missing_references_results": missing_references_results,
                 "presentation_check_results": presentation_check_results,
-                "rubric_template": rubric_template,
-                "conference_rubric": self._conference.value,
+                "rubric_template": self._rubric_template,
+                "conference_rubric": self._conference_rubric,
             }
 
             base_prompt = render_text(
@@ -357,9 +348,9 @@ class ReviewOrchestrator:
         file_ids: list[str],
         prompt: str,
     ) -> ReviewModel:
-        """Make a review chat call, using web search if the conference mentions reproducibility."""
+        """Make a review chat call, optionally using web search."""
         schema_class = self._schema_class
-        if self._conference in REVIEW_RUBRIC_MENTIONS_REPRODUCIBILITY:
+        if self._use_web_search_for_review:
             result = self._provider.web_search_chat(
                 file_ids=file_ids,
                 prompt=prompt,
@@ -376,7 +367,6 @@ class ReviewOrchestrator:
                 temperature=self._temperature,
                 schema_class=schema_class,
             )
-        assert isinstance(result, (NeurIPSReviewModel, ICLRReviewModel, ICMLReviewModel))
         return result
 
     def _run_reflections(
@@ -463,25 +453,10 @@ def perform_review(
     skip_presentation_check: bool,
     is_vanilla_prompt: bool,
 ) -> ReviewResult:
-    """Perform a paper review using LLM.
+    """Perform a paper review using a conference-specific schema.
 
-    Args:
-        pdf_path: Path to the PDF file to review
-        provider: The LLM provider to use
-        model: Model name (e.g., "claude-sonnet-4-20250514")
-        temperature: Sampling temperature
-        event_callback: Callback for progress events
-        num_reflections: Number of reflection rounds
-        conference: Conference to use for schema and system prompt
-        provide_rubric: Whether to include detailed rubric form instructions
-        skip_novelty_search: Whether to skip the novelty web search phase
-        skip_citation_check: Whether to skip the citation verification phase
-        skip_missing_references: Whether to skip the missing references search phase
-        skip_presentation_check: Whether to skip the presentation check phase
-        is_vanilla_prompt: Whether to use the minimal vanilla prompt
-
-    Returns:
-        ReviewResult containing the review and token usage
+    Used by the standalone paper reviewer with conference-specific models
+    (NeurIPS, ICLR, ICML).
     """
     logger.info(
         "Starting paper review (provider=%s, model=%s, reflections=%d, conference=%s, rubric=%s, vanilla=%s)",
@@ -493,6 +468,10 @@ def perform_review(
         is_vanilla_prompt,
     )
 
+    schema_class = _CONFERENCE_SCHEMAS[conference]
+    rubric_template = _CONFERENCE_RUBRIC_TEMPLATES[conference] if provide_rubric else None
+    use_web_search = conference in REVIEW_RUBRIC_MENTIONS_REPRODUCIBILITY
+
     usage = TokenUsage()
     llm_provider = get_provider(provider=provider, model=model, usage=usage)
 
@@ -502,13 +481,67 @@ def perform_review(
         temperature=temperature,
         event_callback=event_callback,
         usage=usage,
-        conference=conference,
-        provide_rubric=provide_rubric,
+        schema_class=schema_class,
+        rubric_template=rubric_template,
+        conference_rubric=conference.value,
+        use_web_search_for_review=use_web_search,
         skip_novelty_search=skip_novelty_search,
         skip_citation_check=skip_citation_check,
         skip_missing_references=skip_missing_references,
         skip_presentation_check=skip_presentation_check,
         is_vanilla_prompt=is_vanilla_prompt,
+    )
+
+    return orchestrator.run(
+        pdf_path=pdf_path,
+        num_reflections=num_reflections,
+    )
+
+
+_AE_SCIENTIST_RUBRIC_TEMPLATE = "llm_review/ae_scientist_form.md.j2"
+_AE_SCIENTIST_CONFERENCE_RUBRIC = "ae_scientist"
+
+
+def perform_ae_scientist_review(
+    pdf_path: Path,
+    *,
+    provider: Provider,
+    model: str,
+    temperature: float,
+    event_callback: Callable[[ReviewProgressEvent], None],
+    num_reflections: int,
+) -> ReviewResult:
+    """Perform a paper review using the AE-Scientist unified schema.
+
+    Uses the AEScientistReviewModel which populates all review dimensions
+    (strengths, weaknesses, soundness, presentation, contribution, etc.)
+    with a 1-10 overall scale. Designed for the AE-Scientist research pipeline.
+    """
+    logger.info(
+        "Starting AE-Scientist review (provider=%s, model=%s, reflections=%d)",
+        provider.value,
+        model,
+        num_reflections,
+    )
+
+    usage = TokenUsage()
+    llm_provider = get_provider(provider=provider, model=model, usage=usage)
+
+    orchestrator = ReviewOrchestrator(
+        provider=llm_provider,
+        model=model,
+        temperature=temperature,
+        event_callback=event_callback,
+        usage=usage,
+        schema_class=AEScientistReviewModel,
+        rubric_template=_AE_SCIENTIST_RUBRIC_TEMPLATE,
+        conference_rubric=_AE_SCIENTIST_CONFERENCE_RUBRIC,
+        use_web_search_for_review=True,
+        skip_novelty_search=False,
+        skip_citation_check=False,
+        skip_missing_references=False,
+        skip_presentation_check=False,
+        is_vanilla_prompt=False,
     )
 
     return orchestrator.run(

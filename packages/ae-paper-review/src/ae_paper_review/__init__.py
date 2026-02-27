@@ -16,9 +16,11 @@ from .llm_review import (
     REVIEW_RUBRIC_MENTIONS_REPRODUCIBILITY,
     ReviewProgressEvent,
     ReviewResult,
+    perform_ae_scientist_review,
     perform_review,
 )
 from .models import (
+    AEScientistReviewModel,
     ClarityIssue,
     Conference,
     ICLRReviewModel,
@@ -36,7 +38,8 @@ __all__ = [
     "__version__",
     # Provider
     "Provider",
-    # Conference-specific models
+    # Review models
+    "AEScientistReviewModel",
     "ClarityIssue",
     "NeurIPSReviewModel",
     "ICLRReviewModel",
@@ -50,6 +53,7 @@ __all__ = [
     # LLM Review
     "REVIEW_RUBRIC_MENTIONS_REPRODUCIBILITY",
     "perform_review",
+    "perform_ae_scientist_review",
     "ReviewResult",
     "ReviewProgressEvent",
     # Token Usage

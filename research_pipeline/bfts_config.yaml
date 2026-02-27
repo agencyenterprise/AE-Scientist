@@ -37,7 +37,6 @@ writeup:
 review:
   model: Qwen:Qwen2.5-VL-7B-Instruct
   temperature: 1.0
-  conference: NEURIPS_2025
 
 experiment:
   num_syn_datasets: 1

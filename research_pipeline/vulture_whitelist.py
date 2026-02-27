@@ -28,6 +28,7 @@ _.partition  # hw_stats.py
 _.to_stage  # agent_manager.py
 _.config_adjustments  # agent_manager.py
 _.populate_by_name  # ai_scientist/vlm/* - Pydantic Config attribute
+_.model_config  # ai_scientist/vlm/* - Pydantic v2 model configuration
 _.overall_comments  # ai_scientist/vlm/models.py - structured response field
 _.containing_sub_figures  # ai_scientist/vlm/models.py - structured response field
 _.informative_review  # ai_scientist/vlm/models.py - structured response field
@@ -46,6 +47,7 @@ _.download_file  # download_manager.py
 _.normalize_run_name  # latest_run_finder.py
 _.set_sentry_run_context  # sentry_config.py
 _.build_auto_review_context  # review_integration.py
+_.perform_review  # review_integration.py - called from launch_scientist_bfts.py
 _.ReviewResponseRecorder  # review_storage.py
 _.from_webhook_client  # review_storage.py
 _.insert_review  # review_storage.py
