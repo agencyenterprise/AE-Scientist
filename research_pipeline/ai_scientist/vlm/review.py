@@ -63,12 +63,12 @@ class _PaperContextExtraction(BaseModel):
     """Extracted title and abstract from a paper."""
 
     title: str | None = Field(
-        default=None,
+        ...,
         alias="Title",
         description="The paper title. Set to null if not clearly present.",
     )
     abstract: str | None = Field(
-        default=None,
+        ...,
         alias="Abstract",
         description="The paper abstract. Set to null if not present.",
     )
