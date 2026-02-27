@@ -29,6 +29,18 @@ const FEATURE_LIST = [
   { label: "Best accept/reject calibration", standard: false, premium: true },
 ] as const;
 
+const CLAIMS: Record<Tier, string[]> = {
+  standard: [
+    "Identifies 17+ specific weaknesses per review",
+    "2.6 actionability score vs 2.4 for human reviewers",
+    "Catches ~70% of issues human reviewers identify",
+  ],
+  premium: [
+    "85% agreement with human review panels (κ=0.71)",
+    "19+ specific weaknesses per review",
+  ],
+};
+
 const TIERS = [
   {
     id: "standard" as const,
@@ -87,6 +99,14 @@ export function TierSelector({ selectedTier, onTierChange }: TierSelectorProps) 
             <div className="mt-2 flex items-baseline gap-2">
               <span className="text-xs text-slate-400">{tier.price}</span>
               <span className="text-xs text-slate-500">{tier.estimate}</span>
+            </div>
+
+            <div className="mt-3 space-y-1">
+              {CLAIMS[tier.id].map(claim => (
+                <p key={claim} className="text-[11px] italic text-slate-400">
+                  {claim}
+                </p>
+              ))}
             </div>
 
             <div className="mt-3 space-y-1">
