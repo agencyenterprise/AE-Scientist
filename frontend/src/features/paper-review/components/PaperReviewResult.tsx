@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { config } from "@/shared/lib/config";
 import { withAuthHeaders } from "@/shared/lib/session-token";
+import { Markdown } from "@/shared/components/Markdown";
 import type { AnyPaperReviewDetail } from "@/features/paper-review/api";
 
 export type { AnyPaperReviewDetail };
@@ -259,7 +260,9 @@ export function PaperReviewResult({ data }: PaperReviewResultProps) {
       {data.summary && (
         <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-3 sm:p-4">
           <h3 className="mb-2 font-medium text-white sm:mb-3">Summary</h3>
-          <p className="text-sm leading-relaxed text-slate-300">{data.summary}</p>
+          <Markdown className="text-sm leading-relaxed text-slate-300 [&>p:first-child]:mt-0 [&>p:last-child]:mb-0">
+            {data.summary}
+          </Markdown>
         </div>
       )}
 
@@ -306,8 +309,10 @@ export function PaperReviewResult({ data }: PaperReviewResultProps) {
             <ul className="space-y-2">
               {data.strengths.map((strength, i) => (
                 <li key={i} className="flex gap-2 text-sm text-slate-300">
-                  <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-emerald-400" />
-                  {strength}
+                  <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-emerald-400" />
+                  <Markdown className="text-sm leading-relaxed text-slate-300 [&>p]:my-0 [&>p]:leading-relaxed">
+                    {strength}
+                  </Markdown>
                 </li>
               ))}
             </ul>
@@ -325,8 +330,10 @@ export function PaperReviewResult({ data }: PaperReviewResultProps) {
             <ul className="space-y-2">
               {data.weaknesses.map((weakness, i) => (
                 <li key={i} className="flex gap-2 text-sm text-slate-300">
-                  <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-red-400" />
-                  {weakness}
+                  <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-red-400" />
+                  <Markdown className="text-sm leading-relaxed text-slate-300 [&>p]:my-0 [&>p]:leading-relaxed">
+                    {weakness}
+                  </Markdown>
                 </li>
               ))}
             </ul>
@@ -341,7 +348,9 @@ export function PaperReviewResult({ data }: PaperReviewResultProps) {
               title="Claims & Evidence"
               icon={<CheckCircle className="h-5 w-5 text-emerald-400" />}
             >
-              <p className="text-sm leading-relaxed text-slate-300">{data.claims_and_evidence}</p>
+              <Markdown className="text-sm leading-relaxed text-slate-300 [&>p:first-child]:mt-0 [&>p:last-child]:mb-0">
+                {data.claims_and_evidence}
+              </Markdown>
             </CollapsibleSection>
           )}
           {data.relation_to_prior_work && (
@@ -349,9 +358,9 @@ export function PaperReviewResult({ data }: PaperReviewResultProps) {
               title="Relation to Prior Work"
               icon={<HelpCircle className="h-5 w-5 text-sky-400" />}
             >
-              <p className="text-sm leading-relaxed text-slate-300">
+              <Markdown className="text-sm leading-relaxed text-slate-300 [&>p:first-child]:mt-0 [&>p:last-child]:mb-0">
                 {data.relation_to_prior_work}
-              </p>
+              </Markdown>
             </CollapsibleSection>
           )}
           {data.other_aspects && (
@@ -359,7 +368,9 @@ export function PaperReviewResult({ data }: PaperReviewResultProps) {
               title="Other Aspects"
               icon={<AlertTriangle className="h-5 w-5 text-amber-400" />}
             >
-              <p className="text-sm leading-relaxed text-slate-300">{data.other_aspects}</p>
+              <Markdown className="text-sm leading-relaxed text-slate-300 [&>p:first-child]:mt-0 [&>p:last-child]:mb-0">
+                {data.other_aspects}
+              </Markdown>
             </CollapsibleSection>
           )}
         </>
@@ -375,8 +386,10 @@ export function PaperReviewResult({ data }: PaperReviewResultProps) {
           <ul className="space-y-2">
             {data.questions.map((question, i) => (
               <li key={i} className="flex gap-2 text-sm text-slate-300">
-                <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-sky-400" />
-                {question}
+                <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-sky-400" />
+                <Markdown className="text-sm leading-relaxed text-slate-300 [&>p]:my-0 [&>p]:leading-relaxed">
+                  {question}
+                </Markdown>
               </li>
             ))}
           </ul>
@@ -391,7 +404,9 @@ export function PaperReviewResult({ data }: PaperReviewResultProps) {
             icon={<AlertTriangle className="h-5 w-5 text-amber-400" />}
             defaultOpen={false}
           >
-            <p className="text-sm leading-relaxed text-slate-300">{data.limitations}</p>
+            <Markdown className="text-sm leading-relaxed text-slate-300 [&>p:first-child]:mt-0 [&>p:last-child]:mb-0">
+              {data.limitations}
+            </Markdown>
           </CollapsibleSection>
         )}
 
@@ -420,7 +435,9 @@ export function PaperReviewResult({ data }: PaperReviewResultProps) {
           defaultOpen={false}
         >
           <div className="space-y-3">
-            <p className="text-sm leading-relaxed text-slate-300">{data.novelty_search.summary}</p>
+            <Markdown className="text-sm leading-relaxed text-slate-300 [&>p:first-child]:mt-0 [&>p:last-child]:mb-0">
+              {data.novelty_search.summary}
+            </Markdown>
             {data.novelty_search.results.length > 0 && (
               <ul className="space-y-2">
                 {data.novelty_search.results.map((result, i) => (
@@ -437,7 +454,9 @@ export function PaperReviewResult({ data }: PaperReviewResultProps) {
                       {result.title}
                       <ExternalLink className="h-3 w-3 flex-shrink-0" />
                     </a>
-                    <p className="mt-1 text-slate-400">{result.snippet}</p>
+                    <Markdown className="mt-1 text-slate-400 [&>p]:my-0 [&>p]:leading-relaxed">
+                      {result.snippet}
+                    </Markdown>
                   </li>
                 ))}
               </ul>
@@ -454,7 +473,9 @@ export function PaperReviewResult({ data }: PaperReviewResultProps) {
           defaultOpen={false}
         >
           <div className="space-y-3">
-            <p className="text-sm leading-relaxed text-slate-300">{data.citation_check.summary}</p>
+            <Markdown className="text-sm leading-relaxed text-slate-300 [&>p:first-child]:mt-0 [&>p:last-child]:mb-0">
+              {data.citation_check.summary}
+            </Markdown>
             <ul className="space-y-2">
               {data.citation_check.checks.map((check, i) => (
                 <li key={i} className="rounded border border-slate-700 bg-slate-800/80 p-2 text-sm">
@@ -465,8 +486,12 @@ export function PaperReviewResult({ data }: PaperReviewResultProps) {
                       <XCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-400" />
                     )}
                     <div>
-                      <p className="text-slate-300">{check.cited_text}</p>
-                      <p className="mt-1 text-slate-400">{check.assessment}</p>
+                      <Markdown className="text-slate-300 [&>p]:my-0 [&>p]:leading-relaxed">
+                        {check.cited_text}
+                      </Markdown>
+                      <Markdown className="mt-1 text-slate-400 [&>p]:my-0 [&>p]:leading-relaxed">
+                        {check.assessment}
+                      </Markdown>
                       {check.found && check.url && (
                         <a
                           href={check.url}
@@ -494,9 +519,9 @@ export function PaperReviewResult({ data }: PaperReviewResultProps) {
           defaultOpen={false}
         >
           <div className="space-y-3">
-            <p className="text-sm leading-relaxed text-slate-300">
+            <Markdown className="text-sm leading-relaxed text-slate-300 [&>p:first-child]:mt-0 [&>p:last-child]:mb-0">
               {data.missing_references.summary}
-            </p>
+            </Markdown>
             <ul className="space-y-2">
               {data.missing_references.missing_references.map((ref, i) => (
                 <li key={i} className="rounded border border-slate-700 bg-slate-800/80 p-2 text-sm">
@@ -511,7 +536,9 @@ export function PaperReviewResult({ data }: PaperReviewResultProps) {
                   >
                     {ref.missing_work} <ExternalLink className="h-3 w-3" />
                   </a>
-                  <p className="mt-1 text-slate-400">{ref.relevance}</p>
+                  <Markdown className="mt-1 text-slate-400 [&>p]:my-0 [&>p]:leading-relaxed">
+                    {ref.relevance}
+                  </Markdown>
                 </li>
               ))}
             </ul>
@@ -527,9 +554,9 @@ export function PaperReviewResult({ data }: PaperReviewResultProps) {
           defaultOpen={false}
         >
           <div className="space-y-3">
-            <p className="text-sm leading-relaxed text-slate-300">
+            <Markdown className="text-sm leading-relaxed text-slate-300 [&>p:first-child]:mt-0 [&>p:last-child]:mb-0">
               {data.presentation_check.summary}
-            </p>
+            </Markdown>
             <ul className="space-y-2">
               {data.presentation_check.issues.map((issue, i) => (
                 <li key={i} className="text-sm text-slate-300">
@@ -554,7 +581,9 @@ export function PaperReviewResult({ data }: PaperReviewResultProps) {
               </span>
             </div>
             {data.ethical_concerns_explanation && (
-              <p className="mt-2 text-sm text-red-300">{data.ethical_concerns_explanation}</p>
+              <Markdown className="mt-2 text-sm text-red-300 [&>p]:my-0 [&>p]:leading-relaxed">
+                {data.ethical_concerns_explanation}
+              </Markdown>
             )}
           </div>
         )}
@@ -569,7 +598,9 @@ export function PaperReviewResult({ data }: PaperReviewResultProps) {
             </span>
           </div>
           {data.ethical_issues_explanation && (
-            <p className="mt-2 text-sm text-red-300">{data.ethical_issues_explanation}</p>
+            <Markdown className="mt-2 text-sm text-red-300 [&>p]:my-0 [&>p]:leading-relaxed">
+              {data.ethical_issues_explanation}
+            </Markdown>
           )}
         </div>
       )}
