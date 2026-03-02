@@ -4,8 +4,8 @@ This package provides LLM-based paper review capabilities that can be
 used independently of the full research pipeline.
 
 Each conference model matches the official review form structure:
-- NeurIPS 2025: Combined strengths_and_weaknesses, 1-6 overall scale
-- ICLR 2025: Separate strengths/weaknesses, soundness/presentation/contribution
+- NeurIPS 2025: Separate strengths/weaknesses lists, 1-6 overall scale
+- ICLR 2025: Separate strengths/weaknesses lists, soundness/presentation/contribution
 - ICML 2025: Claims-based assessment, no confidence score
 
 """

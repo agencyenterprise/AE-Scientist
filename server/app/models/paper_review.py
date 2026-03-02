@@ -164,7 +164,8 @@ class NeurIPSPaperReviewDetail(_ReviewBase):
 
     conference: Literal[Conference.NEURIPS_2025]
     summary: Optional[str] = None
-    strengths_and_weaknesses: Optional[str] = None
+    strengths: Optional[List[str]] = None
+    weaknesses: Optional[List[str]] = None
     questions: Optional[List[str]] = None
     limitations: Optional[str] = None
     ethical_concerns: Optional[bool] = None
@@ -293,7 +294,8 @@ def _build_neurips_detail(
         **common,
         conference=Conference.NEURIPS_2025,
         summary=visible.summary if visible is not None else None,
-        strengths_and_weaknesses=visible.strengths_and_weaknesses if visible is not None else None,
+        strengths=list(visible.strengths) if visible is not None else None,
+        weaknesses=list(visible.weaknesses) if visible is not None else None,
         questions=list(visible.questions) if visible is not None else None,
         limitations=visible.limitations if visible is not None else None,
         ethical_concerns=visible.ethical_concerns if visible is not None else None,

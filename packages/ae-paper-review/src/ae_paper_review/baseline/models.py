@@ -29,7 +29,7 @@ class BaselineNeurIPSReviewModel(BaseModel):
     """NeurIPS 2025 baseline review model (pre-prompt-tuning).
 
     Matches the official NeurIPS 2025 review form structure:
-    - Summary, Strengths and Weaknesses (combined), Questions, Limitations
+    - Summary, Strengths, Weaknesses, Questions, Limitations
     - Quality/Clarity/Significance/Originality ratings (1-4)
     - Overall (1-6, new 6-point scale), Confidence (1-5)
     - Ethical concerns flag
@@ -40,10 +40,15 @@ class BaselineNeurIPSReviewModel(BaseModel):
         alias="Summary",
         description="Brief summary of the paper and its contributions in your own understanding. Do not critique the paper here; the authors should generally agree with a well-written summary.",
     )
-    strengths_and_weaknesses: str = Field(
+    strengths: List[str] = Field(
         ...,
-        alias="Strengths_And_Weaknesses",
-        description="Thorough assessment of strengths and weaknesses, framed as reasons to accept or reject. Cover Quality, Clarity, Significance, and Originality dimensions.",
+        alias="Strengths",
+        description="List of reasons to accept the paper. Cover Quality, Clarity, Significance, and Originality dimensions where applicable.",
+    )
+    weaknesses: List[str] = Field(
+        ...,
+        alias="Weaknesses",
+        description="List of reasons to reject the paper. Cover Quality, Clarity, Significance, and Originality dimensions where applicable.",
     )
     questions: List[str] = Field(
         ...,

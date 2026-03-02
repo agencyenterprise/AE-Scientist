@@ -61,7 +61,8 @@ def _review_model_to_content(review: ReviewModel) -> ReviewContent:
     if isinstance(review, NeurIPSReviewModel):
         return NeurIPSReviewContent(
             summary=review.summary,
-            strengths_and_weaknesses=review.strengths_and_weaknesses,
+            strengths=list(review.strengths),
+            weaknesses=list(review.weaknesses),
             questions=list(review.questions),
             limitations=review.limitations,
             ethical_concerns=review.ethical_concerns,
@@ -116,7 +117,8 @@ def _baseline_review_model_to_content(review: BaselineReviewModel) -> ReviewCont
     if isinstance(review, BaselineNeurIPSReviewModel):
         return NeurIPSReviewContent(
             summary=review.summary,
-            strengths_and_weaknesses=review.strengths_and_weaknesses,
+            strengths=list(review.strengths),
+            weaknesses=list(review.weaknesses),
             questions=list(review.questions),
             limitations=review.limitations,
             ethical_concerns=review.ethical_concerns,

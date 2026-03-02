@@ -44,7 +44,8 @@ class NeurIPSReviewContent(NamedTuple):
     """NeurIPS-specific review content."""
 
     summary: str
-    strengths_and_weaknesses: str
+    strengths: list
+    weaknesses: list
     questions: list
     limitations: str
     ethical_concerns: bool
@@ -125,7 +126,7 @@ class PaperReviewListItem(NamedTuple):
 
 
 _NEURIPS_CONTENT_COLUMNS = """
-    n.summary, n.strengths_and_weaknesses, n.questions, n.limitations,
+    n.summary, n.strengths, n.weaknesses, n.questions, n.limitations,
     n.ethical_concerns, n.ethical_concerns_explanation, n.clarity_issues,
     n.quality, n.clarity, n.significance, n.originality, n.overall, n.confidence, n.decision
 """
@@ -170,7 +171,8 @@ def _row_to_base(row: dict) -> PaperReviewBase:
 def _row_to_neurips_content(row: dict) -> NeurIPSReviewContent:
     return NeurIPSReviewContent(
         summary=row["summary"],
-        strengths_and_weaknesses=row["strengths_and_weaknesses"],
+        strengths=row["strengths"],
+        weaknesses=row["weaknesses"],
         questions=row["questions"],
         limitations=row["limitations"],
         ethical_concerns=row["ethical_concerns"],
@@ -302,16 +304,17 @@ class PaperReviewsMixin(ConnectionProvider):
                     await cursor.execute(
                         """
                         INSERT INTO paper_review_neurips
-                            (paper_review_id, summary, strengths_and_weaknesses, questions,
+                            (paper_review_id, summary, strengths, weaknesses, questions,
                              limitations, ethical_concerns, ethical_concerns_explanation,
                              clarity_issues, quality, clarity, significance, originality,
                              overall, confidence, decision)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         """,
                         (
                             review_id,
                             content.summary,
-                            content.strengths_and_weaknesses,
+                            Jsonb(content.strengths),
+                            Jsonb(content.weaknesses),
                             Jsonb(content.questions),
                             content.limitations,
                             content.ethical_concerns,

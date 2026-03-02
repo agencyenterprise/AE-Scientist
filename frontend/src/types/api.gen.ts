@@ -4269,8 +4269,10 @@ export interface components {
             conference: "neurips_2025";
             /** Summary */
             summary?: string | null;
-            /** Strengths And Weaknesses */
-            strengths_and_weaknesses?: string | null;
+            /** Strengths */
+            strengths?: string[] | null;
+            /** Weaknesses */
+            weaknesses?: string[] | null;
             /** Questions */
             questions?: string[] | null;
             /** Limitations */

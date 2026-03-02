@@ -54,8 +54,8 @@ def _to_review_completed_event(
     if isinstance(review, NeurIPSReviewModel):
         return ReviewCompletedEvent(
             summary=review.summary,
-            strengths=[review.strengths_and_weaknesses],
-            weaknesses=[],
+            strengths=list(review.strengths),
+            weaknesses=list(review.weaknesses),
             originality=review.originality,
             quality=review.quality,
             clarity=review.clarity,

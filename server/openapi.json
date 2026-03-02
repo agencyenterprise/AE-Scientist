@@ -9311,16 +9311,33 @@
             ],
             "title": "Summary"
           },
-          "strengths_and_weaknesses": {
+          "strengths": {
             "anyOf": [
               {
-                "type": "string"
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Strengths And Weaknesses"
+            "title": "Strengths"
+          },
+          "weaknesses": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weaknesses"
           },
           "questions": {
             "anyOf": [

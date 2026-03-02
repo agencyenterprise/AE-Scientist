@@ -3464,9 +3464,8 @@ class NeurIPSPaperReviewDetail(BaseModel):
     ] = None
     conference: Annotated[Literal["neurips_2025"], Field(title="Conference")]
     summary: Annotated[str | None, Field(title="Summary")] = None
-    strengths_and_weaknesses: Annotated[
-        str | None, Field(title="Strengths And Weaknesses")
-    ] = None
+    strengths: Annotated[list[str] | None, Field(title="Strengths")] = None
+    weaknesses: Annotated[list[str] | None, Field(title="Weaknesses")] = None
     questions: Annotated[list[str] | None, Field(title="Questions")] = None
     limitations: Annotated[str | None, Field(title="Limitations")] = None
     ethical_concerns: Annotated[bool | None, Field(title="Ethical Concerns")] = None

@@ -295,51 +295,43 @@ export function PaperReviewResult({ data }: PaperReviewResultProps) {
         </div>
       </div>
 
-      {/* NeurIPS: combined Strengths & Weaknesses */}
-      {data.conference === "neurips_2025" && data.strengths_and_weaknesses && (
-        <CollapsibleSection
-          title="Strengths & Weaknesses"
-          icon={<ThumbsUp className="h-5 w-5 text-emerald-400" />}
-        >
-          <p className="text-sm leading-relaxed text-slate-300">{data.strengths_and_weaknesses}</p>
-        </CollapsibleSection>
-      )}
+      {/* Strengths (NeurIPS and ICLR) */}
+      {(data.conference === "neurips_2025" || data.conference === "iclr_2025") &&
+        data.strengths &&
+        data.strengths.length > 0 && (
+          <CollapsibleSection
+            title={`Strengths (${data.strengths.length})`}
+            icon={<ThumbsUp className="h-5 w-5 text-emerald-400" />}
+          >
+            <ul className="space-y-2">
+              {data.strengths.map((strength, i) => (
+                <li key={i} className="flex gap-2 text-sm text-slate-300">
+                  <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-emerald-400" />
+                  {strength}
+                </li>
+              ))}
+            </ul>
+          </CollapsibleSection>
+        )}
 
-      {/* ICLR: separate Strengths and Weaknesses */}
-      {data.conference === "iclr_2025" && (
-        <>
-          {data.strengths && data.strengths.length > 0 && (
-            <CollapsibleSection
-              title={`Strengths (${data.strengths.length})`}
-              icon={<ThumbsUp className="h-5 w-5 text-emerald-400" />}
-            >
-              <ul className="space-y-2">
-                {data.strengths.map((strength, i) => (
-                  <li key={i} className="flex gap-2 text-sm text-slate-300">
-                    <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-emerald-400" />
-                    {strength}
-                  </li>
-                ))}
-              </ul>
-            </CollapsibleSection>
-          )}
-          {data.weaknesses && data.weaknesses.length > 0 && (
-            <CollapsibleSection
-              title={`Weaknesses (${data.weaknesses.length})`}
-              icon={<ThumbsDown className="h-5 w-5 text-red-400" />}
-            >
-              <ul className="space-y-2">
-                {data.weaknesses.map((weakness, i) => (
-                  <li key={i} className="flex gap-2 text-sm text-slate-300">
-                    <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-red-400" />
-                    {weakness}
-                  </li>
-                ))}
-              </ul>
-            </CollapsibleSection>
-          )}
-        </>
-      )}
+      {/* Weaknesses (NeurIPS and ICLR) */}
+      {(data.conference === "neurips_2025" || data.conference === "iclr_2025") &&
+        data.weaknesses &&
+        data.weaknesses.length > 0 && (
+          <CollapsibleSection
+            title={`Weaknesses (${data.weaknesses.length})`}
+            icon={<ThumbsDown className="h-5 w-5 text-red-400" />}
+          >
+            <ul className="space-y-2">
+              {data.weaknesses.map((weakness, i) => (
+                <li key={i} className="flex gap-2 text-sm text-slate-300">
+                  <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-red-400" />
+                  {weakness}
+                </li>
+              ))}
+            </ul>
+          </CollapsibleSection>
+        )}
 
       {/* ICML: claims, prior work, other aspects */}
       {data.conference === "icml" && (
@@ -373,25 +365,23 @@ export function PaperReviewResult({ data }: PaperReviewResultProps) {
         </>
       )}
 
-      {/* Questions (ICLR and ICML) */}
-      {(data.conference === "iclr_2025" || data.conference === "icml") &&
-        data.questions &&
-        data.questions.length > 0 && (
-          <CollapsibleSection
-            title={`Questions (${data.questions.length})`}
-            icon={<HelpCircle className="h-5 w-5 text-sky-400" />}
-            defaultOpen={false}
-          >
-            <ul className="space-y-2">
-              {data.questions.map((question, i) => (
-                <li key={i} className="flex gap-2 text-sm text-slate-300">
-                  <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-sky-400" />
-                  {question}
-                </li>
-              ))}
-            </ul>
-          </CollapsibleSection>
-        )}
+      {/* Questions (all conferences) */}
+      {data.questions && data.questions.length > 0 && (
+        <CollapsibleSection
+          title={`Questions (${data.questions.length})`}
+          icon={<HelpCircle className="h-5 w-5 text-sky-400" />}
+          defaultOpen={false}
+        >
+          <ul className="space-y-2">
+            {data.questions.map((question, i) => (
+              <li key={i} className="flex gap-2 text-sm text-slate-300">
+                <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-sky-400" />
+                {question}
+              </li>
+            ))}
+          </ul>
+        </CollapsibleSection>
+      )}
 
       {/* Limitations (NeurIPS and ICLR) */}
       {(data.conference === "neurips_2025" || data.conference === "iclr_2025") &&
