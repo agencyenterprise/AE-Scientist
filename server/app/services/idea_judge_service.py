@@ -12,12 +12,18 @@ Results are compiled into an IdeaJudgeResult and persisted to idea_judge_reviews
 
 import asyncio
 import logging
+import os
 from typing import List
 
+import openai
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from app.services.base_llm_service import BaseLLMService
 from app.services.prompts.render import render_text
+
+# Model used for the live prior-art web search step.
+# gpt-4o-mini-search-preview is cheaper and sufficient for literature retrieval.
+_NOVELTY_SEARCH_MODEL = "gpt-4o-mini-search-preview"
 
 logger = logging.getLogger(__name__)
 
@@ -77,8 +83,12 @@ class FeasibilityCriterionResult(BaseModel):
     )
 
 
-class NoveltyCriterionResult(BaseModel):
-    """Structured output for the Novelty criterion."""
+class _NoveltyScoringOutput(BaseModel):
+    """Fields the scoring LLM fills after receiving grounded search results.
+
+    Kept separate from NoveltyCriterionResult so that web_search_summary
+    is set in code (not by the LLM) without fighting with_structured_output.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -90,7 +100,7 @@ class NoveltyCriterionResult(BaseModel):
     )
     related_prior_work: List[str] = Field(
         ...,
-        description="Known prior work that overlaps (format: 'Title/concept — brief description of overlap').",
+        description="Prior work found in the search that overlaps (format: 'Title (Year) — overlap description and URL').",
     )
     differentiation: str = Field(
         ...,
@@ -98,11 +108,22 @@ class NoveltyCriterionResult(BaseModel):
     )
     novelty_risks: List[str] = Field(
         ...,
-        description="Specific risks that the core claim has already been addressed.",
+        description="Specific risks that the core claim has already been addressed (cite paper titles and years).",
     )
     suggestions: List[str] = Field(
         ...,
-        description="How to sharpen or strengthen the novelty claim.",
+        description="How to sharpen or strengthen the novelty claim given the identified prior art.",
+    )
+
+
+class NoveltyCriterionResult(_NoveltyScoringOutput):
+    """Full novelty result including the raw web-search output."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    web_search_summary: str = Field(
+        default="",
+        description="Raw output from the live web search step (grounded prior-art citations).",
     )
 
 
@@ -314,6 +335,45 @@ class IdeaJudgeService:
         assert isinstance(result, FeasibilityCriterionResult)
         return result
 
+    async def _web_search_prior_art(
+        self,
+        *,
+        idea_title: str,
+        idea_markdown: str,
+    ) -> str:
+        """
+        Call gpt-4o-mini-search-preview to retrieve grounded prior-art citations.
+
+        Returns the raw text response (with inline citations) to feed into the
+        scoring step.  Falls back to an empty string if the search fails, so
+        the scoring step can still proceed with a parametric assessment.
+        """
+        system_prompt = render_text(template_name="idea_judge/novelty_search_system.txt.j2")
+        user_prompt = render_text(
+            template_name="idea_judge/novelty_search_user.txt.j2",
+            context={
+                "idea_title": idea_title,
+                "idea_markdown": idea_markdown,
+            },
+        )
+        try:
+            client = openai.AsyncOpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+            response = await client.chat.completions.create(
+                model=_NOVELTY_SEARCH_MODEL,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+            )
+            content = response.choices[0].message.content or ""
+            logger.debug("novelty web search complete (%d chars)", len(content))
+            return content
+        except Exception:
+            logger.exception(
+                "novelty web search failed (falling back to parametric assessment)"
+            )
+            return ""
+
     async def _run_novelty(
         self,
         *,
@@ -321,21 +381,42 @@ class IdeaJudgeService:
         idea_title: str,
         idea_markdown: str,
     ) -> NoveltyCriterionResult:
+        """Two-step novelty evaluation: live web search → structured scoring."""
+        # Step 1: retrieve grounded prior art via gpt-4o-mini-search-preview
+        search_results = await self._web_search_prior_art(
+            idea_title=idea_title,
+            idea_markdown=idea_markdown,
+        )
+
+        fallback_note = (
+            "\n\n(Note: live web search was unavailable. "
+            "Base your assessment on general knowledge of the field.)"
+            if not search_results
+            else ""
+        )
+
+        # Step 2: structured scoring using the grounded search context
         user_prompt = render_text(
             template_name="idea_judge/novelty.txt.j2",
             context={
                 "idea_title": idea_title,
                 "idea_markdown": idea_markdown,
+                "search_results": search_results + fallback_note,
             },
         )
-        result = await self._llm.generate_structured_output(
+        scoring = await self._llm.generate_structured_output(
             llm_model=llm_model,
             system_prompt=self._system_prompt,
             user_prompt=user_prompt,
-            schema=NoveltyCriterionResult,
+            schema=_NoveltyScoringOutput,
         )
-        assert isinstance(result, NoveltyCriterionResult)
-        return result
+        assert isinstance(scoring, _NoveltyScoringOutput)
+
+        # Attach the raw search output (set in code, not by the LLM)
+        return NoveltyCriterionResult(
+            **scoring.model_dump(),
+            web_search_summary=search_results,
+        )
 
     async def _run_impact(
         self,
