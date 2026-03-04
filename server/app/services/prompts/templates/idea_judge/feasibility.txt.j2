@@ -1,0 +1,28 @@
+Evaluate the FEASIBILITY of the following research idea for execution within the AE Scientist pipeline.
+
+## Execution Constraints
+- **Compute:** RunPod GPU instances and/or a steering API; total compute budget ≤ $50 per experiment run
+- **Implementation:** All sub-experiments must be fully automatable — implementable by a coding agent with no manual lab work, no proprietary datasets requiring special access, and no multi-week human iteration loops
+- **Duration:** Experiments should complete in hours to at most one day, not weeks
+- **Environment:** Python ecosystem; PyTorch, HuggingFace Transformers, standard ML/scientific libraries are available; internet access for downloading public datasets and model weights is available
+
+## Research Idea
+**Title:** {{ idea_title }}
+
+{{ idea_markdown }}
+
+---
+
+Assess feasibility along these dimensions:
+- **compute_viable**: true/false — can the proposed experiments fit within a ≤$50 RunPod/steeringapi budget?
+- **agent_implementable**: true/false — can a coding agent implement and execute the full experiment plan without human intervention?
+- **estimated_cost**: Your best estimate of compute cost (e.g., "~$5–15 for fine-tuning a 1B model on RunPod A40" or "< $1 for inference-only steering experiments")
+- **blockers**: Specific blockers that would prevent execution (e.g., "requires proprietary dataset X", "proposed model is too large for $50 budget", "requires interactive human feedback loop")
+- **rationale**: 2-4 sentences synthesizing your assessment
+- **suggestions**: Concrete modifications to bring the idea within constraints (e.g., "Substitute GPT-2 for Llama-70B to reduce compute", "Limit to 3 sub-experiments instead of 10")
+- **score**: 1-5 where:
+  - 5 = Clearly implementable within all constraints; straightforward for a coding agent
+  - 4 = Feasible with minor adaptations; one or two constraints need light adjustment
+  - 3 = Conditionally feasible; requires meaningful scoping or simplification to fit
+  - 2 = Difficult to execute within constraints; likely budget overrun or requires human steps
+  - 1 = Not feasible under current constraints without fundamental redesign

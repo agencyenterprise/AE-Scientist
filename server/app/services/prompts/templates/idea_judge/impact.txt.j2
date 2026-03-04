@@ -1,0 +1,35 @@
+Evaluate the IMPACT of the following research idea across three dimensions.
+
+## Dimension 1 — Research Question Clarity
+What specific, answerable question does this idea address? Is the question well-posed, falsifiable, and scoped appropriately? A vague or unfalsifiable question signals low impact regardless of other merits.
+
+## Dimension 2 — Downstream Consequence
+If the experiment succeeds and produces the expected outcome, what would researchers or practitioners do differently? Does this result change a meaningful belief, unlock a new capability, or prevent a concrete harm? If success wouldn't change anything actionable, the impact is low.
+
+## Dimension 3 — Threat Model Realism (Safety/Alignment Check)
+For safety and alignment research: Are the assumptions grounded in realistic threat models for frontier AI deployment?
+- Is the proposed benefit achievable under realistic adversarial or distributional conditions?
+- Are the assumptions about model behavior, attacker capabilities, or deployment context defensible?
+- Would this result hold for models significantly more capable than those tested?
+
+If the idea is not safety/alignment research, evaluate whether the underlying assumptions are realistic for the research domain instead.
+
+## Research Idea
+**Title:** {{ idea_title }}
+
+{{ idea_markdown }}
+
+---
+
+Assess impact along these dimensions:
+- **research_question**: State the specific research question this idea is answering (in your own words, as precisely as possible)
+- **what_changes_if_success**: Concretely describe what researchers or practitioners would do differently if the experiment succeeds
+- **threat_model_assessment**: Evaluate whether the safety/alignment assumptions are realistic for frontier deployment, or flag if assumptions are too optimistic/narrow
+- **rationale**: 2-4 sentences synthesizing the overall impact assessment
+- **suggestions**: How to increase impact (e.g., "Clarify the falsifiable hypothesis", "Test on a more capable model class", "Address the distributional shift assumption in the threat model")
+- **score**: 1-5 where:
+  - 5 = Clear, high-value question; success would meaningfully shift research direction or safety practice
+  - 4 = Solid impact; answers a useful question with realistic assumptions and clear actionability
+  - 3 = Moderate impact; useful contribution but limited scope, unclear actionability, or partially unrealistic assumptions
+  - 2 = Low impact; question is unclear, assumptions are unrealistic, or positive results wouldn't change anything
+  - 1 = No discernible impact; even if all results are positive, nothing actionable follows

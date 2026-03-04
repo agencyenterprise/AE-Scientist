@@ -12,6 +12,7 @@ from .chat_messages import ChatMessagesMixin
 from .chat_summaries import ChatSummariesMixin
 from .conversations import ConversationsMixin
 from .file_attachments import FileAttachmentsMixin
+from .idea_judge_reviews import IdeaJudgeReviewsMixin
 from .ideas import IdeasMixin
 from .imported_conversation_summaries import ImportedConversationSummariesMixin
 from .llm_defaults import LLMDefaultsMixin
@@ -40,6 +41,7 @@ class DatabaseManager(
     BaseDatabaseManager,
     ConversationsMixin,
     IdeasMixin,
+    IdeaJudgeReviewsMixin,
     ChatMessagesMixin,
     LlmTokenUsagesMixin,
     PromptsMixin,
