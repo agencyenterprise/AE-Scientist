@@ -732,12 +732,14 @@ async def _stream_generation_flow(
         user_id=user_id,
     ):
         yield chunk
-    await _run_idea_judge(
-        db=db,
-        conversation_id=conversation.id,
-        llm_provider=llm_provider,
-        llm_model=llm_model,
-        conversation_text=imported_conversation,
+    asyncio.create_task(
+        _run_idea_judge(
+            db=db,
+            conversation_id=conversation.id,
+            llm_provider=llm_provider,
+            llm_model=llm_model,
+            conversation_text=imported_conversation,
+        )
     )
     async for chunk in _generate_response_for_conversation(
         db=db,
@@ -766,12 +768,14 @@ async def _stream_manual_seed_flow(
         user_id=user_id,
     ):
         yield chunk
-    await _run_idea_judge(
-        db=db,
-        conversation_id=conversation.id,
-        llm_provider=llm_provider,
-        llm_model=llm_model,
-        conversation_text=f"Title: {manual_title}\n\nHypothesis: {manual_hypothesis}",
+    asyncio.create_task(
+        _run_idea_judge(
+            db=db,
+            conversation_id=conversation.id,
+            llm_provider=llm_provider,
+            llm_model=llm_model,
+            conversation_text=f"Title: {manual_title}\n\nHypothesis: {manual_hypothesis}",
+        )
     )
     async for chunk in _generate_response_for_conversation(
         db=db,
