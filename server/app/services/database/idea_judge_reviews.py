@@ -27,6 +27,7 @@ class IdeaJudgeReviewData(NamedTuple):
     feasibility: Dict[str, Any]
     novelty: Dict[str, Any]
     impact: Dict[str, Any]
+    revision: Optional[Dict[str, Any]]
     overall_score: float
     recommendation: str
     summary: str
@@ -46,6 +47,7 @@ class IdeaJudgeReviewsMixin(ConnectionProvider):  # pylint: disable=abstract-met
         feasibility: Dict[str, Any],
         novelty: Dict[str, Any],
         impact: Dict[str, Any],
+        revision: Dict[str, Any],
         overall_score: float,
         recommendation: str,
         summary: str,
@@ -59,11 +61,11 @@ class IdeaJudgeReviewsMixin(ConnectionProvider):  # pylint: disable=abstract-met
                     """
                     INSERT INTO idea_judge_reviews (
                         idea_id, idea_version_id,
-                        relevance, feasibility, novelty, impact,
+                        relevance, feasibility, novelty, impact, revision,
                         overall_score, recommendation, summary,
                         llm_model, created_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
@@ -73,6 +75,7 @@ class IdeaJudgeReviewsMixin(ConnectionProvider):  # pylint: disable=abstract-met
                         Jsonb(feasibility),
                         Jsonb(novelty),
                         Jsonb(impact),
+                        Jsonb(revision),
                         overall_score,
                         recommendation,
                         summary,
@@ -95,7 +98,7 @@ class IdeaJudgeReviewsMixin(ConnectionProvider):  # pylint: disable=abstract-met
                     """
                     SELECT
                         id, idea_id, idea_version_id,
-                        relevance, feasibility, novelty, impact,
+                        relevance, feasibility, novelty, impact, revision,
                         overall_score, recommendation, summary,
                         llm_model, created_at
                     FROM idea_judge_reviews
@@ -116,6 +119,7 @@ class IdeaJudgeReviewsMixin(ConnectionProvider):  # pylint: disable=abstract-met
             feasibility=row["feasibility"],
             novelty=row["novelty"],
             impact=row["impact"],
+            revision=row.get("revision"),
             overall_score=row["overall_score"],
             recommendation=row["recommendation"],
             summary=row["summary"],
@@ -133,7 +137,7 @@ class IdeaJudgeReviewsMixin(ConnectionProvider):  # pylint: disable=abstract-met
                     """
                     SELECT
                         id, idea_id, idea_version_id,
-                        relevance, feasibility, novelty, impact,
+                        relevance, feasibility, novelty, impact, revision,
                         overall_score, recommendation, summary,
                         llm_model, created_at
                     FROM idea_judge_reviews
@@ -152,6 +156,7 @@ class IdeaJudgeReviewsMixin(ConnectionProvider):  # pylint: disable=abstract-met
                 feasibility=row["feasibility"],
                 novelty=row["novelty"],
                 impact=row["impact"],
+                revision=row.get("revision"),
                 overall_score=row["overall_score"],
                 recommendation=row["recommendation"],
                 summary=row["summary"],

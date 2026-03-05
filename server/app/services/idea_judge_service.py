@@ -21,9 +21,8 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field
 from app.services.base_llm_service import BaseLLMService
 from app.services.prompts.render import render_text
 
-# Model used for the live prior-art web search step.
-# gpt-4o-mini-search-preview is cheaper and sufficient for literature retrieval.
-_NOVELTY_SEARCH_MODEL = "gpt-4o-mini-search-preview"
+JUDGE_DEFAULT_MODEL = "gpt-5.4"
+_NOVELTY_SEARCH_MODEL = "gpt-5.4"
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +62,7 @@ class FeasibilityCriterionResult(BaseModel):
     rationale: str = Field(..., description="2-4 sentence synthesis of the feasibility assessment.")
     compute_viable: bool = Field(
         ...,
-        description="True if experiments fit within the ≤$50 RunPod/steeringapi budget.",
+        description="True if experiments fit within the ≤$50 combined RunPod + Steering API budget.",
     )
     agent_implementable: bool = Field(
         ...,
@@ -71,7 +70,7 @@ class FeasibilityCriterionResult(BaseModel):
     )
     estimated_cost: str = Field(
         ...,
-        description="Best-effort cost estimate (e.g. '~$10–20 for fine-tuning a 1B model on RunPod A40').",
+        description="Itemized cost estimate referencing specific GPU types or Steering API rates (e.g. '~$8 for 10 hrs on A40' or '~$2 for 2M tokens via Steering API').",
     )
     blockers: List[str] = Field(
         ...,
@@ -146,9 +145,47 @@ class ImpactCriterionResult(BaseModel):
         ...,
         description="Evaluation of whether safety/alignment assumptions are realistic for frontier deployment.",
     )
+    goodhart_risk_assessment: str = Field(
+        ...,
+        description="Evaluation of Goodhart risk: could the proposed metrics be gamed or diverge from the real objective? Are the evaluation proxies faithful to the underlying property?",
+    )
     suggestions: List[str] = Field(
         ...,
-        description="How to increase impact (clearer hypothesis, more realistic assumptions, broader model scope, etc.).",
+        description="How to increase impact (clearer hypothesis, more realistic assumptions, broader model scope, reduce Goodhart risk, etc.).",
+    )
+
+
+class RevisionActionItem(BaseModel):
+    """A single concrete action item to address a judge concern."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    action: str = Field(
+        ...,
+        description="A specific, actionable edit or change to the idea (start with a verb).",
+    )
+    addresses: str = Field(
+        ...,
+        description="Which criterion/concern this action resolves (e.g., 'feasibility — budget overrun', 'novelty — overlap with Chen et al. 2024').",
+    )
+    priority: str = Field(
+        ...,
+        description="'high' if the idea cannot proceed without this change, 'medium' if it materially improves the idea, 'low' if nice-to-have.",
+    )
+
+
+class RevisionPlan(BaseModel):
+    """Synthesized revision plan produced after all four criteria are evaluated."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    action_items: List[RevisionActionItem] = Field(
+        ...,
+        description="Prioritized list of 3-7 concrete action items to strengthen the idea, ordered by priority (high first).",
+    )
+    overall_assessment: str = Field(
+        ...,
+        description="2-3 sentence synthesis: what is the single biggest weakness, and what would make this idea ready for the experiment pipeline?",
     )
 
 
@@ -172,7 +209,7 @@ def _score_to_recommendation(overall: float) -> str:
 
 
 class IdeaJudgeResult(BaseModel):
-    """Full judge result aggregating all four criteria."""
+    """Full judge result aggregating all four criteria plus a revision plan."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -180,6 +217,7 @@ class IdeaJudgeResult(BaseModel):
     feasibility: FeasibilityCriterionResult
     novelty: NoveltyCriterionResult
     impact: ImpactCriterionResult
+    revision: RevisionPlan
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -245,7 +283,7 @@ class IdeaJudgeService:
         conversation_text: str,
     ) -> IdeaJudgeResult:
         """
-        Run all four criteria concurrently and return the compiled IdeaJudgeResult.
+        Run all four criteria concurrently, then synthesize a revision plan.
 
         Raises:
             Exception: If any criterion call fails (callers should catch and handle gracefully).
@@ -276,11 +314,22 @@ class IdeaJudgeService:
             )
         )
 
+        revision_result = await self._run_revision(
+            llm_model=llm_model,
+            idea_title=idea_title,
+            idea_markdown=idea_markdown,
+            relevance=relevance_result,
+            feasibility=feasibility_result,
+            novelty=novelty_result,
+            impact=impact_result,
+        )
+
         return IdeaJudgeResult(
             relevance=relevance_result,
             feasibility=feasibility_result,
             novelty=novelty_result,
             impact=impact_result,
+            revision=revision_result,
         )
 
     # ------------------------------------------------------------------
@@ -344,13 +393,13 @@ class IdeaJudgeService:
         idea_markdown: str,
     ) -> str:
         """
-        Call gpt-4o-mini-search-preview to retrieve grounded prior-art citations.
+        Use the Responses API with web_search to retrieve grounded prior-art citations.
 
         Returns the raw text response (with inline citations) to feed into the
         scoring step.  Falls back to an empty string if the search fails, so
         the scoring step can still proceed with a parametric assessment.
         """
-        system_prompt = render_text(template_name="idea_judge/novelty_search_system.txt.j2")
+        instructions = render_text(template_name="idea_judge/novelty_search_system.txt.j2")
         user_prompt = render_text(
             template_name="idea_judge/novelty_search_user.txt.j2",
             context={
@@ -360,14 +409,13 @@ class IdeaJudgeService:
         )
         try:
             client = openai.AsyncOpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-            response = await client.chat.completions.create(
+            response = await client.responses.create(
                 model=_NOVELTY_SEARCH_MODEL,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
+                instructions=instructions,
+                input=user_prompt,
+                tools=[{"type": "web_search"}],
             )
-            content = response.choices[0].message.content or ""
+            content = response.output_text or ""
             logger.debug("novelty web search complete (%d chars)", len(content))
             return content
         except Exception:
@@ -443,4 +491,49 @@ class IdeaJudgeService:
         )
         if not isinstance(result, ImpactCriterionResult):
             raise TypeError(f"Expected ImpactCriterionResult, got {type(result)}")
+        return result
+
+    async def _run_revision(
+        self,
+        *,
+        llm_model: str,
+        idea_title: str,
+        idea_markdown: str,
+        relevance: RelevanceCriterionResult,
+        feasibility: FeasibilityCriterionResult,
+        novelty: NoveltyCriterionResult,
+        impact: ImpactCriterionResult,
+    ) -> RevisionPlan:
+        """Synthesize all criterion results into a prioritized revision plan."""
+        user_prompt = render_text(
+            template_name="idea_judge/revision.txt.j2",
+            context={
+                "idea_title": idea_title,
+                "idea_markdown": idea_markdown,
+                "relevance_score": relevance.score,
+                "relevance_rationale": relevance.rationale,
+                "relevance_suggestions": "; ".join(relevance.suggestions),
+                "feasibility_score": feasibility.score,
+                "feasibility_rationale": feasibility.rationale,
+                "estimated_cost": feasibility.estimated_cost,
+                "feasibility_blockers": "; ".join(feasibility.blockers),
+                "feasibility_suggestions": "; ".join(feasibility.suggestions),
+                "novelty_score": novelty.score,
+                "novelty_rationale": novelty.rationale,
+                "novelty_risks": "; ".join(novelty.novelty_risks),
+                "novelty_suggestions": "; ".join(novelty.suggestions),
+                "impact_score": impact.score,
+                "impact_rationale": impact.rationale,
+                "goodhart_risk_assessment": impact.goodhart_risk_assessment,
+                "impact_suggestions": "; ".join(impact.suggestions),
+            },
+        )
+        result = await self._llm.generate_structured_output(
+            llm_model=llm_model,
+            system_prompt=self._system_prompt,
+            user_prompt=user_prompt,
+            schema=RevisionPlan,
+        )
+        if not isinstance(result, RevisionPlan):
+            raise TypeError(f"Expected RevisionPlan, got {type(result)}")
         return result

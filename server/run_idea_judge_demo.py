@@ -1,18 +1,18 @@
 """
-End-to-end demo: generate an idea from a markdown file, then judge it.
+End-to-end demo: generate ideas from all markdown files in ideas/, then judge each.
 
 Usage (from the server/ directory):
     uv run run_idea_judge_demo.py
 
 The script:
-  1. Reads ideas/idea_dropout_overfitting.md as the "source conversation"
-  2. Calls the idea generation LLM (same system/user prompts as the live server)
-  3. Passes the generated idea to IdeaJudgeService (4 parallel criteria)
-  4. Prints the full judge report
+  1. Discovers all ideas/idea_*.md files
+  2. For each file: generates a structured idea via LLM, then runs the judge
+  3. Saves per-file JSON results to judge-output/<idea_name>.json
+  4. Prints a summary table at the end
 
-Provider defaults to openai / gpt-4o-mini. Override with env vars:
-    JUDGE_PROVIDER=anthropic JUDGE_MODEL=claude-haiku-4-5 uv run run_idea_judge_demo.py
-    JUDGE_PROVIDER=openai    JUDGE_MODEL=gpt-4o            uv run run_idea_judge_demo.py
+Provider defaults to openai / gpt-5.4. Override with env vars:
+    JUDGE_PROVIDER=anthropic JUDGE_MODEL=claude-sonnet-4-5 uv run run_idea_judge_demo.py
+    JUDGE_PROVIDER=openai    JUDGE_MODEL=gpt-5.4           uv run run_idea_judge_demo.py
 """
 
 import asyncio
@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import sys
+import time
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -27,7 +28,8 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 REPO_ROOT = Path(__file__).parent.parent  # AE-Scientist/
 SERVER_DIR = Path(__file__).parent  # AE-Scientist/server/
-IDEA_FILE = REPO_ROOT / "ideas" / "idea_shillm.md"
+IDEAS_DIR = REPO_ROOT / "ideas"
+OUTPUT_DIR = REPO_ROOT / "judge-output"
 ENV_FILE = REPO_ROOT / "research_pipeline" / ".env"
 
 sys.path.insert(0, str(SERVER_DIR))
@@ -165,7 +167,7 @@ if not hasattr(_apr, "perform_baseline_review"):
 # ---------------------------------------------------------------------------
 # App imports — safe after stubs
 # ---------------------------------------------------------------------------
-from app.services.idea_judge_service import IdeaJudgeService, IdeaJudgeResult  # noqa: E402
+from app.services.idea_judge_service import JUDGE_DEFAULT_MODEL, IdeaJudgeService, IdeaJudgeResult  # noqa: E402
 from app.services.langchain_llm_service import IdeaGenerationOutput  # noqa: E402
 from app.services.prompts.functions import get_default_idea_generation_prompt  # noqa: E402
 from app.services.prompts.render import render_text  # noqa: E402
@@ -233,6 +235,7 @@ def _print_judge_report(result: IdeaJudgeResult) -> None:
             ("research_question", "Research question"),
             ("what_changes_if_success", "What changes if success"),
             ("threat_model_assessment", "Threat model"),
+            ("goodhart_risk_assessment", "Goodhart risk"),
             ("suggestions", "Suggestions"),
         ]:
             val = d.get(field)
@@ -244,6 +247,17 @@ def _print_judge_report(result: IdeaJudgeResult) -> None:
                 print(f"  {label}: {val}")
             elif val:
                 print(f"  {label}: {val}")
+
+    # Revision plan
+    print(f"\n{'─'*70}")
+    print(f"  [REVISION PLAN]")
+    print(f"{'─'*70}")
+    print(f"  {result.revision.overall_assessment}")
+    print()
+    for i, item in enumerate(result.revision.action_items, 1):
+        priority_tag = item.priority.upper()
+        print(f"  {i}. [{priority_tag}] {item.action}")
+        print(f"     Addresses: {item.addresses}")
 
     print(f"\n{SEP}")
     print(f"  Recommendation : {result.recommendation.upper().replace('_', ' ')}")
@@ -259,78 +273,162 @@ def _print_judge_report(result: IdeaJudgeResult) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Main pipeline
+# Per-idea pipeline
 # ---------------------------------------------------------------------------
 
 
-async def main() -> None:
-    provider = os.environ.get("JUDGE_PROVIDER", "openai").lower()
-    model = os.environ.get("JUDGE_MODEL", "gpt-4o-mini")
+async def _process_idea_file(
+    *,
+    idea_path: Path,
+    provider: str,
+    gen_model: str,
+    judge_model: str,
+    llm_service,
+    output_dir: Path,
+) -> dict:
+    """Generate an idea from a markdown file, judge it, save JSON, return summary."""
+    stem = idea_path.stem  # e.g. "idea_trojan_llm"
+    source_text = idea_path.read_text()
 
-    print(f"\n{SEP}")
-    print(f"  AE Scientist — Idea Generation + Judge Demo")
-    print(f"  provider={provider}  model={model}")
-    print(SEP)
+    print(f"\n{'━'*70}")
+    print(f"  Processing: {idea_path.name}  ({len(source_text)} chars)")
+    print(f"{'━'*70}")
 
-    # ------------------------------------------------------------------
-    # Step 1: read source file
-    # ------------------------------------------------------------------
-    if not IDEA_FILE.exists():
-        print(f"ERROR: idea file not found at {IDEA_FILE}", file=sys.stderr)
-        sys.exit(1)
+    t0 = time.time()
 
-    source_text = IDEA_FILE.read_text()
-    print(f"\n[1/3] Source file: {IDEA_FILE.name}  ({len(source_text)} chars)")
-
-    # ------------------------------------------------------------------
-    # Step 2: generate a structured idea (same prompts as the live server)
-    # ------------------------------------------------------------------
-    print(f"\n[2/3] Generating idea via {provider}:{model} ...")
-
-    llm_service = _resolve_service(provider)
-
+    # Step 1: generate structured idea
+    print(f"  [1/2] Generating idea via {provider}:{gen_model} ...")
     system_prompt = get_default_idea_generation_prompt()
     user_prompt = render_text(
         template_name="idea_generation_user.txt.j2",
         context={"conversation_text": source_text},
     )
-
     raw = await llm_service.generate_structured_output(
-        llm_model=model,
+        llm_model=gen_model,
         system_prompt=system_prompt,
         user_prompt=user_prompt,
         schema=IdeaGenerationOutput,
         max_completion_tokens=2000,
     )
     generated: IdeaGenerationOutput = raw
+    print(f"  Generated: {generated.title}")
 
-    print(f"\n{DASH}")
-    print(f"  Generated Title: {generated.title}")
-    print(DASH)
-    print(generated.content)
-    print(DASH)
-
-    # ------------------------------------------------------------------
-    # Step 3: judge the generated idea (4 criteria in parallel)
-    # ------------------------------------------------------------------
-    print(f"\n[3/3] Running IdeaJudgeService (4 criteria in parallel) ...")
-
+    # Step 2: judge
+    print(f"  [2/2] Judging via {judge_model} (4 criteria + revision) ...")
     judge = IdeaJudgeService(llm_service=llm_service)
     result = await judge.judge(
-        llm_model=model,
+        llm_model=judge_model,
         idea_title=generated.title,
         idea_markdown=generated.content,
         conversation_text=source_text,
     )
 
+    elapsed = time.time() - t0
+
     _print_judge_report(result)
 
-    # ------------------------------------------------------------------
-    # Dump full JSON for inspection / copy-paste into DB debugger
-    # ------------------------------------------------------------------
-    out_path = SERVER_DIR / "idea_judge_result.json"
-    out_path.write_text(json.dumps(result.model_dump(), indent=2))
-    print(f"\nFull JSON saved to: {out_path}\n")
+    # Save JSON
+    output = {
+        "source_file": idea_path.name,
+        "generated_title": generated.title,
+        "generated_content": generated.content,
+        "judge_result": result.model_dump(),
+        "meta": {
+            "gen_provider": provider,
+            "gen_model": gen_model,
+            "judge_model": judge_model,
+            "elapsed_seconds": round(elapsed, 1),
+        },
+    }
+    out_path = output_dir / f"{stem}.json"
+    out_path.write_text(json.dumps(output, indent=2))
+    print(f"\n  Saved: {out_path.relative_to(REPO_ROOT)}")
+
+    return {
+        "file": idea_path.name,
+        "title": generated.title,
+        "overall": result.overall_score,
+        "recommendation": result.recommendation,
+        "relevance": result.relevance.score,
+        "feasibility": result.feasibility.score,
+        "novelty": result.novelty.score,
+        "impact": result.impact.score,
+        "elapsed": round(elapsed, 1),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+
+async def main() -> None:
+    provider = os.environ.get("JUDGE_PROVIDER", "openai").lower()
+    gen_model = os.environ.get("JUDGE_MODEL", JUDGE_DEFAULT_MODEL)
+    judge_model = os.environ.get("JUDGE_MODEL", JUDGE_DEFAULT_MODEL)
+
+    # Discover idea files
+    idea_files = sorted(IDEAS_DIR.glob("idea_*.md"))
+    if not idea_files:
+        print(f"ERROR: no idea_*.md files found in {IDEAS_DIR}", file=sys.stderr)
+        sys.exit(1)
+
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    print(f"\n{SEP}")
+    print(f"  AE Scientist — Batch Idea Judge Demo")
+    print(f"  provider={provider}  gen_model={gen_model}  judge_model={judge_model}")
+    print(f"  ideas found: {len(idea_files)}")
+    print(f"  output dir:  {OUTPUT_DIR.relative_to(REPO_ROOT)}")
+    print(SEP)
+
+    llm_service = _resolve_service(provider)
+    summaries: list[dict] = []
+
+    for idea_path in idea_files:
+        try:
+            summary = await _process_idea_file(
+                idea_path=idea_path,
+                provider=provider,
+                gen_model=gen_model,
+                judge_model=judge_model,
+                llm_service=llm_service,
+                output_dir=OUTPUT_DIR,
+            )
+            summaries.append(summary)
+        except Exception:
+            log.exception("Failed to process %s", idea_path.name)
+            summaries.append({
+                "file": idea_path.name,
+                "title": "ERROR",
+                "overall": 0.0,
+                "recommendation": "error",
+                "relevance": 0,
+                "feasibility": 0,
+                "novelty": 0,
+                "impact": 0,
+                "elapsed": 0.0,
+            })
+
+    # Print summary table
+    print(f"\n\n{SEP}")
+    print(f"  BATCH SUMMARY  ({len(summaries)} ideas)")
+    print(SEP)
+    print(f"  {'File':<30} {'Rec':<15} {'Overall':>7}  {'Rel':>3} {'Fea':>3} {'Nov':>3} {'Imp':>3}  {'Time':>6}")
+    print(f"  {'─'*30} {'─'*15} {'─'*7}  {'─'*3} {'─'*3} {'─'*3} {'─'*3}  {'─'*6}")
+    for s in summaries:
+        rec = s["recommendation"].replace("_", " ").title()
+        print(
+            f"  {s['file']:<30} {rec:<15} {s['overall']:>5.1f}/5"
+            f"  {s['relevance']:>3} {s['feasibility']:>3} {s['novelty']:>3} {s['impact']:>3}"
+            f"  {s['elapsed']:>5.0f}s"
+        )
+    print(SEP)
+
+    # Save summary table as JSON too
+    summary_path = OUTPUT_DIR / "_summary.json"
+    summary_path.write_text(json.dumps(summaries, indent=2))
+    print(f"\n  Summary table saved to: {summary_path.relative_to(REPO_ROOT)}\n")
 
 
 if __name__ == "__main__":

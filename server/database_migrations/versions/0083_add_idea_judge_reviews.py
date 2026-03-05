@@ -42,6 +42,7 @@ def upgrade() -> None:
         sa.Column("feasibility", JSONB(), nullable=False),
         sa.Column("novelty", JSONB(), nullable=False),
         sa.Column("impact", JSONB(), nullable=False),
+        sa.Column("revision", JSONB(), nullable=True),
         # Aggregate
         sa.Column("overall_score", sa.Float(), nullable=False),
         sa.Column("recommendation", sa.String(length=20), nullable=False),

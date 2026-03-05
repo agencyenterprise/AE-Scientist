@@ -43,7 +43,7 @@ from app.services import (
 )
 from app.services.cost_calculator import calculate_llm_token_usage_cost
 from app.services.database import DatabaseManager
-from app.services.idea_judge_service import IdeaJudgeService
+from app.services.idea_judge_service import JUDGE_DEFAULT_MODEL, IdeaJudgeService
 from app.services.database.conversations import CONVERSATION_STATUSES
 from app.services.database.conversations import Conversation as DBConversation
 from app.services.database.conversations import DashboardConversation as DBDashboardConversation
@@ -643,14 +643,15 @@ async def _run_idea_judge(
     db: DatabaseManager,
     conversation_id: int,
     llm_provider: str,
-    llm_model: str,
     conversation_text: str,
 ) -> None:
     """
     Run the LLM-as-a-judge review immediately after idea generation and persist the result.
 
-    Fetches the freshly-saved idea, evaluates it across four criteria in parallel
-    (relevance, feasibility, novelty, impact), and stores the result in idea_judge_reviews.
+    Always uses JUDGE_DEFAULT_MODEL for consistent evaluation regardless of the
+    conversation's model. Fetches the freshly-saved idea, evaluates it across four
+    criteria in parallel (relevance, feasibility, novelty, impact), and stores the
+    result in idea_judge_reviews.
     Failures are logged but never propagate — the rest of the conversation flow continues.
     """
     try:
@@ -665,7 +666,7 @@ async def _run_idea_judge(
         judge = IdeaJudgeService(llm_service=service)
 
         result = await judge.judge(
-            llm_model=llm_model,
+            llm_model=JUDGE_DEFAULT_MODEL,
             idea_title=idea.title,
             idea_markdown=idea.idea_markdown,
             conversation_text=conversation_text,
@@ -678,10 +679,11 @@ async def _run_idea_judge(
             feasibility=result.feasibility.model_dump(),
             novelty=result.novelty.model_dump(),
             impact=result.impact.model_dump(),
+            revision=result.revision.model_dump(),
             overall_score=result.overall_score,
             recommendation=result.recommendation,
             summary=result.summary,
-            llm_model=llm_model,
+            llm_model=JUDGE_DEFAULT_MODEL,
         )
 
         logger.info(
@@ -737,7 +739,6 @@ async def _stream_generation_flow(
             db=db,
             conversation_id=conversation.id,
             llm_provider=llm_provider,
-            llm_model=llm_model,
             conversation_text=imported_conversation,
         )
     )
@@ -773,7 +774,6 @@ async def _stream_manual_seed_flow(
             db=db,
             conversation_id=conversation.id,
             llm_provider=llm_provider,
-            llm_model=llm_model,
             conversation_text=f"Title: {manual_title}\n\nHypothesis: {manual_hypothesis}",
         )
     )
