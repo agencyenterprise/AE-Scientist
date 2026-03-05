@@ -309,7 +309,8 @@ class IdeaJudgeService:
             user_prompt=user_prompt,
             schema=RelevanceCriterionResult,
         )
-        assert isinstance(result, RelevanceCriterionResult)
+        if not isinstance(result, RelevanceCriterionResult):
+            raise TypeError(f"Expected RelevanceCriterionResult, got {type(result)}")
         return result
 
     async def _run_feasibility(
@@ -332,7 +333,8 @@ class IdeaJudgeService:
             user_prompt=user_prompt,
             schema=FeasibilityCriterionResult,
         )
-        assert isinstance(result, FeasibilityCriterionResult)
+        if not isinstance(result, FeasibilityCriterionResult):
+            raise TypeError(f"Expected FeasibilityCriterionResult, got {type(result)}")
         return result
 
     async def _web_search_prior_art(
@@ -410,7 +412,8 @@ class IdeaJudgeService:
             user_prompt=user_prompt,
             schema=_NoveltyScoringOutput,
         )
-        assert isinstance(scoring, _NoveltyScoringOutput)
+        if not isinstance(scoring, _NoveltyScoringOutput):
+            raise TypeError(f"Expected _NoveltyScoringOutput, got {type(scoring)}")
 
         # Attach the raw search output (set in code, not by the LLM)
         return NoveltyCriterionResult(
@@ -438,5 +441,6 @@ class IdeaJudgeService:
             user_prompt=user_prompt,
             schema=ImpactCriterionResult,
         )
-        assert isinstance(result, ImpactCriterionResult)
+        if not isinstance(result, ImpactCriterionResult):
+            raise TypeError(f"Expected ImpactCriterionResult, got {type(result)}")
         return result
