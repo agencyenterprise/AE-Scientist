@@ -281,9 +281,15 @@ class IdeaJudgeService:
         idea_title: str,
         idea_markdown: str,
         conversation_text: str,
+        prior_reviews: str | None = None,
     ) -> IdeaJudgeResult:
         """
         Run all four criteria concurrently, then synthesize a revision plan.
+
+        Args:
+            prior_reviews: Optional formatted string of previous judge reviews
+                for this idea, so the revision step can track score progression
+                and avoid re-flagging resolved issues.
 
         Raises:
             Exception: If any criterion call fails (callers should catch and handle gracefully).
@@ -322,6 +328,7 @@ class IdeaJudgeService:
             feasibility=feasibility_result,
             novelty=novelty_result,
             impact=impact_result,
+            prior_reviews=prior_reviews,
         )
 
         return IdeaJudgeResult(
@@ -503,6 +510,7 @@ class IdeaJudgeService:
         feasibility: FeasibilityCriterionResult,
         novelty: NoveltyCriterionResult,
         impact: ImpactCriterionResult,
+        prior_reviews: str | None = None,
     ) -> RevisionPlan:
         """Synthesize all criterion results into a prioritized revision plan."""
         user_prompt = render_text(
@@ -526,6 +534,7 @@ class IdeaJudgeService:
                 "impact_rationale": impact.rationale,
                 "goodhart_risk_assessment": impact.goodhart_risk_assessment,
                 "impact_suggestions": "; ".join(impact.suggestions),
+                "prior_reviews": prior_reviews or "",
             },
         )
         result = await self._llm.generate_structured_output(

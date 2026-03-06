@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import type { ConversationDetail, Idea as IdeaType } from "@/types";
 import { api } from "@/shared/lib/api-client-typed";
 import { CreateProjectModal } from "./CreateProjectModal";
@@ -15,6 +15,7 @@ import { useAnimations } from "../hooks/useAnimations";
 import { ProjectDraftHeader } from "./ProjectDraftHeader";
 import { ProjectDraftContent } from "./ProjectDraftContent";
 import { ProjectDraftFooter } from "./ProjectDraftFooter";
+import { IdeaJudgeAudit } from "./IdeaJudgeAudit";
 
 interface ProjectDraftProps {
   conversation: ConversationDetail;
@@ -153,6 +154,22 @@ export function ProjectDraft({ conversation, externalUpdate }: ProjectDraftProps
     }
   };
 
+  const handleIdeaRefined = useCallback(async () => {
+    const { data } = await api.GET("/api/conversations/{conversation_id}/idea", {
+      params: { path: { conversation_id: conversation.id } },
+    });
+    if (data && "idea" in data && data.idea) {
+      const previousVersion = projectState.projectDraft?.active_version?.version_number;
+      projectState.setProjectDraft(data.idea as IdeaType);
+      animations.triggerUpdateAnimation();
+      await versionState.loadVersions();
+      if (previousVersion) {
+        versionState.setSelectedVersionForComparison(previousVersion);
+        versionState.setShowDiffs(true);
+      }
+    }
+  }, [conversation.id, projectState, animations, versionState]);
+
   // Handle project creation with conversation locking
   const handleCreateProject = (): void => {
     projectState.handleCreateProject();
@@ -228,6 +245,14 @@ export function ProjectDraft({ conversation, externalUpdate }: ProjectDraftProps
               markdownDiffContent={diffState.markdownDiffContent}
               showDiffs={versionState.showDiffs}
             />
+
+            {/* Idea Judge Audit */}
+            <div className="py-4">
+              <IdeaJudgeAudit
+                conversationId={conversation.id}
+                onIdeaRefined={handleIdeaRefined}
+              />
+            </div>
 
             {/* Footer Section */}
             <ProjectDraftFooter

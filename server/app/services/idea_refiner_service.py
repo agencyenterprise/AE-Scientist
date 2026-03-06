@@ -119,6 +119,7 @@ class IdeaRefinerService:
         idea_markdown: str,
         judge_result: IdeaJudgeResult,
         conversation_text: Optional[str] = None,
+        refinement_history: Optional[str] = None,
     ) -> IdeaRefinerResult:
         """
         Generate a refined version of the idea that addresses judge concerns.
@@ -141,6 +142,7 @@ class IdeaRefinerService:
             idea_markdown=idea_markdown,
             judge_result=judge_result,
             conversation_text=conversation_text,
+            refinement_history=refinement_history,
         )
 
         refined = await self._llm.generate_structured_output(
@@ -174,6 +176,7 @@ class IdeaRefinerService:
         idea_markdown: str,
         judge_result: IdeaJudgeResult,
         conversation_text: Optional[str],
+        refinement_history: Optional[str] = None,
     ) -> str:
         rel = judge_result.relevance
         feas = judge_result.feasibility
@@ -187,6 +190,7 @@ class IdeaRefinerService:
                 "idea_title": idea_title,
                 "idea_markdown": idea_markdown,
                 "conversation_text": conversation_text or "",
+                "refinement_history": refinement_history or "",
                 "overall_score": f"{judge_result.overall_score:.1f}",
                 "recommendation": judge_result.recommendation.replace("_", " ").title(),
                 # Relevance

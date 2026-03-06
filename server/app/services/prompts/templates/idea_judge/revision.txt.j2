@@ -29,11 +29,25 @@ Estimated cost: {{ estimated_cost }}
 Goodhart risk: {{ goodhart_risk_assessment }}
 {% if impact_suggestions %}Suggestions: {{ impact_suggestions }}{% endif %}
 
+{% if prior_reviews %}
+---
+
+## Prior Review History
+
+This idea has been through previous judge-refine rounds. Consider this history when producing your revision plan:
+- Do NOT re-flag issues that were already addressed (score improved or concern resolved)
+- DO flag regressions where a previously good score got worse
+- Focus your action items on genuinely NEW or PERSISTING issues
+
+{{ prior_reviews }}
+{% endif %}
+
 ---
 
 Produce 3-7 action items, ordered by priority (high first). Each action item should:
 - Start with a verb (e.g., "Replace", "Narrow", "Add", "Remove", "Clarify")
 - Be specific enough that a researcher or coding agent could execute it without further clarification
 - Reference the criterion and concern it addresses
+{% if prior_reviews %}- NOT repeat action items from previous rounds that have already been addressed{% endif %}
 
 Then provide a 2-3 sentence overall assessment: what is the single biggest weakness holding this idea back, and what would make it ready for the experiment pipeline?
