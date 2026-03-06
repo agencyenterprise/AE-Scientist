@@ -1,0 +1,53 @@
+You have just evaluated a research idea across four criteria. Below are the full results.
+
+Your task: synthesize the findings into a short, prioritized revision plan — a list of concrete action items that, if executed, would address the most important concerns raised by the evaluation.
+
+## Idea Under Review
+**Title:** {{ idea_title }}
+
+{{ idea_markdown }}
+
+## Evaluation Results
+
+### Relevance ({{ relevance_score }}/5)
+{{ relevance_rationale }}
+{% if relevance_suggestions %}Suggestions: {{ relevance_suggestions }}{% endif %}
+
+### Feasibility ({{ feasibility_score }}/5)
+{{ feasibility_rationale }}
+Estimated cost: {{ estimated_cost }}
+{% if feasibility_blockers %}Blockers: {{ feasibility_blockers }}{% endif %}
+{% if feasibility_suggestions %}Suggestions: {{ feasibility_suggestions }}{% endif %}
+
+### Novelty ({{ novelty_score }}/5)
+{{ novelty_rationale }}
+{% if novelty_risks %}Novelty risks: {{ novelty_risks }}{% endif %}
+{% if novelty_suggestions %}Suggestions: {{ novelty_suggestions }}{% endif %}
+
+### Impact ({{ impact_score }}/5)
+{{ impact_rationale }}
+Goodhart risk: {{ goodhart_risk_assessment }}
+{% if impact_suggestions %}Suggestions: {{ impact_suggestions }}{% endif %}
+
+{% if prior_reviews %}
+---
+
+## Prior Review History
+
+This idea has been through previous judge-refine rounds. Consider this history when producing your revision plan:
+- Do NOT re-flag issues that were already addressed (score improved or concern resolved)
+- DO flag regressions where a previously good score got worse
+- Focus your action items on genuinely NEW or PERSISTING issues
+
+{{ prior_reviews }}
+{% endif %}
+
+---
+
+Produce 3-7 action items, ordered by priority (high first). Each action item should:
+- Start with a verb (e.g., "Replace", "Narrow", "Add", "Remove", "Clarify")
+- Be specific enough that a researcher or coding agent could execute it without further clarification
+- Reference the criterion and concern it addresses
+{% if prior_reviews %}- NOT repeat action items from previous rounds that have already been addressed{% endif %}
+
+Then provide a 2-3 sentence overall assessment: what is the single biggest weakness holding this idea back, and what would make it ready for the experiment pipeline?

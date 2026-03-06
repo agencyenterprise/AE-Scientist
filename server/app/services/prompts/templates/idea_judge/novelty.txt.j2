@@ -1,0 +1,25 @@
+Score the NOVELTY of the following research idea. You have been provided with live web search results showing the actual prior-art landscape — base your assessment on those results, not on general assumptions.
+
+## Research Idea
+**Title:** {{ idea_title }}
+
+{{ idea_markdown }}
+
+## Live Prior-Art Search Results
+{{ search_results }}
+
+---
+
+Using the search results above, assess novelty along these dimensions:
+- **core_claims**: The 3–5 specific novelty claims this idea is making
+- **related_prior_work**: Prior work found in the search that overlaps (format: "Title (Year) — brief description of overlap and URL if available"). Ground every entry in the search results; do not fabricate citations.
+- **differentiation**: What genuinely sets this idea apart from the identified prior work, if anything
+- **novelty_risks**: Specific risks that the core claim has already been addressed (cite paper titles and years from the search)
+- **rationale**: 2–4 sentences synthesising the novelty assessment based on what the search found
+- **suggestions**: How to sharpen the novelty claim given the identified prior art (e.g., "Explicitly differentiate from [X]", "Narrow to the specific gap Y not covered by [Z]")
+- **score**: 1–5 where:
+  - 5 = Addresses a clearly unexplored question; search found no direct prior art on the core claim
+  - 4 = Meaningful novelty; prior work exists but search confirms a genuine, identifiable gap
+  - 3 = Moderate novelty; extends or applies known methods in a non-obvious but incremental way
+  - 2 = Limited novelty; search found closely related work; contribution is marginal
+  - 1 = No meaningful novelty; search found work that essentially replicates or supersedes this idea

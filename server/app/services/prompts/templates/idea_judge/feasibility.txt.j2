@@ -1,0 +1,59 @@
+Evaluate the FEASIBILITY of the following research idea for execution within the AE Scientist pipeline.
+
+## Execution Constraints
+- **Total budget:** ≤ $50 per experiment run (combined RunPod + Steering API spend)
+- **Implementation:** All sub-experiments must be fully automatable — implementable by a coding agent with no manual lab work, no proprietary datasets requiring special access, and no multi-week human iteration loops
+- **Duration:** Experiments should complete in hours to at most one day, not weeks
+- **Environment:** Python ecosystem; PyTorch, HuggingFace Transformers, standard ML/scientific libraries are available; internet access for downloading public datasets and model weights is available
+
+## Available Compute Resources
+
+### RunPod GPU Instances (on-demand, per-hour pricing)
+| GPU                  | VRAM    | $/hr  |
+|----------------------|---------|-------|
+| RTX 2000 Ada         | 16 GB   | $0.24 |
+| RTX 4000 Ada         | 20 GB   | $0.26 |
+| L4                   | 24 GB   | $0.39 |
+| A40                  | 48 GB   | $0.40 |
+| RTX 6000 Ada         | 48 GB   | $0.77 |
+| L40S                 | 48 GB   | $0.86 |
+| RTX 5090             | 32 GB   | $0.89 |
+| L40                  | 48 GB   | $0.99 |
+| RTX PRO 6000         | 96 GB   | $1.69 |
+| RTX PRO 6000 WK      | 96 GB   | $1.89 |
+| H100 PCIe            | 80 GB   | $2.39 |
+| H100 SXM             | 80 GB   | $2.69 |
+| H100 NVL             | 94 GB   | $3.07 |
+| H200 SXM             | 141 GB  | $3.59 |
+| B200                 | 180 GB  | $4.99 |
+
+The default GPU is **RTX 5090 (32 GB, $0.89/hr)**. Use it for cost estimates unless the idea requires more VRAM. Pick the cheapest GPU with enough VRAM for the proposed model/data.
+
+### Steering API
+- $0.01 per API call
+- $1.00 per 1,000,000 tokens
+- All endpoints (steering vectors, activations, etc.)
+- No minimum commitment
+
+Use the Steering API for activation-steering, representation-reading, or inference-only experiments where full GPU access is unnecessary. It is significantly cheaper than RunPod for inference-heavy workloads.
+
+## Research Idea
+**Title:** {{ idea_title }}
+
+{{ idea_markdown }}
+
+---
+
+Assess feasibility along these dimensions:
+- **compute_viable**: true/false — can the proposed experiments fit within a ≤$50 combined budget? Show your work: estimate GPU-hours or API calls needed, multiply by the rates above.
+- **agent_implementable**: true/false — can a coding agent implement and execute the full experiment plan without human intervention?
+- **estimated_cost**: Itemized cost estimate referencing specific resources (e.g., "~$8 for 10 hrs on A40 for fine-tuning a 1B model" or "~$2 for ~2M tokens via Steering API for inference-only probing"). Break down by RunPod vs Steering API if both are used.
+- **blockers**: Specific blockers that would prevent execution (e.g., "requires proprietary dataset X", "70B model needs >48 GB VRAM — requires H100 at $2.39/hr, blowing budget for multi-run experiments", "requires interactive human feedback loop")
+- **rationale**: 2-4 sentences synthesizing your assessment
+- **suggestions**: Concrete modifications to bring the idea within constraints (e.g., "Use Steering API instead of RunPod for the inference-only probing experiments", "Switch from 70B to 7B model to fit on A40 at $0.40/hr", "Limit to 3 sub-experiments instead of 10")
+- **score**: 1-5 where:
+  - 5 = Clearly implementable within all constraints; straightforward for a coding agent
+  - 4 = Feasible with minor adaptations; one or two constraints need light adjustment
+  - 3 = Conditionally feasible; requires meaningful scoping or simplification to fit
+  - 2 = Difficult to execute within constraints; likely budget overrun or requires human steps
+  - 1 = Not feasible under current constraints without fundamental redesign

@@ -76,7 +76,9 @@ class OpenAIPDFProvider(LLMProvider):
         response = self._client.responses.create(  # type: ignore[call-overload]
             model=self._model,
             instructions=system_message,
-            input=[{"role": "user", "content": input_content}],  # fmt: skip  # pyright: ignore[reportArgumentType]
+            input=[
+                {"role": "user", "content": input_content}
+            ],  # fmt: skip  # pyright: ignore[reportArgumentType]
             text={
                 "format": {
                     "type": "json_schema",
@@ -131,7 +133,9 @@ class OpenAIPDFProvider(LLMProvider):
         response = self._client.responses.create(  # type: ignore[call-overload]
             model=self._model,
             instructions=enhanced_system,
-            input=[{"role": "user", "content": input_content}],  # fmt: skip  # pyright: ignore[reportArgumentType]
+            input=[
+                {"role": "user", "content": input_content}
+            ],  # fmt: skip  # pyright: ignore[reportArgumentType]
             tools=[{"type": "web_search"}],
             text={
                 "format": {

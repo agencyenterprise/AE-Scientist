@@ -5,7 +5,7 @@ import logging
 import re
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from typing import Any, AsyncGenerator, Dict, List, Sequence, Union, cast
+from typing import Any, AsyncGenerator, Dict, List, Sequence, Type, Union, cast
 
 from langchain.tools import tool
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -243,6 +243,22 @@ class LangChainLLMService(BaseLLMService, ABC):
         if not isinstance(response, AIMessage):
             return ""
         return self._message_to_text(message=response)
+
+    async def generate_structured_output(
+        self,
+        llm_model: str,
+        system_prompt: str,
+        user_prompt: str,
+        schema: Type[Any],
+        max_completion_tokens: int = 1500,
+    ) -> Any:
+        base_model = self.get_or_create_model(llm_model)
+        structured_model = base_model.with_structured_output(schema)
+        messages: List[BaseMessage] = [
+            SystemMessage(content=self._text_content_block(text=system_prompt)),
+            HumanMessage(content=self._text_content_block(text=user_prompt)),
+        ]
+        return await structured_model.ainvoke(input=messages)
 
     async def generate_idea(
         self,

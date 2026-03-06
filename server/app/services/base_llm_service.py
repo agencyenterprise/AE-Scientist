@@ -8,7 +8,7 @@ must implement to ensure consistent behavior across different providers.
 from abc import ABC, abstractmethod
 from datetime import datetime
 from logging import getLogger
-from typing import AsyncGenerator, List, NamedTuple, Optional
+from typing import Any, AsyncGenerator, List, NamedTuple, Optional, Type
 
 from app.models import ChatMessageData
 from app.models.llm_prompts import LLMModel
@@ -140,6 +140,33 @@ class BaseLLMService(ABC):
 
         Returns:
             Provider response text as a single string (may be empty on failure).
+        """
+        pass
+
+    @abstractmethod
+    async def generate_structured_output(
+        self,
+        llm_model: str,
+        system_prompt: str,
+        user_prompt: str,
+        schema: Type[Any],
+        max_completion_tokens: int = 1500,
+    ) -> Any:
+        """
+        Execute a single structured-output call, returning an instance of schema.
+
+        Uses provider tool-calling / function-calling to guarantee the response
+        conforms to the given Pydantic model.
+
+        Args:
+            llm_model: Provider-specific model identifier
+            system_prompt: System instruction to steer behavior
+            user_prompt: User content to process
+            schema: Pydantic BaseModel subclass that defines the output shape
+            max_completion_tokens: Upper bound for completion length
+
+        Returns:
+            An instance of schema populated from the LLM response.
         """
         pass
 
