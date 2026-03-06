@@ -1,5 +1,5 @@
 """
-End-to-end demo: generate ideas from all markdown files in ideas/, then judge each.
+End-to-end demo: generate ideas from all markdown files in ideas/, then judge and refine each.
 
 Usage (from the server/ directory):
     uv run run_idea_judge_demo.py
@@ -7,8 +7,9 @@ Usage (from the server/ directory):
 The script:
   1. Discovers all ideas/idea_*.md files
   2. For each file: generates a structured idea via LLM, then runs the judge
-  3. Saves per-file JSON results to judge-output/<idea_name>.json
-  4. Prints a summary table at the end
+  3. If the judge says "revise" or "reject", runs the refiner to produce an improved version
+  4. Saves per-file JSON results to judge-output/<idea_name>.json
+  5. Prints a summary table at the end
 
 Provider defaults to openai / gpt-5.4. Override with env vars:
     JUDGE_PROVIDER=anthropic JUDGE_MODEL=claude-sonnet-4-5 uv run run_idea_judge_demo.py
@@ -168,6 +169,7 @@ if not hasattr(_apr, "perform_baseline_review"):
 # App imports — safe after stubs
 # ---------------------------------------------------------------------------
 from app.services.idea_judge_service import JUDGE_DEFAULT_MODEL, IdeaJudgeService, IdeaJudgeResult  # noqa: E402
+from app.services.idea_refiner_service import REFINER_DEFAULT_MODEL, IdeaRefinerService, IdeaRefinerResult  # noqa: E402
 from app.services.langchain_llm_service import IdeaGenerationOutput  # noqa: E402
 from app.services.prompts.functions import get_default_idea_generation_prompt  # noqa: E402
 from app.services.prompts.render import render_text  # noqa: E402
@@ -272,6 +274,33 @@ def _print_judge_report(result: IdeaJudgeResult) -> None:
     print(SEP)
 
 
+def _print_refiner_report(result: IdeaRefinerResult) -> None:
+    print(f"\n{SEP}")
+    print(f"  REFINER REPORT")
+    print(SEP)
+    print(f"  Original : {result.original_title}  (score {result.original_overall_score:.1f}/5, {result.original_recommendation})")
+    print(f"  Refined  : {result.refined_title}")
+    print(f"\n  Strategy: {result.refinement_summary}")
+
+    print(f"\n{'─'*70}")
+    print(f"  CHANGES MADE ({len(result.changes_made)})")
+    print(f"{'─'*70}")
+    for i, change in enumerate(result.changes_made, 1):
+        print(f"  {i}. {change.change}")
+        print(f"     Addresses: {change.criterion_addressed}")
+        print(f"     Expected:  {change.expected_score_impact}")
+
+    print(f"\n{'─'*70}")
+    print(f"  REFINED IDEA (first 500 chars)")
+    print(f"{'─'*70}")
+    preview = result.refined_markdown[:500]
+    if len(result.refined_markdown) > 500:
+        preview += "\n  ... (truncated)"
+    for line in preview.split("\n"):
+        print(f"  {line}")
+    print(SEP)
+
+
 # ---------------------------------------------------------------------------
 # Per-idea pipeline
 # ---------------------------------------------------------------------------
@@ -283,10 +312,11 @@ async def _process_idea_file(
     provider: str,
     gen_model: str,
     judge_model: str,
+    refiner_model: str,
     llm_service,
     output_dir: Path,
 ) -> dict:
-    """Generate an idea from a markdown file, judge it, save JSON, return summary."""
+    """Generate an idea from a markdown file, judge it, optionally refine, save JSON, return summary."""
     stem = idea_path.stem  # e.g. "idea_trojan_llm"
     source_text = idea_path.read_text()
 
@@ -297,7 +327,8 @@ async def _process_idea_file(
     t0 = time.time()
 
     # Step 1: generate structured idea
-    print(f"  [1/2] Generating idea via {provider}:{gen_model} ...")
+    total_steps = 3
+    print(f"  [1/{total_steps}] Generating idea via {provider}:{gen_model} ...")
     system_prompt = get_default_idea_generation_prompt()
     user_prompt = render_text(
         template_name="idea_generation_user.txt.j2",
@@ -314,29 +345,48 @@ async def _process_idea_file(
     print(f"  Generated: {generated.title}")
 
     # Step 2: judge
-    print(f"  [2/2] Judging via {judge_model} (4 criteria + revision) ...")
+    print(f"  [2/{total_steps}] Judging via {judge_model} (4 criteria + revision) ...")
     judge = IdeaJudgeService(llm_service=llm_service)
-    result = await judge.judge(
+    judge_result = await judge.judge(
         llm_model=judge_model,
         idea_title=generated.title,
         idea_markdown=generated.content,
         conversation_text=source_text,
     )
 
+    _print_judge_report(judge_result)
+
+    # Step 3: refine (if the judge says revise or reject)
+    refiner_result: IdeaRefinerResult | None = None
+    if judge_result.recommendation in ("revise", "reject"):
+        print(f"  [3/{total_steps}] Refining via {refiner_model} (recommendation={judge_result.recommendation}) ...")
+        refiner = IdeaRefinerService(llm_service=llm_service)
+        refiner_result = await refiner.refine(
+            llm_model=refiner_model,
+            idea_title=generated.title,
+            idea_markdown=generated.content,
+            judge_result=judge_result,
+            conversation_text=source_text,
+        )
+        _print_refiner_report(refiner_result)
+    else:
+        print(f"  [3/{total_steps}] Skipping refinement (recommendation={judge_result.recommendation})")
+
     elapsed = time.time() - t0
 
-    _print_judge_report(result)
-
     # Save JSON
-    output = {
+    output: dict = {
         "source_file": idea_path.name,
         "generated_title": generated.title,
         "generated_content": generated.content,
-        "judge_result": result.model_dump(),
+        "judge_result": judge_result.model_dump(),
+        "refiner_result": refiner_result.model_dump() if refiner_result else None,
         "meta": {
             "gen_provider": provider,
             "gen_model": gen_model,
             "judge_model": judge_model,
+            "refiner_model": refiner_model,
+            "refined": refiner_result is not None,
             "elapsed_seconds": round(elapsed, 1),
         },
     }
@@ -347,12 +397,14 @@ async def _process_idea_file(
     return {
         "file": idea_path.name,
         "title": generated.title,
-        "overall": result.overall_score,
-        "recommendation": result.recommendation,
-        "relevance": result.relevance.score,
-        "feasibility": result.feasibility.score,
-        "novelty": result.novelty.score,
-        "impact": result.impact.score,
+        "overall": judge_result.overall_score,
+        "recommendation": judge_result.recommendation,
+        "relevance": judge_result.relevance.score,
+        "feasibility": judge_result.feasibility.score,
+        "novelty": judge_result.novelty.score,
+        "impact": judge_result.impact.score,
+        "refined": refiner_result is not None,
+        "refined_title": refiner_result.refined_title if refiner_result else None,
         "elapsed": round(elapsed, 1),
     }
 
@@ -366,6 +418,7 @@ async def main() -> None:
     provider = os.environ.get("JUDGE_PROVIDER", "openai").lower()
     gen_model = os.environ.get("JUDGE_MODEL", JUDGE_DEFAULT_MODEL)
     judge_model = os.environ.get("JUDGE_MODEL", JUDGE_DEFAULT_MODEL)
+    refiner_model = os.environ.get("REFINER_MODEL", REFINER_DEFAULT_MODEL)
 
     # Discover idea files
     idea_files = sorted(IDEAS_DIR.glob("idea_*.md"))
@@ -376,8 +429,8 @@ async def main() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     print(f"\n{SEP}")
-    print(f"  AE Scientist — Batch Idea Judge Demo")
-    print(f"  provider={provider}  gen_model={gen_model}  judge_model={judge_model}")
+    print(f"  AE Scientist — Batch Idea Judge + Refiner Demo")
+    print(f"  provider={provider}  gen_model={gen_model}  judge_model={judge_model}  refiner_model={refiner_model}")
     print(f"  ideas found: {len(idea_files)}")
     print(f"  output dir:  {OUTPUT_DIR.relative_to(REPO_ROOT)}")
     print(SEP)
@@ -392,6 +445,7 @@ async def main() -> None:
                 provider=provider,
                 gen_model=gen_model,
                 judge_model=judge_model,
+                refiner_model=refiner_model,
                 llm_service=llm_service,
                 output_dir=OUTPUT_DIR,
             )
@@ -407,6 +461,8 @@ async def main() -> None:
                 "feasibility": 0,
                 "novelty": 0,
                 "impact": 0,
+                "refined": False,
+                "refined_title": None,
                 "elapsed": 0.0,
             })
 
@@ -414,14 +470,15 @@ async def main() -> None:
     print(f"\n\n{SEP}")
     print(f"  BATCH SUMMARY  ({len(summaries)} ideas)")
     print(SEP)
-    print(f"  {'File':<30} {'Rec':<15} {'Overall':>7}  {'Rel':>3} {'Fea':>3} {'Nov':>3} {'Imp':>3}  {'Time':>6}")
-    print(f"  {'─'*30} {'─'*15} {'─'*7}  {'─'*3} {'─'*3} {'─'*3} {'─'*3}  {'─'*6}")
+    print(f"  {'File':<30} {'Rec':<15} {'Overall':>7}  {'Rel':>3} {'Fea':>3} {'Nov':>3} {'Imp':>3}  {'Refined':<8} {'Time':>6}")
+    print(f"  {'─'*30} {'─'*15} {'─'*7}  {'─'*3} {'─'*3} {'─'*3} {'─'*3}  {'─'*8} {'─'*6}")
     for s in summaries:
         rec = s["recommendation"].replace("_", " ").title()
+        refined_tag = "Yes" if s.get("refined") else "—"
         print(
             f"  {s['file']:<30} {rec:<15} {s['overall']:>5.1f}/5"
             f"  {s['relevance']:>3} {s['feasibility']:>3} {s['novelty']:>3} {s['impact']:>3}"
-            f"  {s['elapsed']:>5.0f}s"
+            f"  {refined_tag:<8} {s['elapsed']:>5.0f}s"
         )
     print(SEP)
 

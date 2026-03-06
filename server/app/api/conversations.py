@@ -43,7 +43,8 @@ from app.services import (
 )
 from app.services.cost_calculator import calculate_llm_token_usage_cost
 from app.services.database import DatabaseManager
-from app.services.idea_judge_service import JUDGE_DEFAULT_MODEL, IdeaJudgeService
+from app.services.idea_judge_service import JUDGE_DEFAULT_MODEL, IdeaJudgeService, IdeaJudgeResult
+from app.services.idea_refiner_service import REFINER_DEFAULT_MODEL, IdeaRefinerService
 from app.services.database.conversations import CONVERSATION_STATUSES
 from app.services.database.conversations import Conversation as DBConversation
 from app.services.database.conversations import DashboardConversation as DBDashboardConversation
@@ -646,7 +647,8 @@ async def _run_idea_judge(
     conversation_text: str,
 ) -> None:
     """
-    Run the LLM-as-a-judge review immediately after idea generation and persist the result.
+    Run the LLM-as-a-judge review immediately after idea generation, persist the result,
+    and automatically trigger the refiner if the recommendation is "revise" or "reject".
 
     Always uses JUDGE_DEFAULT_MODEL for consistent evaluation regardless of the
     conversation's model. Fetches the freshly-saved idea, evaluates it across four
@@ -693,9 +695,73 @@ async def _run_idea_judge(
             result.overall_score,
             result.recommendation,
         )
+
+        if result.recommendation in ("revise", "reject"):
+            await _run_idea_refiner(
+                db=db,
+                idea_id=idea.idea_id,
+                idea_title=idea.title,
+                idea_markdown=idea.idea_markdown,
+                judge_result=result,
+                llm_provider=llm_provider,
+                conversation_text=conversation_text,
+            )
+
     except Exception:
         logger.exception(
             "idea_judge: failed for conversation %d (non-fatal)", conversation_id
+        )
+
+
+async def _run_idea_refiner(
+    *,
+    db: DatabaseManager,
+    idea_id: int,
+    idea_title: str,
+    idea_markdown: str,
+    judge_result: IdeaJudgeResult,
+    llm_provider: str,
+    conversation_text: str,
+) -> None:
+    """
+    Run the idea refiner after a judge evaluation recommends revision.
+
+    Produces a refined version of the idea that addresses the judge's concerns,
+    saves it as a new idea version, and re-runs the judge on the refined version.
+    Failures are logged but never propagate.
+    """
+    try:
+        service = _resolve_llm_service(llm_provider=llm_provider)
+        refiner = IdeaRefinerService(llm_service=service)
+
+        refiner_result = await refiner.refine(
+            llm_model=REFINER_DEFAULT_MODEL,
+            idea_title=idea_title,
+            idea_markdown=idea_markdown,
+            judge_result=judge_result,
+            conversation_text=conversation_text,
+        )
+
+        new_version_id = await db.create_idea_version(
+            idea_id=idea_id,
+            title=refiner_result.refined_title,
+            idea_markdown=refiner_result.refined_markdown,
+            is_manual_edit=False,
+            created_by_user_id=0,
+        )
+
+        logger.info(
+            "idea_refiner: idea=%d created refined version=%d (original score=%.2f, rec=%s, changes=%d)",
+            idea_id,
+            new_version_id,
+            refiner_result.original_overall_score,
+            refiner_result.original_recommendation,
+            len(refiner_result.changes_made),
+        )
+
+    except Exception:
+        logger.exception(
+            "idea_refiner: failed for idea %d (non-fatal)", idea_id
         )
 
 
