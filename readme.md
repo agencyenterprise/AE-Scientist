@@ -291,11 +291,48 @@ Setting `DOCKER_DEFAULT_PLATFORM=linux/amd64` ensures you build an x86 image com
 
 ## Contributing
 
-1. Follow the code style guidelines above
-2. Run linting before committing: `make lint`
-3. Update documentation when adding features
-4. Test authentication flows and protected routes
-5. Keep dependencies up to date
+### Setup
+
+Follow the [Installation](#installation) section to install all dependencies, configure environment files, and run the development servers.
+
+### Local Database
+
+A local PostgreSQL instance is required. Database migrations live in `server/database_migrations/` and are managed with Alembic. Run pending migrations with:
+
+```bash
+make migrate-db
+```
+
+### Redis
+
+Redis is used for SSE event streaming and requires Docker. Start it with:
+
+```bash
+make redis
+```
+
+This runs a Redis container on `localhost:6379`. Stop it with `make redis-stop`.
+
+### API Type Generation
+
+When the server API changes (new endpoints, modified request/response models), regenerate the TypeScript types used by the frontend and research pipeline:
+
+```bash
+make gen-api-types
+```
+
+This exports the OpenAPI schema from the server and generates typed clients for both the frontend and research pipeline.
+
+### Before Opening a PR
+
+Run linting for all affected components before opening a pull request:
+
+```bash
+make lint          # Lint all Python projects (server, research pipeline)
+make lint-frontend # Lint frontend (ESLint, Prettier, Stylelint, TypeScript)
+```
+
+Both commands must pass with no errors or warnings.
 
 ## License
 
