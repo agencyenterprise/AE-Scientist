@@ -276,6 +276,9 @@ class _CodexPaperTaskContext(NamedTuple):
     latex_folder: str
     page_limit: int
     previous_run_path: str
+    tables_dir: str
+    table_list: str
+    table_manifest: str
 
 
 class _CodexRefinementTaskContext(NamedTuple):
@@ -586,6 +589,23 @@ def perform_writeup(
         # ------------------------------------------------------------------- #
         emit_event("Running coding agent to write initial paper...", 0.40, 0.20)
 
+        # Discover pre-generated tables
+        tables_dir_path = base_path / "tables" / run_dir_name
+        table_names: list[str] = []
+        table_manifest_str = ""
+        if tables_dir_path.exists():
+            table_names = sorted(
+                entry.name
+                for entry in tables_dir_path.iterdir()
+                if entry.is_file() and entry.suffix.lower() == ".tex"
+            )
+            manifest_path = tables_dir_path / "manifest.json"
+            if manifest_path.exists():
+                try:
+                    table_manifest_str = manifest_path.read_text(encoding="utf-8")
+                except Exception:
+                    logger.debug("Failed to read table manifest", exc_info=True)
+
         codex_task_content = render_text(
             template_name="writeup/codex_paper_task.md.j2",
             context=_CodexPaperTaskContext(
@@ -598,6 +618,9 @@ def perform_writeup(
                 latex_folder=str(latex_folder),
                 page_limit=page_limit,
                 previous_run_path=previous_run_path,
+                tables_dir=str(tables_dir_path) if table_names else "",
+                table_list=", ".join(table_names),
+                table_manifest=table_manifest_str,
             )._asdict(),
         )
 

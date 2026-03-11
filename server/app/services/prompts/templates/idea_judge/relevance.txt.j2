@@ -1,0 +1,27 @@
+Evaluate the RELEVANCE of the following research idea to the original conversation that generated it.
+
+A relevant idea clearly traces back to the core topics, methods, hypotheses, or open problems discussed in the source conversation. An irrelevant idea may be technically interesting but drifts from what was actually discussed or intended.
+
+## Original Conversation
+{{ conversation_text }}
+
+## Generated Research Idea
+**Title:** {{ idea_title }}
+
+{{ idea_markdown }}
+
+---
+
+Assess relevance along two dimensions:
+- **connection_points**: Specific ways the idea directly connects to or builds on the conversation (quote or paraphrase the conversation where relevant)
+- **drift_concerns**: Any ways the idea departs, over-generalizes, or introduces topics not present in the conversation
+
+Then provide:
+- **rationale**: 2-4 sentences synthesizing your assessment
+- **suggestions**: Concrete edits that would improve relevance (e.g., "Narrow the scope to the X method discussed rather than the general Y problem")
+- **score**: 1-5 where:
+  - 5 = Directly and tightly connected; the idea is a faithful elaboration of the conversation
+  - 4 = Strongly connected with minor, justified extensions
+  - 3 = Moderately connected; some drift but the core link is intact
+  - 2 = Loosely connected; significant departure from the source material
+  - 1 = Not meaningfully connected to the conversation

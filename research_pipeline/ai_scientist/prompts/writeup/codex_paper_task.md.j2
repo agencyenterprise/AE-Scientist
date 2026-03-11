@@ -56,6 +56,26 @@ The following PNG files are available in the figures directory (`{{ figures_dir 
 
 {{ plot_descriptions }}
 
+{% if tables_dir and table_list %}
+## Available Tables
+
+Pre-generated LaTeX table fragments are available in `{{ tables_dir }}`:
+
+```
+{{ table_list }}
+```
+
+{% if table_manifest %}
+### Table Manifest (suggested captions and labels)
+
+```json
+{{ table_manifest }}
+```
+{% endif %}
+
+To include a table in the paper, use `\input{path/to/table.tex}` wrapped in a `table` environment with an appropriate caption. You may also modify the table content directly if needed. These tables contain key quantitative results — **you should include at least the main results table** in the Experiments section.
+{% endif %}
+
 ## LaTeX Template
 
 The LaTeX template is located at: `{{ latex_folder }}/template.tex`
@@ -86,10 +106,11 @@ The references have already been populated in the `references.bib` filecontents 
 1. **Read the template**: Start by reading `{{ latex_folder }}/template.tex` to understand the structure
 2. **Write the paper**: Fill in all sections with content based on the experiment results
 3. **Include figures**: Reference ALL available figures appropriately with meaningful captions
-4. **Compile and verify**: Run `pdflatex` to ensure the paper compiles without errors
-5. **Fix any issues**: If compilation fails, read the error output and fix the LaTeX
-6. **Run chktex**: Execute `chktex {{ latex_folder }}/template.tex -q -n2 -n24 -n13 -n1` and address warnings
-7. **Verify page count**: Ensure the main content (before Impact Statement) fits within {{ page_limit }} pages
+4. **Include tables**: If pre-generated LaTeX tables are available, include the most important ones (especially the main results table) in the Experiments section using `\input{}`. Add proper `\begin{table}...\end{table}` wrappers with captions and labels.
+5. **Compile and verify**: Run `pdflatex` to ensure the paper compiles without errors
+6. **Fix any issues**: If compilation fails, read the error output and fix the LaTeX
+7. **Run chktex**: Execute `chktex {{ latex_folder }}/template.tex -q -n2 -n24 -n13 -n1` and address warnings
+8. **Verify page count**: Ensure the main content (before Impact Statement) fits within {{ page_limit }} pages
 
 ## Important LaTeX Notes
 

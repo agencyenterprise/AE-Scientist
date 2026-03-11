@@ -1,0 +1,80 @@
+Below is a research idea that was evaluated by an independent judge. Your task is to produce an improved version that addresses the judge's concerns while preserving the core hypothesis.
+
+## Current Idea (to be refined)
+**Title:** {{ idea_title }}
+
+{{ idea_markdown }}
+
+{% if conversation_text %}
+## Source Conversation (for relevance context)
+{{ conversation_text }}
+{% endif %}
+
+{% if refinement_history %}
+## Refinement History
+
+CRITICAL: This idea has been through prior judge-refine rounds. You MUST:
+- Stay anchored to the ORIGINAL idea's core hypothesis (shown first below)
+- NOT re-introduce issues that were already fixed in earlier rounds
+- NOT undo improvements from previous refinements
+- Focus ONLY on issues flagged in the CURRENT (most recent) judge review
+- If a previous round already addressed a concern, do not change that part again
+
+{{ refinement_history }}
+{% endif %}
+
+## Judge Evaluation Summary
+**Overall Score:** {{ overall_score }}/5.0 — Recommendation: {{ recommendation }}
+
+### Relevance ({{ relevance_score }}/5)
+{{ relevance_rationale }}
+{% if relevance_connection_points %}**Connection points:** {{ relevance_connection_points }}{% endif %}
+{% if relevance_drift_concerns %}**Drift concerns:** {{ relevance_drift_concerns }}{% endif %}
+{% if relevance_suggestions %}**Suggestions:** {{ relevance_suggestions }}{% endif %}
+
+### Feasibility ({{ feasibility_score }}/5)
+{{ feasibility_rationale }}
+**Estimated cost:** {{ estimated_cost }}
+**Compute viable:** {{ compute_viable }} | **Agent implementable:** {{ agent_implementable }}
+{% if feasibility_blockers %}**Blockers:** {{ feasibility_blockers }}{% endif %}
+{% if feasibility_suggestions %}**Suggestions:** {{ feasibility_suggestions }}{% endif %}
+
+### Novelty ({{ novelty_score }}/5)
+{{ novelty_rationale }}
+{% if novelty_differentiation %}**Differentiation:** {{ novelty_differentiation }}{% endif %}
+{% if novelty_risks %}**Novelty risks:** {{ novelty_risks }}{% endif %}
+{% if novelty_suggestions %}**Suggestions:** {{ novelty_suggestions }}{% endif %}
+
+### Impact ({{ impact_score }}/5)
+{{ impact_rationale }}
+**Research question (judge's restatement):** {{ research_question }}
+**What changes if success:** {{ what_changes_if_success }}
+**Goodhart risk:** {{ goodhart_risk_assessment }}
+{% if impact_suggestions %}**Suggestions:** {{ impact_suggestions }}{% endif %}
+
+### Revision Plan from Judge
+**Overall assessment:** {{ revision_overall_assessment }}
+{% for item in revision_action_items %}
+- [{{ item.priority }}] {{ item.action }} (addresses: {{ item.addresses }})
+{% endfor %}
+
+---
+
+## Your Task
+
+Produce a refined version of this idea that:
+1. Addresses every HIGH-priority action item from the revision plan
+2. Addresses MEDIUM-priority action items where possible
+3. Improves the lowest-scoring criteria while not degrading the higher-scoring ones
+4. Stays strictly within pipeline constraints (≤$50, fully automatable, completes in hours)
+5. Preserves the core research hypothesis
+6. Ensure none of the revisions end up contradicting one another.
+
+For each change you make, briefly explain why in the `changes_made` list.
+
+The `refined_title` and `refined_markdown` must follow the standard idea format:
+- ## Project Summary
+- ## Idea Description
+- ## Proposed Experiments
+- ## Expected Outcome
+- ## Key Considerations

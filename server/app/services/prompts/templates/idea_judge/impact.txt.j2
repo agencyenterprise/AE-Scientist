@@ -1,0 +1,45 @@
+Evaluate the IMPACT of the following research idea across four dimensions.
+
+## Dimension 1 — Research Question Clarity
+What specific, answerable question does this idea address? Is the question well-posed, falsifiable, and scoped appropriately? A vague or unfalsifiable question signals low impact regardless of other merits.
+
+## Dimension 2 — Downstream Consequence
+If the experiment succeeds and produces the expected outcome, what would researchers or practitioners do differently? Does this result change a meaningful belief, unlock a new capability, or prevent a concrete harm? If success wouldn't change anything actionable, the impact is low.
+
+## Dimension 3 — Threat Model Realism (Safety/Alignment Check)
+For safety and alignment research: Are the assumptions grounded in realistic threat models for frontier AI deployment?
+- Is the proposed benefit achievable under realistic adversarial or distributional conditions?
+- Are the assumptions about model behavior, attacker capabilities, or deployment context defensible?
+- Would this result hold for models significantly more capable than those tested?
+
+If the idea is not safety/alignment research, evaluate whether the underlying assumptions are realistic for the research domain instead.
+
+## Dimension 4 — Goodhart Risk
+Goodhart's Law: "When a measure becomes a target, it ceases to be a good measure." Evaluate whether the proposed metrics and evaluation strategy could be Goodharted:
+- Does the idea optimize for a proxy metric that could diverge from the actual property it claims to measure? (e.g., improving a safety benchmark score without improving actual safety)
+- Could the experimental setup produce "positive" results that are artifacts of the metric rather than genuine progress?
+- Are there ways the proposed approach could overfit to the evaluation while failing to generalize to real deployment conditions?
+- If the idea proposes a new defense or detection method, could it be trivially bypassed once the metric is known?
+
+High Goodhart risk substantially reduces impact — a result that only holds under the specific measurement regime used in the experiment is not actionable.
+
+## Research Idea
+**Title:** {{ idea_title }}
+
+{{ idea_markdown }}
+
+---
+
+Assess impact along these dimensions:
+- **research_question**: State the specific research question this idea is answering (in your own words, as precisely as possible)
+- **what_changes_if_success**: Concretely describe what researchers or practitioners would do differently if the experiment succeeds
+- **threat_model_assessment**: Evaluate whether the safety/alignment assumptions are realistic for frontier deployment, or flag if assumptions are too optimistic/narrow
+- **goodhart_risk_assessment**: Evaluate the Goodhart risk — could the proposed metrics be gamed or diverge from the real objective? Are the evaluation proxies faithful to the underlying property being studied?
+- **rationale**: 2-4 sentences synthesizing the overall impact assessment (incorporating all four dimensions)
+- **suggestions**: How to increase impact (e.g., "Clarify the falsifiable hypothesis", "Test on a more capable model class", "Address the distributional shift assumption in the threat model", "Add an auxiliary metric that is harder to Goodhart")
+- **score**: 1-5 where:
+  - 5 = Clear, high-value question; success would meaningfully shift research direction or safety practice; low Goodhart risk
+  - 4 = Solid impact; answers a useful question with realistic assumptions, clear actionability, and manageable Goodhart risk
+  - 3 = Moderate impact; useful contribution but limited scope, unclear actionability, partially unrealistic assumptions, or notable Goodhart risk
+  - 2 = Low impact; question is unclear, assumptions are unrealistic, positive results wouldn't change anything, or high Goodhart risk undermines conclusions
+  - 1 = No discernible impact; even if all results are positive, nothing actionable follows

@@ -36,6 +36,7 @@ from ai_scientist.artifact_manager import ArtifactPublisher, ArtifactSpec
 from ai_scientist.latest_run_finder import normalize_run_name
 from ai_scientist.perform_citations import gather_citations
 from ai_scientist.perform_plotting import aggregate_plots
+from ai_scientist.perform_tables import aggregate_tables
 from ai_scientist.perform_writeup import perform_writeup
 from ai_scientist.review_integration import perform_review, publish_token_usage
 from ai_scientist.review_storage import FigureReviewRecorder, ReviewResponseRecorder
@@ -700,6 +701,20 @@ def run_plot_aggregation(
                 )
         except Exception:
             logger.exception("Failed to record plots archive artifact for %s", run_dir_path)
+
+        # Generate results tables (best-effort; don't block writeup on failure)
+        try:
+            aggregate_tables(
+                base_folder=reports_base,
+                model=writeup_cfg.plot_model,
+                temperature=writeup_cfg.temperature,
+                run_dir_name=run_dir_path.name if run_dir_path is not None else None,
+                event_callback=event_callback,
+                run_id=run_id,
+            )
+        except Exception:
+            logger.warning("Table generation failed; continuing without tables.", exc_info=True)
+
         return True
     except Exception as e:
         logger.warning(f"Aggregate plots failed: {e}. Skipping writeup.")

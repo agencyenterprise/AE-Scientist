@@ -1,0 +1,39 @@
+We have three JSON summaries of scientific experiments: baseline, research, ablation.
+They contain metrics, analyses, and paths to .npy files with numerical results.
+Our goal is to produce final, publishable LaTeX tables summarizing the key quantitative results.
+
+--- RESEARCH IDEA ---
+```
+{{ idea_text }}
+```
+
+IMPORTANT:
+- The script must load existing .npy experiment data from the "exp_results_npy_files" fields (ONLY using full and exact file paths in the summary JSONs).
+- It should call os.makedirs("tables", exist_ok=True) before saving any files.
+- Tables should be saved as both `.tex` (LaTeX tabular fragments) and `.csv` files in the `tables/` directory.
+
+Your generated Python script must:
+1) Load relevant data from .npy files using the full and exact file paths in the summary JSONs.
+2) Extract key quantitative results: final metrics, best hyperparameters, ablation comparisons, dataset-level breakdowns.
+3) Produce the following types of tables (as applicable):
+   - **Main results table**: Final metric values per dataset, comparing baseline vs best tuned model.
+   - **Hyperparameter tuning table**: Performance across different hyperparameter settings (from Stage 2 data).
+   - **Ablation table**: Metric impact of removing/changing each component (from Stage 4 data).
+   - **Sample predictions table** (if classification/regression): A small table (5-10 rows) showing example inputs, ground truth, and model predictions.
+4) For each table, save two files:
+   - `tables/<table_name>.tex` — A LaTeX `tabular` fragment (no `\begin{table}` wrapper, just the tabular environment) that can be `\input{}` into a paper.
+   - `tables/<table_name>.csv` — A CSV version for easy inspection.
+5) Save a manifest file `tables/manifest.json` listing all generated tables with fields:
+   - `filename`: the .tex filename (without path)
+   - `caption`: a suggested caption for the table
+   - `label`: a suggested LaTeX label (e.g., `tab:main_results`)
+6) Do not hallucinate data. All values must come from .npy files or the JSON summaries.
+7) Format numbers to appropriate precision (e.g., 2-4 decimal places for metrics, integers for counts).
+8) Use `\textbf{}` to highlight best results in each column.
+9) The script must be fully self-contained.
+
+Below are the summaries in JSON:
+
+{{ combined_summaries_str }}
+
+Provide your answer using the structured response schema (field: script). Do not include commentary outside the schema.
