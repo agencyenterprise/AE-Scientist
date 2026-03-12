@@ -1,0 +1,135 @@
+\documentclass{article}
+
+\usepackage[T1]{fontenc}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{hyperref}
+
+% To reference your generated figures, name the PNGs directly
+% DO NOT CHANGE THIS
+\graphicspath{{./}}
+
+%%%%% BIBLIOGRAPHY %%%%%
+\begin{filecontents}{template.bib}
+  % ADD YOUR CITATIONS HERE
+
+  % sample citation
+  % use it like this: `\cite{goodfellow2016deep}`
+  @book{goodfellow2016deep,
+    title={Deep learning},
+    author={Goodfellow, Ian and Bengio, Yoshua and Courville, Aaron and Bengio, Yoshua},
+    volume={1},
+    year={2016},
+    publisher={MIT Press}
+  }
+\end{filecontents}
+%%%%% BIBLIOGRAPHY %%%%%
+
+
+\begin{document}
+
+
+%%%%% TITLE %%%%%
+\title{TITLE HERE}
+%%%%% TITLE %%%%%
+
+
+%%%%% SUBTITLE %%%%%
+\titlerunning{Abbreviated paper title}
+%%%%% SUBTITLE %%%%%
+
+
+%%%%% AUTHOR %%%%%
+\author{Anonymous Author\inst{1}}
+%%%%% AUTHOR %%%%%
+
+
+%%%%% OTHER AUTHORS %%%%%
+\authorrunning{Anonymous et al.}
+%%%%% OTHER AUTHORS %%%%%
+
+
+\maketitle
+
+
+%%%%% ABSTRACT %%%%%
+\begin{abstract}
+ABSTRACT HERE
+
+\keywords{Machine Learning \and Deep Learning \and Neural Networks}
+\end{abstract}
+%%%%% ABSTRACT %%%%%
+
+
+%%%%% INTRODUCTION %%%%%
+\section{Introduction}
+\label{sec:intro}
+INTRO HERE
+%%%%% INTRODUCTION %%%%%
+
+
+%%%%% RELATED WORK %%%%%
+\section{Related Work}
+\label{sec:related}
+RELATED WORK HERE
+%%%%% RELATED WORK %%%%%
+
+
+%%%%% BACKGROUND %%%%%
+\section{Background}
+\label{sec:background}
+BACKGROUND HERE
+%%%%% BACKGROUND %%%%%
+
+
+%%%%% METHOD %%%%%
+\section{Method}
+\label{sec:method}
+METHOD HERE
+%%%%% METHOD %%%%%
+
+
+%%%%% EXPERIMENTAL SETUP %%%%%
+\section{Experimental Setup}
+\label{sec:experimental_setup}
+EXPERIMENTAL SETUP HERE
+%%%%% EXPERIMENTAL SETUP %%%%%
+
+
+%%%%% EXPERIMENTS %%%%%
+\section{Experiments}
+\label{sec:experiments}
+RESULTS HERE
+
+% EXAMPLE FIGURE: REPLACE AND ADD YOUR OWN FIGURES / CAPTIONS
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{example-image-a}
+\caption{PLEASE FILL IN CAPTION HERE}
+\label{fig:first_figure}
+\end{figure}
+%%%%% EXPERIMENTS%%%%%
+
+
+%%%%% CONCLUSION %%%%%
+\section{Conclusion}
+\label{sec:conclusion}
+CONCLUSION HERE
+%%%%% CONCLUSION %%%%%
+
+
+\newpage
+
+
+%%%%% APPENDIX %%%%%
+\section{Supplementary Material}
+\label{sec:appendix}
+APPENDIX TEXT
+%%%%% APPENDIX %%%%%
+
+\bibliographystyle{plain}
+\bibliography{template}
+
+\end{document}
