@@ -13,6 +13,21 @@ from psycopg.types.json import Jsonb
 from .base import ConnectionProvider
 
 
+def _strip_null_bytes(value: object) -> object:
+    """Recursively strip \\u0000 null bytes from strings, lists, and dicts.
+
+    PostgreSQL rejects null bytes in text and JSONB columns, but LLM outputs
+    occasionally contain them (e.g. in mathematical notation).
+    """
+    if isinstance(value, str):
+        return value.replace("\x00", "")
+    if isinstance(value, list):
+        return [_strip_null_bytes(item) for item in value]
+    if isinstance(value, dict):
+        return {k: _strip_null_bytes(v) for k, v in value.items()}
+    return value
+
+
 class PaperReviewStatus(str, Enum):
     """Status of a paper review."""
 
@@ -298,6 +313,7 @@ class PaperReviewsMixin(ConnectionProvider):
         content: ReviewContent,
     ) -> None:
         """Insert conference-specific content and mark the review as completed."""
+        s = _strip_null_bytes
         async with self.aget_connection() as conn:
             if isinstance(content, NeurIPSReviewContent):
                 async with conn.cursor() as cursor:
@@ -312,21 +328,21 @@ class PaperReviewsMixin(ConnectionProvider):
                         """,
                         (
                             review_id,
-                            content.summary,
-                            Jsonb(content.strengths),
-                            Jsonb(content.weaknesses),
-                            Jsonb(content.questions),
-                            content.limitations,
-                            content.ethical_concerns,
-                            content.ethical_concerns_explanation,
-                            Jsonb(content.clarity_issues),
+                            s(content.summary),
+                            Jsonb(s(content.strengths)),
+                            Jsonb(s(content.weaknesses)),
+                            Jsonb(s(content.questions)),
+                            s(content.limitations),
+                            s(content.ethical_concerns),
+                            s(content.ethical_concerns_explanation),
+                            Jsonb(s(content.clarity_issues)),
                             content.quality,
                             content.clarity,
                             content.significance,
                             content.originality,
                             content.overall,
                             content.confidence,
-                            content.decision,
+                            s(content.decision),
                         ),
                     )
             elif isinstance(content, ICLRReviewContent):
@@ -342,20 +358,20 @@ class PaperReviewsMixin(ConnectionProvider):
                         """,
                         (
                             review_id,
-                            content.summary,
-                            Jsonb(content.strengths),
-                            Jsonb(content.weaknesses),
-                            Jsonb(content.questions),
-                            content.limitations,
-                            content.ethical_concerns,
-                            content.ethical_concerns_explanation,
-                            Jsonb(content.clarity_issues),
+                            s(content.summary),
+                            Jsonb(s(content.strengths)),
+                            Jsonb(s(content.weaknesses)),
+                            Jsonb(s(content.questions)),
+                            s(content.limitations),
+                            s(content.ethical_concerns),
+                            s(content.ethical_concerns_explanation),
+                            Jsonb(s(content.clarity_issues)),
                             content.soundness,
                             content.presentation,
                             content.contribution,
                             content.overall,
                             content.confidence,
-                            content.decision,
+                            s(content.decision),
                         ),
                     )
             elif isinstance(content, ICMLReviewContent):
@@ -371,16 +387,16 @@ class PaperReviewsMixin(ConnectionProvider):
                         """,
                         (
                             review_id,
-                            content.summary,
-                            content.claims_and_evidence,
-                            content.relation_to_prior_work,
-                            content.other_aspects,
-                            Jsonb(content.questions),
-                            content.ethical_issues,
-                            content.ethical_issues_explanation,
-                            Jsonb(content.clarity_issues),
+                            s(content.summary),
+                            s(content.claims_and_evidence),
+                            s(content.relation_to_prior_work),
+                            s(content.other_aspects),
+                            Jsonb(s(content.questions)),
+                            s(content.ethical_issues),
+                            s(content.ethical_issues_explanation),
+                            Jsonb(s(content.clarity_issues)),
                             content.overall,
-                            content.decision,
+                            s(content.decision),
                         ),
                     )
             async with conn.cursor() as cursor:
@@ -410,10 +426,10 @@ class PaperReviewsMixin(ConnectionProvider):
                     """,
                     (
                         review_id,
-                        Jsonb(novelty_search) if novelty_search is not None else None,
-                        Jsonb(citation_check) if citation_check is not None else None,
-                        Jsonb(missing_references) if missing_references is not None else None,
-                        Jsonb(presentation_check) if presentation_check is not None else None,
+                        Jsonb(_strip_null_bytes(novelty_search)) if novelty_search is not None else None,
+                        Jsonb(_strip_null_bytes(citation_check)) if citation_check is not None else None,
+                        Jsonb(_strip_null_bytes(missing_references)) if missing_references is not None else None,
+                        Jsonb(_strip_null_bytes(presentation_check)) if presentation_check is not None else None,
                     ),
                 )
 
